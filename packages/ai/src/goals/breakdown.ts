@@ -139,7 +139,6 @@ export async function recalculateGoalProgress(goalId: string, companyId: string)
 
   let progress: number;
   if (subGoals.length > 0) {
-    // Average of sub-goal progress
     const total = subGoals.reduce((sum, g) => sum + g.progressPct, 0);
     progress = Math.round(total / subGoals.length);
   } else {

@@ -55,7 +55,7 @@ export async function processRecurringTasks(ctx: TickContext): Promise<Recurring
       // old (already-due) nextOccurrenceAt; the next 5-min tick sees
       // the template still due and spawns a SECOND instance for the
       // same scheduled time. The orchestrator-tick wrapper's optimistic
-      // claim (row 127) doesn't catch this because the duplicate is at
+      // claim doesn't catch this because the duplicate is at
       // the INSTANCE level, not the trigger level: two distinct rows
       // get claimed and triggered.
       const nextConfig: RecurrenceConfig = {
