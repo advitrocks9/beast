@@ -101,14 +101,14 @@ const EVERY_PLAN: Pillar[] = [
     label: "Memory that learns your voice",
     detail:
       "Every approval and edit teaches the model. Outputs sound more like you each week.",
-    hex: "#B05A38",
+    hex: "#A85D44",
   },
   {
     Icon: Quote,
     label: "Source grounding",
     detail:
       "Every claim cites where it came from. No silent hallucinations.",
-    hex: "#8A3D63",
+    hex: "#834A6A",
   },
   {
     Icon: Calendar,

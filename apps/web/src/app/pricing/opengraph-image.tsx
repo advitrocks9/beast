@@ -10,13 +10,13 @@ const TIERS = [
     name: "Starter",
     price: "$99",
     tagline: "One AI employee",
-    accent: "#B05A38",
+    accent: "#A85D44",
   },
   {
     name: "Team",
     price: "$299",
     tagline: "Two AI employees",
-    accent: "#8A3D63",
+    accent: "#834A6A",
     emphasis: true,
   },
   {

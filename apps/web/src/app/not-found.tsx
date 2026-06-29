@@ -9,7 +9,7 @@ export default function NotFound() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-bg-warm p-6">
       <GlassCard hoverable={false} className="w-full max-w-md p-8 text-center">
-        <p className="font-(--font-display) text-5xl font-bold tracking-tight text-[#B05A38]">
+        <p className="font-(--font-display) text-5xl font-bold tracking-tight text-[#A85D44]">
           404
         </p>
         <h1 className="mt-3 font-(--font-display) text-2xl font-bold tracking-tight">

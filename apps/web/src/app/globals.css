@@ -5,19 +5,19 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme {
-  /* Base. Warm paper canvas with true-white cards, so depth comes from real
+  /* Base. Cool-neutral canvas with true-white cards, so depth comes from real
      surface contrast instead of glass-on-white that vanished against #F8F9FB. */
   --color-bg: #FFFFFF;
-  --color-bg-warm: #FAFAF7;
+  --color-bg-warm: #FBFBFD;
   --color-surface: #FFFFFF;
-  --color-surface-hover: #F6F4EE;
+  --color-surface-hover: #F4F5F7;
   --color-surface-solid: #FFFFFF;
-  --color-surface-sunken: #F3F1EA;
+  --color-surface-sunken: #F1F2F5;
 
-  /* Glass. Reserved for the nav and over-imagery now; warmer, more present
-     border so it still reads as a panel where it is used. */
+  /* Glass. Reserved for the nav and over-imagery now; a present cool border so
+     it still reads as a panel where it is used. */
   --color-glass: oklch(1 0 0 / 0.72);
-  --color-glass-border: oklch(0.83 0.008 70 / 0.5);
+  --color-glass-border: oklch(0.84 0.006 255 / 0.5);
   --color-glass-heavy: oklch(1 0 0 / 0.85);
 
   /* Brand. Spruce teal is the single owned accent: links, focus, active nav,
@@ -31,7 +31,7 @@
 
   /* Text. #4B5563 ~7:1 and #6B7280 ~4.83:1 both pass AA on the warm canvas;
      the old #9CA3AF muted came in at 2.4:1 and is gone. */
-  --color-text: #1C1A17;
+  --color-text: #18181B;
   --color-text-secondary: #4B5563;
   --color-text-muted: #6B7280;
 
@@ -56,11 +56,11 @@
   --color-chip-neutral-bg: #EEF6F5;
   --color-chip-neutral-text: #0B5C56;
 
-  /* Shadows. Warm-tinted so cards lift off the paper. */
-  --shadow-xs: 0 1px 2px oklch(0.3 0.02 70 / 0.05);
-  --shadow-sm: 0 1px 2px oklch(0.3 0.02 70 / 0.05), 0 4px 12px oklch(0.3 0.02 70 / 0.06);
-  --shadow-md: 0 8px 24px oklch(0.3 0.02 70 / 0.09);
-  --shadow-glass: 0 4px 16px oklch(0.3 0.02 70 / 0.06), inset 0 1px 0 oklch(1 0 0 / 0.4);
+  /* Shadows. Neutral so cards lift cleanly off the canvas. */
+  --shadow-xs: 0 1px 2px oklch(0.3 0 0 / 0.05);
+  --shadow-sm: 0 1px 2px oklch(0.3 0 0 / 0.05), 0 4px 12px oklch(0.3 0 0 / 0.06);
+  --shadow-md: 0 8px 24px oklch(0.3 0 0 / 0.09);
+  --shadow-glass: 0 4px 16px oklch(0.3 0 0 / 0.06), inset 0 1px 0 oklch(1 0 0 / 0.4);
 
   /* Radius */
   --radius-sm: 6px;
@@ -86,7 +86,7 @@
 }
 
 .glass:hover {
-  border-color: oklch(0.83 0.008 70 / 0.9);
+  border-color: oklch(0.84 0.006 255 / 0.9);
   box-shadow: var(--shadow-md);
 }
 
@@ -155,14 +155,14 @@
   padding: 10px 20px;
   font: 500 14px/1 var(--font-body);
   letter-spacing: -0.01em;
-  box-shadow: 0 1px 2px oklch(0.2 0.02 70 / 0.18), 0 6px 16px oklch(0.2 0.02 70 / 0.12);
+  box-shadow: 0 1px 2px oklch(0.2 0 0 / 0.18), 0 6px 16px oklch(0.2 0 0 / 0.12);
   transition: all 150ms ease;
 }
 
 .btn-primary:hover {
   transform: translateY(-1px);
-  background: #2A2723;
-  box-shadow: 0 2px 4px oklch(0.2 0.02 70 / 0.2), 0 10px 22px oklch(0.2 0.02 70 / 0.16);
+  background: #27272A;
+  box-shadow: 0 2px 4px oklch(0.2 0 0 / 0.2), 0 10px 22px oklch(0.2 0 0 / 0.16);
 }
 
 /* Brand button: the teal accent CTA, used sparingly for the one key action. */
@@ -228,37 +228,37 @@
    above owns brand + semantic + role. --primary is warm ink so the shadcn Button
    default and the .btn-primary class are one primary; --ring is the brand teal. */
 :root {
-  --background: #FAFAF7;
-  --foreground: #1C1A17;
+  --background: #FBFBFD;
+  --foreground: #18181B;
   --card: #FFFFFF;
-  --card-foreground: #1C1A17;
+  --card-foreground: #18181B;
   --popover: #FFFFFF;
-  --popover-foreground: #1C1A17;
-  --primary: #1C1A17;
+  --popover-foreground: #18181B;
+  --primary: #18181B;
   --primary-foreground: #FFFFFF;
-  --secondary: #F3F1EA;
-  --secondary-foreground: #1C1A17;
-  --muted: #F3F1EA;
+  --secondary: #F2F3F5;
+  --secondary-foreground: #18181B;
+  --muted: #F2F3F5;
   --muted-foreground: #6B7280;
-  --accent: #F1EFE8;
-  --accent-foreground: #1C1A17;
+  --accent: #EFF1F4;
+  --accent-foreground: #18181B;
   --destructive: #DC2626;
-  --border: #ECE8E0;
-  --input: #ECE8E0;
+  --border: #E7E9ED;
+  --input: #E7E9ED;
   --ring: #0F766E;
   --chart-1: #0F766E;
-  --chart-2: #B05A38;
-  --chart-3: #8A3D63;
+  --chart-2: #A85D44;
+  --chart-3: #834A6A;
   --chart-4: #46618A;
   --chart-5: #F59E0B;
   --radius: 0.625rem;
-  --sidebar: #FBFBF8;
-  --sidebar-foreground: #1C1A17;
-  --sidebar-primary: #1C1A17;
+  --sidebar: #FCFCFD;
+  --sidebar-foreground: #18181B;
+  --sidebar-primary: #18181B;
   --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: #F1EFE8;
-  --sidebar-accent-foreground: #1C1A17;
-  --sidebar-border: #ECE8E0;
+  --sidebar-accent: #EFF1F4;
+  --sidebar-accent-foreground: #18181B;
+  --sidebar-border: #E7E9ED;
   --sidebar-ring: #0F766E;
 }
 
