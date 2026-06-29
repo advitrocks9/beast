@@ -7,14 +7,14 @@
 @theme {
   /* Base */
   --color-bg: #FFFFFF;
-  --color-bg-warm: #FAFAFA;
-  --color-surface: oklch(0.97 0 0 / 0.4);
-  --color-surface-hover: oklch(0.95 0 0 / 0.5);
-  --color-surface-solid: #F1F1F2;
+  --color-bg-warm: #F8F9FB;
+  --color-surface: oklch(0.97 0.004 264 / 0.4);
+  --color-surface-hover: oklch(0.95 0.005 264 / 0.5);
+  --color-surface-solid: #F1F2F5;
 
   /* Glass */
   --color-glass: oklch(1 0 0 / 0.55);
-  --color-glass-border: oklch(0.8 0 0 / 0.15);
+  --color-glass-border: oklch(0.8 0.012 264 / 0.15);
   --color-glass-heavy: oklch(1 0 0 / 0.7);
 
   /* Accent */
@@ -24,7 +24,7 @@
   --color-accent-glow: oklch(0.65 0.2 260 / 0.15);
 
   /* Text. Both secondary (#4B5563 ~7:1) and muted (#6B7280 ~4.83:1)
-     pass WCAG AA on the warm-white surfaces; the previous #9CA3AF muted
+     pass WCAG AA on the off-white surfaces; the previous #9CA3AF muted
      came in at 2.4:1 and broke a11y on /, /pricing, and /vs/sintra. */
   --color-text: #1A1A1A;
   --color-text-secondary: #4B5563;
@@ -74,21 +74,21 @@
 .glass {
   background: oklch(1 0 0 / 0.55);
   backdrop-filter: blur(20px) saturate(1.2);
-  border: 1px solid oklch(0.8 0 0 / 0.15);
+  border: 1px solid var(--color-glass-border);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-glass);
 }
 
 .glass:hover {
   background: oklch(1 0 0 / 0.65);
-  border-color: oklch(0.8 0 0 / 0.2);
+  border-color: oklch(0.8 0.012 264 / 0.2);
   box-shadow: 0 8px 24px oklch(0.3 0 0 / 0.08), inset 0 1px 0 oklch(1 0 0 / 0.25);
 }
 
 .glass-heavy {
   background: oklch(1 0 0 / 0.7);
   backdrop-filter: blur(24px) saturate(1.2);
-  border: 1px solid oklch(0.8 0 0 / 0.15);
+  border: 1px solid var(--color-glass-border);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-glass);
 }
@@ -96,14 +96,44 @@
 .glass-nav {
   background: oklch(1 0 0 / 0.6);
   backdrop-filter: blur(16px) saturate(1.2);
-  border-bottom: 1px solid oklch(0.8 0 0 / 0.15);
+  border-bottom: 1px solid var(--color-glass-border);
 }
 
 .glass-frosted {
   background: oklch(1 0 0 / 0.4);
   backdrop-filter: blur(32px) saturate(1.2);
-  border: 1px solid oklch(0.8 0 0 / 0.1);
+  border: 1px solid oklch(0.8 0.012 264 / 0.1);
   border-radius: var(--radius-card);
+}
+
+/* Goal progress range: painted track + a small thumb in the goal's color, so
+   both sides of the track render consistently instead of the browser default. */
+.progress-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 9999px;
+  outline: none;
+}
+.progress-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 14px;
+  width: 14px;
+  border-radius: 9999px;
+  background: var(--thumb-color, #3B82F6);
+  border: 2px solid white;
+  box-shadow: 0 1px 3px oklch(0.3 0 0 / 0.2);
+  cursor: pointer;
+}
+.progress-range::-moz-range-thumb {
+  height: 14px;
+  width: 14px;
+  border-radius: 9999px;
+  background: var(--thumb-color, #3B82F6);
+  border: 2px solid white;
+  box-shadow: 0 1px 3px oklch(0.3 0 0 / 0.2);
+  cursor: pointer;
 }
 
 /* Gradient text */

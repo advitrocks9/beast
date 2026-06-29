@@ -59,8 +59,11 @@ export function ProgressSlider({
           onInput={(e) => setPct(Number((e.target as HTMLInputElement).value))}
           onChange={(e) => commit(Number((e.target as HTMLInputElement).value))}
           aria-label="Goal progress"
-          className="flex-1 cursor-pointer"
-          style={{ accentColor: color }}
+          className="progress-range flex-1 cursor-pointer"
+          style={{
+            background: `linear-gradient(to right, ${color} ${pct}%, oklch(0.9 0.006 264) ${pct}%)`,
+            "--thumb-color": color,
+          } as React.CSSProperties}
           disabled={update.isPending}
         />
         <span
