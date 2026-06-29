@@ -43,7 +43,7 @@ export default async function Home() {
   return (
     <>
       <LandingNav />
-      <main className="bg-[oklch(0.98_0.005_260)]">
+      <main className="bg-[#FAFAFA]">
         <Hero />
         <ProblemSection />
         <TeamSection />
