@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { eq, and } from "drizzle-orm";
-import { randomBytes } from "node:crypto";
 import { connectors } from "@beast/db";
+import { encryptToken, decryptToken } from "@beast/shared";
 import {
   buildTwitterOAuthUrl,
   buildLinkedInAuthUrl,
@@ -10,27 +10,29 @@ import {
 } from "@beast/ai";
 import { createTRPCRouter, protectedProcedure, assertNotDemo } from "../init";
 
-// In-memory store for OAuth state tokens (short-lived).
-// In production, use Redis or a DB table with TTL.
-const oauthStateStore = new Map<string, { companyId: string; platform: string; extra?: Record<string, string>; expiresAt: number }>();
-
-function generateState(companyId: string, platform: string, extra?: Record<string, string>): string {
-  const state = randomBytes(24).toString("hex");
-  oauthStateStore.set(state, {
-    companyId,
-    platform,
-    extra,
-    expiresAt: Date.now() + 10 * 60 * 1000, // 10 min TTL
-  });
-  return state;
+// OAuth state is a signed, self-contained token (AES-256-GCM) instead of a
+// server-side entry, so it survives the separate serverless invocations of
+// initOAuth and the callback. The payload carries the companyId and an expiry.
+interface OAuthState {
+  companyId: string;
+  platform: string;
+  exp: number;
 }
 
-export function verifyState(state: string): { companyId: string; platform: string; extra?: Record<string, string> } | null {
-  const entry = oauthStateStore.get(state);
-  if (!entry) return null;
-  oauthStateStore.delete(state);
-  if (Date.now() > entry.expiresAt) return null;
-  return entry;
+function generateState(companyId: string, platform: string): string {
+  const payload: OAuthState = { companyId, platform, exp: Date.now() + 10 * 60 * 1000 };
+  return encryptToken(JSON.stringify(payload)).toString("base64url");
+}
+
+export function verifyState(state: string): { companyId: string; platform: string } | null {
+  if (!state) return null;
+  try {
+    const payload = JSON.parse(decryptToken(Buffer.from(state, "base64url"))) as OAuthState;
+    if (Date.now() > payload.exp) return null;
+    return { companyId: payload.companyId, platform: payload.platform };
+  } catch {
+    return null;
+  }
 }
 
 function getCallbackUrl(platform: string): string {
@@ -70,13 +72,9 @@ export const connectorsRouter = createTRPCRouter({
             throw new Error("Twitter API credentials not configured");
           }
 
-          const result = await buildTwitterOAuthUrl(callbackUrl, consumerKey, consumerSecret);
-
-          // Store the token secret in state for the callback
-          const entry = oauthStateStore.get(state);
-          if (entry) {
-            entry.extra = { oauthTokenSecret: result.oauthTokenSecret };
-          }
+          // OAuth 1.0a does not echo our state, so carry it in the callback URL.
+          const twitterCallback = `${callbackUrl}?st=${state}`;
+          const result = await buildTwitterOAuthUrl(twitterCallback, consumerKey, consumerSecret);
 
           return { redirectUrl: result.url };
         }
