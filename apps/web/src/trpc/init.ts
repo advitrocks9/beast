@@ -51,9 +51,18 @@ export const publicProcedure = t.procedure;
  * Protected procedure: requires auth.
  * Resolves Supabase user -> Beast companyId and injects into context.
  */
-export const protectedProcedure = t.procedure.use(async ({ ctx, next }) => {
+export const protectedProcedure = t.procedure.use(async ({ ctx, type, next }) => {
   if (!ctx.user) {
     throw new TRPCError({ code: "UNAUTHORIZED" });
+  }
+
+  // The public demo is read-only: block every write so a visitor cannot mutate
+  // the shared seeded company.
+  if (DEMO_MODE && type === "mutation") {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "This is a read-only demo. Clone the repo and add your own keys to make changes.",
+    });
   }
 
   const company = await ctx.db.query.companies.findFirst({
