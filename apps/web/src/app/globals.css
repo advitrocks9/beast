@@ -288,6 +288,7 @@
   }
   html {
     font-family: var(--font-body), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    overflow-x: hidden;
   }
 }
 
