@@ -42,7 +42,6 @@ export async function consolidateMemories(agentId: string, tenantId: string): Pr
     };
   }
 
-  // Step 2: Group by episode_type
   const groups = new Map<string, typeof episodes>();
   for (const ep of episodes) {
     const key = ep.episodeType;
@@ -391,7 +390,7 @@ export async function detectDrift(agentId: string, tenantId: string): Promise<{
         rulesRolledBack++;
       } else {
         // Atomic so deprecate + audit log commit together; same shape as
-        // updateEmployeeStatuses (row 130). Without the tx, retry could
+        // updateEmployeeStatuses. Without the tx, retry could
         // re-read the already-deprecated rule, the currentRules query
         // (filters isCurrent=true) would skip it, and the rule_deprecated
         // activity row would never get written.

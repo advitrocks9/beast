@@ -34,7 +34,6 @@ export async function advanceChain(
   parentTaskId: string,
   triggerTask: (payload: SpawnPayload) => Promise<{ id: string }>,
 ): Promise<AdvanceResult> {
-  // 1. Load parent task with plan
   const parent = await db.query.tasks.findFirst({
     where: eq(tasks.id, parentTaskId),
   });
@@ -48,12 +47,10 @@ export async function advanceChain(
     return { action: "no_plan" };
   }
 
-  // 2. Load all child tasks for this parent
   const children = await db.query.tasks.findMany({
     where: eq(tasks.parentTaskId, parentTaskId),
   });
 
-  // 3. Build stepId → status map
   const stepStatuses = new Map<string, { status: StepStatus; taskId: string }>();
   for (const child of children) {
     const stepId = (child.brief as Record<string, unknown>)?._planStepId as string | undefined;
@@ -73,7 +70,6 @@ export async function advanceChain(
     stepStatuses.set(stepId, { status, taskId: child.id });
   }
 
-  // 4. Check for failures - any failed step cancels the chain
   for (const step of plan.steps) {
     const info = stepStatuses.get(step.stepId);
     if (info?.status === "failed") {
@@ -102,7 +98,6 @@ export async function advanceChain(
     }
   }
 
-  // 5. Check if any step is currently running
   for (const step of plan.steps) {
     const info = stepStatuses.get(step.stepId);
     if (info?.status === "working") {
@@ -110,7 +105,6 @@ export async function advanceChain(
     }
   }
 
-  // 6. Check if a gated step is awaiting review
   for (const step of plan.steps) {
     const info = stepStatuses.get(step.stepId);
     if (info?.status === "review" && step.humanGate) {
@@ -118,7 +112,6 @@ export async function advanceChain(
     }
   }
 
-  // 7. Find next pending step whose dependencies are all approved
   let nextStep: PlanStep | undefined;
   for (const step of plan.steps) {
     if (stepStatuses.has(step.stepId)) continue;
@@ -134,7 +127,6 @@ export async function advanceChain(
     }
   }
 
-  // 8. All steps done → chain complete
   if (!nextStep) {
     const allApproved = plan.steps.every((step) => {
       const info = stepStatuses.get(step.stepId);
@@ -152,10 +144,8 @@ export async function advanceChain(
     return { action: "waiting_gate" };
   }
 
-  // 9. Gather context from completed sibling deliverables
   const siblingContext = await gatherSiblingContext(nextStep.dependsOn, plan);
 
-  // 10. Resolve which employee executes this step
   const employeeId = nextStep.assignedEmployeeId
     ?? await resolveDefaultEmployee(parent.companyId, nextStep.assignedRole);
 
@@ -177,7 +167,6 @@ export async function advanceChain(
     return { action: "chain_failed", error: "Employee or company not found" };
   }
 
-  // 11. Create child task
   const enrichedBrief = {
     ...nextStep.brief,
     _planStepId: nextStep.stepId,
@@ -198,7 +187,6 @@ export async function advanceChain(
     return { action: "chain_failed", error: "Failed to create child task" };
   }
 
-  // 12. Update parent plan's stepTaskMap
   const updatedPlan: TaskPlan = {
     ...plan,
     stepTaskMap: { ...plan.stepTaskMap, [nextStep.stepId]: child.id },
@@ -208,7 +196,6 @@ export async function advanceChain(
     status: "working",
   }).where(eq(tasks.id, parentTaskId));
 
-  // 13. Trigger execute-task via caller-provided function
   const handle = await triggerTask({
     agentId: employeeId,
     tenantId: parent.companyId,

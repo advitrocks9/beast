@@ -77,7 +77,6 @@ export default async function OnboardingPage() {
 
   // Step 3: Hire employees
   if (company.onboardingStatus === "hiring") {
-    // Load departments and their functions to show recommendations
     const depts = await db.query.departments.findMany({
       where: eq(departments.companyId, company.id),
     });

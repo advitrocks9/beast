@@ -21,8 +21,7 @@ export const departmentsRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       // Atomic so a partial commit can't leave an empty department on
       // /onboarding/functions or /settings with no functions attached.
-      // Same shape as employees.hire (row 109) and onboarding.saveFunctions
-      // (row 110).
+      // Same shape as employees.hire and onboarding.saveFunctions.
       const dept = await ctx.db.transaction(async (tx) => {
         const [created] = await tx.insert(departments).values({
           companyId: ctx.companyId,

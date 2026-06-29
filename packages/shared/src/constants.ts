@@ -1,5 +1,3 @@
-export const APP_NAME = "Beast";
-
 export const EMPLOYEE_ROLES = ["marketing", "sales", "support"] as const;
 export type EmployeeRole = (typeof EMPLOYEE_ROLES)[number];
 

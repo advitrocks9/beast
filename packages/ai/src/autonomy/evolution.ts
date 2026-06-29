@@ -37,7 +37,6 @@ export async function evaluateAutonomy(ctx: TickContext): Promise<AutonomySugges
     for (const action of AUTONOMY_ACTIONS) {
       if (settings[action] === "auto") continue; // Already autonomous
 
-      // Map action to deliverable type for tracking
       const deliverableTypes = actionToDeliverableTypes(action);
       if (deliverableTypes.length === 0) continue;
 
