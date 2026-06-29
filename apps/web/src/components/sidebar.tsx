@@ -15,6 +15,8 @@ interface SidebarEmployee {
 interface SidebarProps {
   employees?: SidebarEmployee[];
   reviewCount?: number;
+  open?: boolean;
+  onClose?: () => void;
 }
 
 const roleColors: Record<string, string> = {
@@ -30,11 +32,18 @@ const statusColors: Record<string, string> = {
   active: "bg-[#22C55E]",
 };
 
-export function Sidebar({ employees = [], reviewCount = 0 }: SidebarProps) {
+export function Sidebar({ employees = [], reviewCount = 0, open = false, onClose }: SidebarProps) {
   const pathname = usePathname();
 
   return (
-    <aside className="flex h-full w-[240px] flex-col bg-[oklch(1_0_0/0.6)] backdrop-blur-[16px] backdrop-saturate-[1.2] border-r border-[oklch(0.8_0.01_260/0.15)]">
+    <aside
+      onClick={onClose}
+      className={cn(
+        "z-40 flex h-full w-[240px] flex-col bg-[oklch(1_0_0/0.6)] backdrop-blur-[16px] backdrop-saturate-[1.2] border-r border-[oklch(0.8_0.01_260/0.15)]",
+        "fixed inset-y-0 left-0 transition-transform duration-200 md:static md:translate-x-0",
+        open ? "translate-x-0" : "-translate-x-full",
+      )}
+    >
       {/* Logo */}
       <div className="flex h-14 items-center px-4 border-b border-[oklch(0.8_0.01_260/0.1)]">
         <Link href="/dashboard" className="font-(--font-display) text-lg font-bold tracking-tight">
