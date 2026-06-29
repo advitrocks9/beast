@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Bell, LogOut } from "lucide-react";
+import { Bell, LogOut, Menu } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTRPC } from "@/trpc/client";
 import { createClient } from "@/lib/supabase/client";
@@ -32,7 +32,7 @@ function relativeTime(d: Date): string {
   return `${dy}d ago`;
 }
 
-export function TopNav() {
+export function TopNav({ onMenu }: { onMenu?: () => void }) {
   const [showNotifs, setShowNotifs] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -99,6 +99,13 @@ export function TopNav() {
 
   return (
     <header className="flex h-14 items-center justify-end gap-3 border-b border-[oklch(0.8_0.01_260/0.1)] bg-[oklch(1_0_0/0.6)] backdrop-blur-[16px] backdrop-saturate-[1.2] px-6 sticky top-0 z-40">
+      <button
+        onClick={onMenu}
+        aria-label="Open menu"
+        className="mr-auto flex h-9 w-9 items-center justify-center rounded-lg text-text-secondary transition-colors hover:bg-[oklch(0.97_0.005_260/0.5)] hover:text-text md:hidden"
+      >
+        <Menu size={20} />
+      </button>
       <div className="relative" ref={notifRef}>
         <button
           onClick={() => setShowNotifs((s) => !s)}

@@ -223,7 +223,7 @@ export function PendingList({ items }: PendingListProps) {
                     </p>
                   </div>
                   <div className="text-right shrink-0">
-                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-600">
+                    <span className="rounded-full bg-surface-solid px-2 py-0.5 text-[10px] font-medium text-text-muted">
                       v{d.version}
                     </span>
                     <p className="text-[10px] text-text-muted mt-0.5">

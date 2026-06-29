@@ -24,7 +24,7 @@ export default function VsSintraPage() {
   return (
     <>
       <LandingNav />
-      <main className="bg-[#FAFAFA]">
+      <main className="bg-bg-warm">
         <Hero />
         <Differentiators />
         <ComparisonTable />
