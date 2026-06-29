@@ -5,56 +5,62 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme {
-  /* Base */
+  /* Base. Warm paper canvas with true-white cards, so depth comes from real
+     surface contrast instead of glass-on-white that vanished against #F8F9FB. */
   --color-bg: #FFFFFF;
-  --color-bg-warm: #F8F9FB;
-  --color-surface: oklch(0.97 0.004 264 / 0.4);
-  --color-surface-hover: oklch(0.95 0.005 264 / 0.5);
-  --color-surface-solid: #F1F2F5;
+  --color-bg-warm: #FAFAF7;
+  --color-surface: #FFFFFF;
+  --color-surface-hover: #F6F4EE;
+  --color-surface-solid: #FFFFFF;
+  --color-surface-sunken: #F3F1EA;
 
-  /* Glass */
-  --color-glass: oklch(1 0 0 / 0.55);
-  --color-glass-border: oklch(0.8 0.012 264 / 0.15);
-  --color-glass-heavy: oklch(1 0 0 / 0.7);
+  /* Glass. Reserved for the nav and over-imagery now; warmer, more present
+     border so it still reads as a panel where it is used. */
+  --color-glass: oklch(1 0 0 / 0.72);
+  --color-glass-border: oklch(0.83 0.008 70 / 0.5);
+  --color-glass-heavy: oklch(1 0 0 / 0.85);
 
-  /* Accent */
-  --color-accent: #1E82E0;
-  --color-accent-deep: #1C38EA;
-  --color-accent-light: #E8F2FE;
-  --color-accent-glow: oklch(0.65 0.2 260 / 0.15);
+  /* Brand. Spruce teal is the single owned accent: links, focus, active nav,
+     the "working" state, and the voice/memory moments. This replaces the dead
+     --color-accent that the @theme inline block silently aliased to near-white. */
+  --color-brand: #0F766E;
+  --color-brand-deep: #0B5C56;
+  --color-brand-light: #E6F2F0;
+  --color-brand-glow: oklch(0.6 0.07 185 / 0.18);
+  --color-brand-fg: #FFFFFF;
 
-  /* Text. Both secondary (#4B5563 ~7:1) and muted (#6B7280 ~4.83:1)
-     pass WCAG AA on the off-white surfaces; the previous #9CA3AF muted
-     came in at 2.4:1 and broke a11y on /, /pricing, and /vs/sintra. */
-  --color-text: #1A1A1A;
+  /* Text. #4B5563 ~7:1 and #6B7280 ~4.83:1 both pass AA on the warm canvas;
+     the old #9CA3AF muted came in at 2.4:1 and is gone. */
+  --color-text: #1C1A17;
   --color-text-secondary: #4B5563;
   --color-text-muted: #6B7280;
 
-  /* Status */
-  --color-active: #22C55E;
-  --color-working: #3B82F6;
-  --color-review: #F59E0B;
-  --color-idle: #9CA3AF;
-  --color-error: #EF4444;
+  /* Status / signal. Bright value for dots and fills; AA text shades live in
+     lib/colors.ts so a tinted chip never paints a hue as text on its own tint. */
+  --color-active: #15803D;   /* approved / done */
+  --color-working: #0F766E;  /* in-flight, shares the brand teal on purpose */
+  --color-review: #F59E0B;   /* needs review, "your turn" */
+  --color-idle: #6B7280;     /* idle (was #9CA3AF) */
+  --color-error: #DC2626;
 
-  /* Employee Roles */
-  --color-marketing: #E87B35;
-  --color-sales: #3B82F6;
-  --color-support: #22C55E;
+  /* Employee roles. Identity only, low chroma, never reused as status. */
+  --color-marketing: #B05A38; /* clay, Alex */
+  --color-sales: #8A3D63;     /* mulberry, Jordan */
+  --color-support: #46618A;   /* slate-blue, Sam */
 
-  /* Feedback Chips */
+  /* Feedback chips */
   --color-chip-negative-bg: #FEF2F2;
-  --color-chip-negative-text: #DC2626;
-  --color-chip-positive-bg: #F0FDF4;
-  --color-chip-positive-text: #16A34A;
-  --color-chip-neutral-bg: #F5F3FF;
-  --color-chip-neutral-text: #7C3AED;
+  --color-chip-negative-text: #B91C1C;
+  --color-chip-positive-bg: #ECFDF3;
+  --color-chip-positive-text: #15803D;
+  --color-chip-neutral-bg: #EEF6F5;
+  --color-chip-neutral-text: #0B5C56;
 
-  /* Shadows */
-  --shadow-xs: 0 1px 2px oklch(0.3 0 0 / 0.04);
-  --shadow-sm: 0 4px 12px oklch(0.3 0 0 / 0.06);
-  --shadow-md: 0 8px 24px oklch(0.3 0 0 / 0.08);
-  --shadow-glass: 0 4px 16px oklch(0.3 0 0 / 0.05), inset 0 1px 0 oklch(1 0 0 / 0.2);
+  /* Shadows. Warm-tinted so cards lift off the paper. */
+  --shadow-xs: 0 1px 2px oklch(0.3 0.02 70 / 0.05);
+  --shadow-sm: 0 1px 2px oklch(0.3 0.02 70 / 0.05), 0 4px 12px oklch(0.3 0.02 70 / 0.06);
+  --shadow-md: 0 8px 24px oklch(0.3 0.02 70 / 0.09);
+  --shadow-glass: 0 4px 16px oklch(0.3 0.02 70 / 0.06), inset 0 1px 0 oklch(1 0 0 / 0.4);
 
   /* Radius */
   --radius-sm: 6px;
@@ -70,44 +76,44 @@
   --font-mono: 'JetBrains Mono', monospace;
 }
 
-/* Glass utility classes */
+/* Card surface. Solid white on the warm canvas with a real hairline + lift,
+   replacing the translucent glass that disappeared on the old white page. */
 .glass {
-  background: oklch(1 0 0 / 0.55);
-  backdrop-filter: blur(20px) saturate(1.2);
-  border: 1px solid var(--color-glass-border);
+  background: var(--color-surface-solid);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
-  box-shadow: var(--shadow-glass);
+  box-shadow: var(--shadow-sm);
 }
 
 .glass:hover {
-  background: oklch(1 0 0 / 0.65);
-  border-color: oklch(0.8 0.012 264 / 0.2);
-  box-shadow: 0 8px 24px oklch(0.3 0 0 / 0.08), inset 0 1px 0 oklch(1 0 0 / 0.25);
+  border-color: oklch(0.83 0.008 70 / 0.9);
+  box-shadow: var(--shadow-md);
 }
 
 .glass-heavy {
-  background: oklch(1 0 0 / 0.7);
-  backdrop-filter: blur(24px) saturate(1.2);
-  border: 1px solid var(--color-glass-border);
+  background: var(--color-surface-solid);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
-  box-shadow: var(--shadow-glass);
+  box-shadow: var(--shadow-md);
 }
 
+/* The one place glass stays glass: the top nav floating over content. */
 .glass-nav {
-  background: oklch(1 0 0 / 0.6);
+  background: oklch(1 0 0 / 0.75);
   backdrop-filter: blur(16px) saturate(1.2);
-  border-bottom: 1px solid var(--color-glass-border);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .glass-frosted {
-  background: oklch(1 0 0 / 0.4);
-  backdrop-filter: blur(32px) saturate(1.2);
-  border: 1px solid oklch(0.8 0.012 264 / 0.1);
+  background: oklch(1 0 0 / 0.6);
+  backdrop-filter: blur(28px) saturate(1.2);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
 }
 
-/* Goal progress range: painted track + a small thumb in the goal's color, so
-   both sides of the track render consistently instead of the browser default. */
+.tnum { font-variant-numeric: tabular-nums; }
+
+/* Goal progress range: painted track + a small thumb in the goal's color. */
 .progress-range {
   -webkit-appearance: none;
   appearance: none;
@@ -121,7 +127,7 @@
   height: 14px;
   width: 14px;
   border-radius: 9999px;
-  background: var(--thumb-color, #3B82F6);
+  background: var(--thumb-color, #0F766E);
   border: 2px solid white;
   box-shadow: 0 1px 3px oklch(0.3 0 0 / 0.2);
   cursor: pointer;
@@ -130,40 +136,49 @@
   height: 14px;
   width: 14px;
   border-radius: 9999px;
-  background: var(--thumb-color, #3B82F6);
+  background: var(--thumb-color, #0F766E);
   border: 2px solid white;
   box-shadow: 0 1px 3px oklch(0.3 0 0 / 0.2);
   cursor: pointer;
 }
 
-/* Gradient text */
+/* Headings: solid warm ink. Crisp, no gradient. */
 .heading-gradient {
-  background: linear-gradient(to right in oklab, #19191D 0%, #626275 100%);
-  -webkit-background-clip: text;
-  color: transparent;
+  color: var(--color-text);
 }
 
-/* Primary button */
+/* Primary button: solid warm ink. Premium, achromatic, lets the teal stay rare. */
 .btn-primary {
-  background: radial-gradient(114% 114% at 10% 17%, #1E82E0, #1C38EA);
+  background: var(--color-text);
   color: white;
   border-radius: 12px;
   padding: 10px 20px;
   font: 500 14px/1 var(--font-body);
   letter-spacing: -0.01em;
-  box-shadow:
-    oklch(0.4 0.15 260 / 0.17) 0 2px 5px,
-    oklch(0.4 0.15 260 / 0.15) 0 10px 10px,
-    oklch(0.4 0.15 260 / 0.09) 0 22px 13px;
+  box-shadow: 0 1px 2px oklch(0.2 0.02 70 / 0.18), 0 6px 16px oklch(0.2 0.02 70 / 0.12);
   transition: all 150ms ease;
 }
 
 .btn-primary:hover {
   transform: translateY(-1px);
-  box-shadow:
-    oklch(0.4 0.15 260 / 0.2) 0 4px 8px,
-    oklch(0.4 0.15 260 / 0.18) 0 12px 14px,
-    oklch(0.4 0.15 260 / 0.12) 0 26px 16px;
+  background: #2A2723;
+  box-shadow: 0 2px 4px oklch(0.2 0.02 70 / 0.2), 0 10px 22px oklch(0.2 0.02 70 / 0.16);
+}
+
+/* Brand button: the teal accent CTA, used sparingly for the one key action. */
+.btn-brand {
+  background: var(--color-brand);
+  color: var(--color-brand-fg);
+  border-radius: 12px;
+  padding: 10px 20px;
+  font: 500 14px/1 var(--font-body);
+  letter-spacing: -0.01em;
+  box-shadow: 0 1px 2px oklch(0.35 0.06 185 / 0.25), 0 8px 18px oklch(0.35 0.06 185 / 0.18);
+  transition: all 150ms ease;
+}
+.btn-brand:hover {
+  transform: translateY(-1px);
+  background: var(--color-brand-deep);
 }
 
 @theme inline {
@@ -209,73 +224,76 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* shadcn neutrals, warmed. They own surfaces/borders/text; the @theme palette
+   above owns brand + semantic + role. --primary is warm ink so the shadcn Button
+   default and the .btn-primary class are one primary; --ring is the brand teal. */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+  --background: #FAFAF7;
+  --foreground: #1C1A17;
+  --card: #FFFFFF;
+  --card-foreground: #1C1A17;
+  --popover: #FFFFFF;
+  --popover-foreground: #1C1A17;
+  --primary: #1C1A17;
+  --primary-foreground: #FFFFFF;
+  --secondary: #F3F1EA;
+  --secondary-foreground: #1C1A17;
+  --muted: #F3F1EA;
+  --muted-foreground: #6B7280;
+  --accent: #F1EFE8;
+  --accent-foreground: #1C1A17;
+  --destructive: #DC2626;
+  --border: #ECE8E0;
+  --input: #ECE8E0;
+  --ring: #0F766E;
+  --chart-1: #0F766E;
+  --chart-2: #B05A38;
+  --chart-3: #8A3D63;
+  --chart-4: #46618A;
+  --chart-5: #F59E0B;
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar: #FBFBF8;
+  --sidebar-foreground: #1C1A17;
+  --sidebar-primary: #1C1A17;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #F1EFE8;
+  --sidebar-accent-foreground: #1C1A17;
+  --sidebar-border: #ECE8E0;
+  --sidebar-ring: #0F766E;
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
+  --background: oklch(0.165 0.006 70);
   --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
+  --card: oklch(0.205 0.006 70);
   --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
+  --popover: oklch(0.205 0.006 70);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
+  --primary: oklch(0.985 0 0);
   --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
+  --secondary: oklch(0.269 0.006 70);
   --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
+  --muted: oklch(0.269 0.006 70);
   --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
+  --accent: oklch(0.269 0.006 70);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
+  --ring: oklch(0.62 0.1 185);
+  --chart-1: oklch(0.62 0.1 185);
+  --chart-2: oklch(0.6 0.12 45);
+  --chart-3: oklch(0.55 0.12 350);
+  --chart-4: oklch(0.6 0.08 260);
+  --chart-5: oklch(0.7 0.15 70);
+  --sidebar: oklch(0.205 0.006 70);
   --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary: oklch(0.62 0.1 185);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent: oklch(0.269 0.006 70);
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --sidebar-ring: oklch(0.62 0.1 185);
 }
 
 @layer base {
@@ -293,14 +311,18 @@
 }
 
 @keyframes memory-receipt-pulse {
-  0% { box-shadow: 0 0 0 0 oklch(0.7 0.18 280 / 0.35); }
-  100% { box-shadow: 0 0 0 14px oklch(0.7 0.18 280 / 0); }
+  0% { box-shadow: 0 0 0 0 oklch(0.55 0.08 185 / 0.4); }
+  100% { box-shadow: 0 0 0 14px oklch(0.55 0.08 185 / 0); }
+}
+
+.memory-receipt-pulse {
+  animation: memory-receipt-pulse 1.4s ease-out;
 }
 
 @keyframes cite-flash-anim {
-  0%   { box-shadow: 0 0 0 0 oklch(0.7 0.18 260 / 0); }
-  20%  { box-shadow: 0 0 0 4px oklch(0.7 0.18 260 / 0.45); }
-  100% { box-shadow: 0 0 0 12px oklch(0.7 0.18 260 / 0); }
+  0%   { box-shadow: 0 0 0 0 oklch(0.55 0.08 185 / 0); }
+  20%  { box-shadow: 0 0 0 4px oklch(0.55 0.08 185 / 0.45); }
+  100% { box-shadow: 0 0 0 12px oklch(0.55 0.08 185 / 0); }
 }
 
 .cite-flash {
@@ -308,7 +330,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cite-flash {
+  .cite-flash, .memory-receipt-pulse {
     animation: none;
   }
 }

@@ -5,11 +5,14 @@ interface GlassCardProps extends React.HTMLAttributes<HTMLDivElement> {
   hoverable?: boolean;
 }
 
+// Solid cards on the warm paper canvas: depth comes from a real hairline + lift,
+// not translucency that vanished on white. "frosted" keeps true glass for the
+// few over-imagery / nav surfaces; "accent" is a brand-tinted panel.
 const variants = {
-  light: "bg-[oklch(1_0_0/0.55)] backdrop-blur-[20px] backdrop-saturate-[1.2]",
-  heavy: "bg-[oklch(1_0_0/0.7)] backdrop-blur-[24px] backdrop-saturate-[1.2]",
-  frosted: "bg-[oklch(1_0_0/0.4)] backdrop-blur-[32px] backdrop-saturate-[1.2]",
-  accent: "bg-[oklch(0.58_0.16_260/0.08)] backdrop-blur-[24px] backdrop-saturate-[1.2]",
+  light: "bg-white",
+  heavy: "bg-white",
+  frosted: "bg-[oklch(1_0_0/0.6)] backdrop-blur-[28px] backdrop-saturate-[1.2]",
+  accent: "bg-brand-light",
 };
 
 export function GlassCard({
@@ -23,13 +26,11 @@ export function GlassCard({
     <div
       className={cn(
         variants[variant],
-        "rounded-[20px] border border-[oklch(0.8_0.01_260/0.15)]",
-        "shadow-[0_4px_16px_oklch(0.3_0.02_260/0.05),inset_0_1px_0_oklch(1_0_0/0.2)]",
+        "rounded-[20px] border border-border shadow-sm",
         hoverable && [
           "transition-all duration-150",
-          "hover:bg-[oklch(1_0_0/0.65)]",
-          "hover:border-[oklch(0.8_0.01_260/0.2)]",
-          "hover:shadow-[0_8px_24px_oklch(0.3_0.02_260/0.08),inset_0_1px_0_oklch(1_0_0/0.25)]",
+          "hover:-translate-y-px hover:shadow-md",
+          "hover:border-[oklch(0.83_0.008_70/0.9)]",
         ],
         className,
       )}
