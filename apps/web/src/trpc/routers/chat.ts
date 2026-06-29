@@ -1,6 +1,7 @@
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { and, asc, eq, gt, desc } from "drizzle-orm";
-import { chatMessages, agentRunEvents, tasks, deliverables } from "@beast/db";
+import { chatMessages, agentRunEvents, tasks, deliverables, aiEmployees } from "@beast/db";
 import { extractRuleFromRationale } from "@beast/ai";
 import { createTRPCRouter, protectedProcedure } from "../init";
 
@@ -168,6 +169,24 @@ export const chatRouter = createTRPCRouter({
       taskId: z.string().uuid().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
+      // Verify the referenced employee (and task, when present) belong to this
+      // company so a message can't dangle a reference to another tenant's rows.
+      const employee = await ctx.db.query.aiEmployees.findFirst({
+        where: and(eq(aiEmployees.id, input.employeeId), eq(aiEmployees.companyId, ctx.companyId)),
+        columns: { id: true },
+      });
+      if (!employee) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Employee not found" });
+      }
+      if (input.taskId) {
+        const task = await ctx.db.query.tasks.findFirst({
+          where: and(eq(tasks.id, input.taskId), eq(tasks.companyId, ctx.companyId)),
+          columns: { id: true },
+        });
+        if (!task) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Task not found" });
+        }
+      }
       const [row] = await ctx.db.insert(chatMessages).values({
         companyId: ctx.companyId,
         aiEmployeeId: input.employeeId,
