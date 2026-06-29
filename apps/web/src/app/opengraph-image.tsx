@@ -88,7 +88,7 @@ export default function OpengraphImage() {
                 width: 12,
                 height: 12,
                 borderRadius: 999,
-                background: "#E87B35",
+                background: "#B05A38",
               }}
             />
             Marketing
@@ -111,7 +111,7 @@ export default function OpengraphImage() {
                 width: 12,
                 height: 12,
                 borderRadius: 999,
-                background: "#3B82F6",
+                background: "#8A3D63",
               }}
             />
             Sales
@@ -134,7 +134,7 @@ export default function OpengraphImage() {
                 width: 12,
                 height: 12,
                 borderRadius: 999,
-                background: "#22C55E",
+                background: "#15803D",
               }}
             />
             Support
