@@ -6,6 +6,7 @@ import { useTRPC } from "@/trpc/client";
 import { GlassCard } from "@beast/ui";
 import { Plus, Trash2, FileText, Globe, Upload, Pencil } from "lucide-react";
 import { KNOWLEDGE_CATEGORIES, type KnowledgeCategory } from "@beast/shared";
+import { statusMeta } from "@/lib/colors";
 
 const CRAWL_INFLIGHT_TTL_MS = 90_000;
 
@@ -27,11 +28,13 @@ const SOURCE_LABEL: Record<string, string> = {
   feedback_learned: "Feedback",
 };
 
-const SOURCE_COLOR: Record<string, string> = {
-  interview: "#9CA3AF",
-  document: "#3B82F6",
-  url_crawl: "#22C55E",
-  feedback_learned: "#E87B35",
+// Source has no dedicated namespace in the color module, so map each kind to the
+// nearest on-system status palette to keep a distinct, AA-safe chip.
+const SOURCE_STATUS: Record<string, string> = {
+  interview: "queued",
+  document: "in_progress",
+  url_crawl: "completed",
+  feedback_learned: "pending",
 };
 
 type FilterValue = "all" | KnowledgeCategory;
@@ -338,7 +341,7 @@ function KnowledgeItemRow({
     },
   });
 
-  const sourceColor = SOURCE_COLOR[item.sourceType] ?? "#9CA3AF";
+  const source = statusMeta(SOURCE_STATUS[item.sourceType]);
   const sourceLabel = SOURCE_LABEL[item.sourceType] ?? item.sourceType;
 
   if (editing) {
@@ -351,7 +354,7 @@ function KnowledgeItemRow({
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value)}
-            className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+            className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
           >
             {KNOWLEDGE_CATEGORIES.map((cat) => (
               <option key={cat} value={cat}>
@@ -367,7 +370,7 @@ function KnowledgeItemRow({
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+            className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
           />
         </div>
         <div>
@@ -378,7 +381,7 @@ function KnowledgeItemRow({
             value={content}
             onChange={(e) => setContent(e.target.value)}
             rows={6}
-            className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent resize-none"
+            className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand resize-none"
           />
           <p className="mt-1 text-[11px] text-text-muted">
             Edits update the title, body, and category. Linked embeddings stay
@@ -439,10 +442,7 @@ function KnowledgeItemRow({
           <div className="flex flex-wrap items-center gap-2 mb-1">
             <span
               className="rounded-full px-2 py-0.5 text-[10px] font-medium"
-              style={{
-                backgroundColor: `${sourceColor}20`,
-                color: sourceColor,
-              }}
+              style={{ backgroundColor: source.bg, color: source.fg }}
             >
               {sourceLabel}
             </span>
@@ -493,6 +493,7 @@ function safeHostname(input: string): string | null {
 
 function CrawlsInFlightSection({ rows }: { rows: Array<{ url: string; queuedAt: number }> }) {
   if (rows.length === 0) return null;
+  const crawling = statusMeta("in_progress");
   return (
     <section>
       <div className="flex items-baseline justify-between mb-3">
@@ -515,7 +516,7 @@ function CrawlsInFlightSection({ rows }: { rows: Array<{ url: string; queuedAt: 
               </div>
               <span
                 className="rounded-full px-2.5 py-0.5 text-[10px] font-medium shrink-0"
-                style={{ backgroundColor: "#DBEAFE", color: "#1D4ED8" }}
+                style={{ backgroundColor: crawling.bg, color: crawling.fg }}
               >
                 Crawling
               </span>
@@ -527,11 +528,11 @@ function CrawlsInFlightSection({ rows }: { rows: Array<{ url: string; queuedAt: 
   );
 }
 
-const FILE_STATUS_META: Record<string, { label: string; color: string; bg: string }> = {
-  pending: { label: "Queued", color: "#6B7280", bg: "#F3F4F6" },
-  processing: { label: "Processing", color: "#1D4ED8", bg: "#DBEAFE" },
-  complete: { label: "Indexed", color: "#15803D", bg: "#DCFCE7" },
-  failed: { label: "Failed", color: "#B91C1C", bg: "#FEE2E2" },
+const FILE_STATUS: Record<string, { label: string; status: string }> = {
+  pending: { label: "Queued", status: "queued" },
+  processing: { label: "Processing", status: "in_progress" },
+  complete: { label: "Indexed", status: "completed" },
+  failed: { label: "Failed", status: "failed" },
 };
 
 function UploadedFilesSection() {
@@ -570,8 +571,9 @@ function UploadedFilesSection() {
       </div>
       <GlassCard hoverable={false} className="divide-y divide-[oklch(0.8_0.01_260/0.1)]">
         {rows.map((file) => {
-          const meta =
-            FILE_STATUS_META[file.processingStatus] ?? FILE_STATUS_META.pending!;
+          const entry =
+            FILE_STATUS[file.processingStatus] ?? FILE_STATUS.pending!;
+          const meta = statusMeta(entry.status);
           return (
             <div key={file.id} className="flex items-center gap-3 px-4 py-3">
               <FileText size={16} className="text-text-muted shrink-0" />
@@ -591,9 +593,9 @@ function UploadedFilesSection() {
               </div>
               <span
                 className="rounded-full px-2.5 py-0.5 text-[10px] font-medium shrink-0"
-                style={{ backgroundColor: meta.bg, color: meta.color }}
+                style={{ backgroundColor: meta.bg, color: meta.fg }}
               >
-                {meta.label}
+                {entry.label}
               </span>
               <button
                 onClick={() => {
@@ -661,7 +663,7 @@ function AddKnowledgeBlock({
     return (
       <button
         onClick={() => setOpen(true)}
-        className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-[oklch(0.8_0.01_260/0.4)] bg-white px-4 py-3 text-sm font-medium text-text-secondary hover:border-accent hover:text-accent"
+        className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-[oklch(0.8_0.01_260/0.4)] bg-white px-4 py-3 text-sm font-medium text-text-secondary hover:border-brand hover:text-brand"
       >
         <Plus size={14} />
         Add knowledge
@@ -788,7 +790,7 @@ function NoteForm({ onDone }: { onDone: () => void }) {
         <select
           value={category}
           onChange={(e) => setCategory(e.target.value as KnowledgeCategory)}
-          className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+          className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
         >
           {KNOWLEDGE_CATEGORIES.map((cat) => (
             <option key={cat} value={cat}>
@@ -805,7 +807,7 @@ function NoteForm({ onDone }: { onDone: () => void }) {
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="e.g. Tone of voice for customer-facing copy"
-          className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+          className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
         />
       </div>
       <div>
@@ -817,7 +819,7 @@ function NoteForm({ onDone }: { onDone: () => void }) {
           onChange={(e) => setContent(e.target.value)}
           rows={5}
           placeholder="Write what the agent should know. Plain prose works fine."
-          className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent resize-none"
+          className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand resize-none"
         />
       </div>
       <div className="flex justify-end">
@@ -884,7 +886,7 @@ function UrlForm({
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           placeholder="https://your-company.com/about"
-          className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+          className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
         />
         <p className="mt-1.5 text-[11px] text-text-muted">
           The crawler runs in the background. The page becomes searchable in

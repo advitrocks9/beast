@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { GlassCard } from "@beast/ui";
-import { Sparkles } from "lucide-react";
+import { statusMeta } from "@/lib/colors";
 
 interface ShippedItem {
   id: string;
@@ -51,16 +51,11 @@ export function WeeklyDigest({
 
   return (
     <GlassCard hoverable={false} className="p-5">
-      <div className="flex items-start gap-3">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-light">
-          <Sparkles size={16} className="text-accent" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-semibold">This week</h3>
-          <p className="text-xs text-text-secondary">
-            What your team did in the last 7 days.
-          </p>
-        </div>
+      <div>
+        <h3 className="text-sm font-semibold">This week</h3>
+        <p className="text-xs text-text-secondary">
+          What your team did in the last 7 days.
+        </p>
       </div>
 
       <div className={`mt-4 grid gap-3 ${gridCols}`}>
@@ -142,9 +137,9 @@ function Tile({
 }) {
   const accent =
     tone === "reject" && value > 0
-      ? "#DC2626"
+      ? statusMeta("rejected").fg
       : tone === "warn" && value > 0
-        ? "#B45309"
+        ? statusMeta("review").fg
         : "#111827";
   return (
     <Link href={href} className="block">

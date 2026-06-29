@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useTRPC } from "@/trpc/client";
 import { GlassCard } from "@beast/ui";
+import { ROLE_COLORS } from "@/lib/colors";
 import { OnboardingStepIndicator } from "./step-indicator";
 
 type RoleType = "marketing" | "sales" | "support";
@@ -44,12 +45,6 @@ const ROLE_META: Record<RoleType, { icon: string; description: string }> = {
   },
 };
 
-const ROLE_COLORS: Record<RoleType, string> = {
-  marketing: "#E87B35",
-  sales: "#3B82F6",
-  support: "#22C55E",
-};
-
 function EmployeeCard({
   option,
   selected,
@@ -66,7 +61,7 @@ function EmployeeCard({
       hoverable
       className={`cursor-pointer p-5 transition-all ${
         selected
-          ? "ring-2 ring-accent ring-offset-2"
+          ? "ring-2 ring-brand ring-offset-2"
           : "opacity-75 hover:opacity-100"
       }`}
       onClick={onToggle}
@@ -96,7 +91,7 @@ function EmployeeCard({
                 {aiFunctions.map((fn) => (
                   <span
                     key={fn.id}
-                    className="rounded-full bg-accent-light px-2.5 py-0.5 text-xs font-medium text-accent"
+                    className="rounded-full bg-brand-light px-2.5 py-0.5 text-xs font-medium text-brand"
                   >
                     {fn.name}
                   </span>
@@ -110,7 +105,7 @@ function EmployeeCard({
         <div
           className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
             selected
-              ? "border-accent bg-accent text-white"
+              ? "border-brand bg-brand text-white"
               : "border-gray-300"
           }`}
         >
@@ -221,7 +216,7 @@ export function HireEmployeesShell({ companyName, employeeOptions }: HireEmploye
         </div>
 
         {selectedRoles.size > 0 && (
-          <div className="mx-auto mt-8 max-w-3xl rounded-xl bg-accent-light/50 p-4 text-center">
+          <div className="mx-auto mt-8 max-w-3xl rounded-xl bg-brand-light/50 p-4 text-center">
             <p className="text-sm text-text-secondary">
               Your employees start in <strong>draft mode</strong> - they'll create content for your review before anything goes live.
               You can increase their autonomy over time as you build trust.

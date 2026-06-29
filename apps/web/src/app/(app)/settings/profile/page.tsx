@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { db } from "@beast/db";
 import { companies, knowledgeItems, connectors } from "@beast/db";
 import { GlassCard } from "@beast/ui";
+import { statusMeta } from "@/lib/colors";
 import { SlackConnector } from "../_components/slack-connector";
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -50,7 +51,7 @@ export default async function SettingsProfilePage() {
               <p className="text-sm font-medium">{company!.name}</p>
               <p className="text-xs text-text-secondary">{user!.email}</p>
             </div>
-            <span className="rounded-full bg-accent-light px-3 py-1 text-xs font-medium text-accent">
+            <span className="rounded-full bg-brand-light px-3 py-1 text-xs font-medium text-brand">
               Context Score: {company!.contextScore ?? 0}%
             </span>
           </div>
@@ -91,7 +92,7 @@ export default async function SettingsProfilePage() {
               <div className="flex items-center gap-2 mb-2">
                 <span
                   className="h-2 w-2 rounded-full"
-                  style={{ backgroundColor: items.length > 0 ? "#22C55E" : "#9CA3AF" }}
+                  style={{ backgroundColor: items.length > 0 ? statusMeta("completed").dot : statusMeta().dot }}
                 />
                 <h3 className="text-sm font-medium">{label}</h3>
                 <span className="text-xs text-text-muted">({items.length})</span>

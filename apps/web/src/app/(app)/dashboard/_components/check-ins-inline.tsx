@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useTRPC } from "@/trpc/client";
 import { GlassCard } from "@beast/ui";
+import { roleColor, statusMeta } from "@/lib/colors";
 
 interface InlineCheckIn {
   id: string;
@@ -24,12 +25,6 @@ interface CheckInsInlineProps {
   checkIns: InlineCheckIn[];
   employees: InlineEmployee[];
 }
-
-const ROLE_COLORS: Record<string, string> = {
-  marketing: "#E87B35",
-  sales: "#3B82F6",
-  support: "#22C55E",
-};
 
 const RESPONSE_BUTTONS = [
   { value: "used", label: "Used it", color: "#166534", bg: "#dcfce7" },
@@ -64,7 +59,7 @@ export function CheckInsInline({ checkIns, employees }: CheckInsInlineProps) {
       <div className="space-y-2">
         {visible.map((c) => {
           const emp = employeeById.get(c.aiEmployeeId);
-          const roleHex = emp ? ROLE_COLORS[emp.roleType] ?? "#9CA3AF" : "#9CA3AF";
+          const roleHex = roleColor(emp?.roleType);
           const scheduledLabel = formatScheduled(c.scheduledFor);
           const isOverdue =
             c.scheduledFor !== null &&
@@ -87,7 +82,11 @@ export function CheckInsInline({ checkIns, employees }: CheckInsInlineProps) {
                     {c.deliverableType && (
                       <span>{c.deliverableType.replace(/_/g, " ")}</span>
                     )}
-                    <span style={{ color: isOverdue ? "#B45309" : undefined }}>
+                    <span
+                      style={{
+                        color: isOverdue ? statusMeta("pending").fg : undefined,
+                      }}
+                    >
                       {scheduledLabel}
                     </span>
                   </div>

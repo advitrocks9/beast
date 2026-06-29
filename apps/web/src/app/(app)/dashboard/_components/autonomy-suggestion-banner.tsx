@@ -4,12 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { GlassCard } from "@beast/ui";
 import { useTRPC } from "@/trpc/client";
-
-const ROLE_HEX: Record<string, string> = {
-  marketing: "#E87B35",
-  sales: "#3B82F6",
-  support: "#22C55E",
-};
+import { roleMeta } from "@/lib/colors";
 
 function formatAction(action: string): string {
   switch (action) {
@@ -79,7 +74,7 @@ export function AutonomySuggestionBanner() {
 
   if (list.isLoading || !active) return null;
 
-  const hex = ROLE_HEX[active.employeeRoleType] ?? "#9CA3AF";
+  const role = roleMeta(active.employeeRoleType);
   const safety = formatSafetyNet(active.action);
   const counter = total > 1 ? `${activeIdx + 1} of ${total}` : null;
   const pending = accept.isPending || snooze.isPending || dismiss.isPending;
@@ -143,12 +138,12 @@ export function AutonomySuggestionBanner() {
         <div className="flex items-start gap-3">
           <span
             className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
-            style={{ backgroundColor: hex }}
+            style={{ backgroundColor: role.solid }}
             aria-hidden
           />
           <div className="min-w-0 flex-1">
             <div className="flex items-baseline justify-between gap-3">
-              <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: hex }}>
+              <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: role.text }}>
                 {active.employeeName} earned trust
               </p>
               <div className="flex items-center gap-3">
@@ -223,7 +218,7 @@ export function AutonomySuggestionBanner() {
             </div>
 
             {panelOpen && (
-              <LastEightInline rows={(lastApproved.data ?? []) as LastApprovedRow[]} loading={lastApproved.isLoading} hex={hex} />
+              <LastEightInline rows={(lastApproved.data ?? []) as LastApprovedRow[]} loading={lastApproved.isLoading} role={role} />
             )}
           </div>
         </div>
@@ -235,11 +230,11 @@ export function AutonomySuggestionBanner() {
 function LastEightInline({
   rows,
   loading,
-  hex,
+  role,
 }: {
   rows: LastApprovedRow[];
   loading: boolean;
-  hex: string;
+  role: ReturnType<typeof roleMeta>;
 }) {
   if (loading) {
     return (
@@ -274,7 +269,7 @@ function LastEightInline({
             {r.version === 1 && (
               <span
                 className="shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium"
-                style={{ background: `${hex}20`, color: hex }}
+                style={{ background: role.tint, color: role.text }}
               >
                 first read
               </span>

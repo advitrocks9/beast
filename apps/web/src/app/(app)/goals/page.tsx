@@ -7,21 +7,7 @@ import { GlassCard } from "@beast/ui";
 import { EditGoalButton } from "./_components/edit-goal-button";
 import { AddGoalButton } from "./_components/add-goal-button";
 import { ProgressSlider } from "./_components/progress-slider";
-
-const STATUS_BADGE: Record<
-  string,
-  { color: string; bg: string; label: string }
-> = {
-  active: { color: "#1f6feb", bg: "#dbeafe", label: "Active" },
-  paused: { color: "#92400e", bg: "#fef3c7", label: "Paused" },
-  completed: { color: "#166534", bg: "#dcfce7", label: "Completed" },
-};
-
-const ROLE_COLORS: Record<string, string> = {
-  marketing: "#E87B35",
-  sales: "#3B82F6",
-  support: "#22C55E",
-};
+import { statusMeta, roleColor, roleMeta } from "@/lib/colors";
 
 export const metadata = {
   title: "Goals - Beast",
@@ -140,9 +126,8 @@ function GoalCard({
   owner: EmployeeRef | undefined;
   employeeById: Map<string, EmployeeRef>;
 }) {
-  const status = STATUS_BADGE[goal.status] ?? STATUS_BADGE.active!;
-  const progressColor =
-    goal.progressPct >= 75 ? "#22C55E" : goal.progressPct >= 40 ? "#F59E0B" : "#3B82F6";
+  const status = statusMeta(goal.status);
+  const progressColor = goal.progressPct >= 75 ? "#15803D" : "#0F766E";
 
   return (
     <GlassCard hoverable={false} className="p-6">
@@ -154,7 +139,7 @@ function GoalCard({
             </h2>
             <span
               className="rounded-full px-2.5 py-0.5 text-xs font-medium"
-              style={{ backgroundColor: status.bg, color: status.color }}
+              style={{ backgroundColor: status.bg, color: status.fg }}
             >
               {status.label}
             </span>
@@ -189,7 +174,7 @@ function GoalCard({
               <span className="flex items-center gap-1.5">
                 <span
                   className="h-2 w-2 rounded-full"
-                  style={{ backgroundColor: ROLE_COLORS[owner.roleType] ?? "#9CA3AF" }}
+                  style={{ backgroundColor: roleColor(owner.roleType) }}
                 />
                 <span className="font-medium text-text-secondary">Owner:</span>{" "}
                 {owner.name}
@@ -220,7 +205,7 @@ function GoalCard({
                 ? employeeById.get(sub.aiEmployeeId)
                 : undefined;
               const subProgressColor =
-                sub.progressPct >= 75 ? "#22C55E" : sub.progressPct >= 40 ? "#F59E0B" : "#3B82F6";
+                sub.progressPct >= 75 ? "#15803D" : "#0F766E";
               return (
                 <div
                   key={sub.id}
@@ -245,7 +230,7 @@ function GoalCard({
                     {subOwner && (
                       <p
                         className="mt-1 text-[11px]"
-                        style={{ color: ROLE_COLORS[subOwner.roleType] ?? "#9CA3AF" }}
+                        style={{ color: roleMeta(subOwner.roleType).text }}
                       >
                         {subOwner.name}
                       </p>

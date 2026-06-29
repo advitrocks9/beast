@@ -36,7 +36,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
                   active
                     ? isDanger
                       ? "border-error text-error"
-                      : "border-accent text-text"
+                      : "border-brand text-text"
                     : "border-transparent text-text-muted hover:text-text"
                 }`}
               >

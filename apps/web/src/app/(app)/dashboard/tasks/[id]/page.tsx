@@ -8,23 +8,9 @@ import { GlassCard } from "@beast/ui";
 import { PlanApprovalButtons } from "./_components/plan-approval-buttons";
 import { TaskComments } from "./_components/task-comments";
 import { CancelTaskButton } from "./_components/cancel-task-button";
+import { roleColor, roleMeta, statusMeta } from "@/lib/colors";
 
 const IN_FLIGHT_STATUSES = new Set(["pending", "in_progress", "working", "planned"]);
-
-const ROLE_COLORS: Record<string, string> = {
-  marketing: "#E87B35",
-  sales: "#3B82F6",
-  support: "#22C55E",
-};
-
-const STATUS_META: Record<string, { label: string; color: string }> = {
-  pending: { label: "Pending", color: "#9CA3AF" },
-  in_progress: { label: "Working", color: "#3B82F6" },
-  working: { label: "Working", color: "#3B82F6" },
-  review: { label: "Ready to review", color: "#F59E0B" },
-  approved: { label: "Approved", color: "#22C55E" },
-  rejected: { label: "Rejected", color: "#DC2626" },
-};
 
 interface ToolCallTrace {
   toolCallId: string;
@@ -99,8 +85,8 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
     limit: 100,
   });
 
-  const status = STATUS_META[task.status] ?? STATUS_META.pending!;
-  const employeeColor = employee?.roleType ? ROLE_COLORS[employee.roleType] ?? "#9CA3AF" : "#9CA3AF";
+  const status = statusMeta(task.status);
+  const employeeMeta = roleMeta(employee?.roleType);
 
   const plan = task.plan as { steps?: PlanStep[] } | null;
   const planSteps = plan?.steps ?? [];
@@ -142,7 +128,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
         <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
           <span
             className="rounded-full px-2.5 py-0.5 text-xs font-medium"
-            style={{ backgroundColor: `${status.color}20`, color: status.color }}
+            style={{ backgroundColor: status.bg, color: status.fg }}
           >
             {status.label}
           </span>
@@ -150,7 +136,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
             <span className="flex items-center gap-1.5 text-text-secondary">
               <span
                 className="inline-block h-2 w-2 rounded-full"
-                style={{ backgroundColor: employeeColor }}
+                style={{ backgroundColor: employeeMeta.solid }}
               />
               {employee.name}
               <span className="text-text-muted">·</span>
@@ -227,8 +213,8 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
           <div className="space-y-2">
             {childTasks.map((child) => {
               const cEmp = childEmployeeMap.get(child.aiEmployeeId);
-              const cColor = cEmp?.roleType ? ROLE_COLORS[cEmp.roleType] ?? "#9CA3AF" : "#9CA3AF";
-              const cs = STATUS_META[child.status] ?? STATUS_META.pending!;
+              const cColor = roleColor(cEmp?.roleType);
+              const cs = statusMeta(child.status);
               return (
                 <Link key={child.id} href={`/dashboard/tasks/${child.id}`}>
                   <GlassCard className="p-3">
@@ -245,7 +231,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
                       </div>
                       <span
                         className="rounded-full px-2 py-0.5 text-[10px] font-medium shrink-0"
-                        style={{ backgroundColor: `${cs.color}15`, color: cs.color }}
+                        style={{ backgroundColor: cs.bg, color: cs.fg }}
                       >
                         {cs.label}
                       </span>
@@ -263,11 +249,11 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
           <div className="flex items-center gap-3">
             <span
               className="inline-flex h-8 w-8 items-center justify-center rounded-full"
-              style={{ backgroundColor: `${employeeColor}20` }}
+              style={{ backgroundColor: employeeMeta.tint }}
             >
               <span
                 className="inline-block h-2 w-2 animate-pulse rounded-full"
-                style={{ backgroundColor: employeeColor }}
+                style={{ backgroundColor: employeeMeta.solid }}
               />
             </span>
             <div>
@@ -294,7 +280,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
             </h2>
             <Link
               href={`/review/${latestDeliverable.id}`}
-              className="text-xs font-medium text-accent hover:underline"
+              className="text-xs font-medium text-brand hover:underline"
             >
               Open in review
             </Link>
@@ -424,12 +410,12 @@ function formatTimelineEvent(type: string, payload: Record<string, unknown>): st
 
 function eventTypeColor(type: string): string {
   switch (type) {
-    case "run_start": return "#3B82F6";
-    case "tool_call_start": return "#9CA3AF";
-    case "tool_call_end": return "#22C55E";
-    case "scratchpad_update": return "#F59E0B";
-    case "error": return "#DC2626";
-    case "run_end": return "#22C55E";
-    default: return "#9CA3AF";
+    case "run_start": return statusMeta("running").dot;
+    case "tool_call_start": return statusMeta("idle").dot;
+    case "tool_call_end": return statusMeta("completed").dot;
+    case "scratchpad_update": return statusMeta("review").dot;
+    case "error": return statusMeta("error").dot;
+    case "run_end": return statusMeta("completed").dot;
+    default: return statusMeta("idle").dot;
   }
 }

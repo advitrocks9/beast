@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { useTRPC } from "@/trpc/client";
+import { statusMeta } from "@/lib/colors";
 import { GlassCard } from "@beast/ui";
 
 export interface TaskRow {
@@ -173,6 +174,7 @@ export function TasksList({ rows }: TasksListProps) {
       {rows.map((t, i) => {
         const active = i === activeIndex;
         const isSelected = selected.has(t.id);
+        const status = statusMeta(t.status);
         return (
           <div key={t.id} className="flex items-stretch gap-2">
             <button
@@ -231,7 +233,7 @@ export function TasksList({ rows }: TasksListProps) {
                   </div>
                   <span
                     className="rounded-full px-2.5 py-0.5 text-xs font-medium shrink-0"
-                    style={{ backgroundColor: `${t.statusColor}15`, color: t.statusColor }}
+                    style={{ backgroundColor: status.bg, color: status.fg }}
                   >
                     {t.statusLabel}
                   </span>

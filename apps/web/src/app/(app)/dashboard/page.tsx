@@ -15,6 +15,7 @@ import { ActivityEmployeeChips } from "./_components/activity-employee-chips";
 import { LOW_SIGNAL_ACTIVITY_TYPES } from "@/lib/activity-format";
 import { CollaborationProposals, type ProposalItem } from "./_components/collaboration-proposals";
 import type { StarterRole } from "@beast/shared";
+import { roleColor, roleMeta, statusMeta, BRAND } from "@/lib/colors";
 
 const MEMORY_PILL_CONFIDENCE_FLOOR = 0.7;
 const MEMORY_PILL_MAX = 8;
@@ -261,11 +262,6 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     .map((e) => ({ id: e.id, name: e.name, roleType: e.roleType as StarterRole }));
   const employeeNameById = new Map(employees.map((e) => [e.id, e.name]));
   const employeeRoleById = new Map(employees.map((e) => [e.id, e.roleType]));
-  const ROLE_HEX: Record<string, string> = {
-    marketing: "#E87B35",
-    sales: "#3B82F6",
-    support: "#22C55E",
-  };
   const weeklyShippedItems = weeklyShippedRows.map((r) => ({
     id: r.id,
     title: r.title,
@@ -275,9 +271,9 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   const proposalItems: ProposalItem[] = pendingProposalRows.map((r) => ({
     id: r.id,
     fromEmployeeName: employeeNameById.get(r.fromEmployeeId) ?? "AI Employee",
-    fromEmployeeColor: ROLE_HEX[employeeRoleById.get(r.fromEmployeeId) ?? ""] ?? "#9CA3AF",
+    fromEmployeeColor: roleMeta(employeeRoleById.get(r.fromEmployeeId)).text,
     toEmployeeName: employeeNameById.get(r.toEmployeeId) ?? "AI Employee",
-    toEmployeeColor: ROLE_HEX[employeeRoleById.get(r.toEmployeeId) ?? ""] ?? "#9CA3AF",
+    toEmployeeColor: roleMeta(employeeRoleById.get(r.toEmployeeId)).text,
     proposal: r.proposal,
     sourceDeliverableId: r.sourceDeliverableId,
     createdAt: r.createdAt.toISOString(),
@@ -292,9 +288,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     employeeName: r.aiEmployeeId
       ? employeeNameById.get(r.aiEmployeeId) ?? "Beast"
       : "Beast",
-    employeeColor: r.aiEmployeeId
-      ? ROLE_HEX[employeeRoleById.get(r.aiEmployeeId) ?? ""] ?? "#9CA3AF"
-      : "#9CA3AF",
+    employeeColor: roleColor(r.aiEmployeeId ? employeeRoleById.get(r.aiEmployeeId) : undefined),
   }));
   const latestRule = weeklyRuleRows[0]
     ? { title: weeklyRuleRows[0].title, ruleType: weeklyRuleRows[0].ruleType }
@@ -429,14 +423,14 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
               name={emp.name}
               role={emp.roleTitle}
               status={emp.status ?? "idle"}
-              roleColor={emp.roleType}
+              roleType={emp.roleType}
             />
           ))}
 
           {/* Hire card */}
           <GlassCard className="flex min-h-[140px] items-center justify-center border-dashed p-6">
             <div className="text-center">
-              <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-accent-light text-accent">
+              <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-brand-light text-brand">
                 <span className="text-xl">+</span>
               </div>
               <p className="mt-2 text-sm font-medium text-text-secondary">Hire Employee</p>
@@ -496,27 +490,16 @@ function EmployeeCard({
   name,
   role,
   status,
-  roleColor,
+  roleType,
 }: {
   id: string;
   name: string;
   role: string;
   status: string;
-  roleColor: string;
+  roleType: string;
 }) {
-  const colorMap: Record<string, string> = {
-    marketing: "#E87B35",
-    sales: "#3B82F6",
-    support: "#22C55E",
-  };
-  const statusMap: Record<string, { color: string; label: string }> = {
-    idle: { color: "#9CA3AF", label: "Idle" },
-    working: { color: "#3B82F6", label: "Working" },
-    waiting_review: { color: "#F59E0B", label: "Needs review" },
-  };
-
-  const roleHex = colorMap[roleColor] ?? "#9CA3AF";
-  const st = statusMap[status] ?? statusMap.idle!;
+  const roleHex = roleColor(roleType);
+  const st = statusMeta(status);
 
   return (
     <a href={`/employees/${id}`}>
@@ -534,7 +517,7 @@ function EmployeeCard({
           </div>
         </div>
         <div className="mt-4 flex items-center gap-1.5">
-          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: st.color }} />
+          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: st.dot }} />
           <span className="text-xs text-text-secondary">{st.label}</span>
         </div>
       </GlassCard>
@@ -555,12 +538,8 @@ function GoalCard({
   progressPct: number;
   status: string;
 }) {
-  const progressColor = progressPct >= 75 ? "#22C55E" : progressPct >= 40 ? "#F59E0B" : "#3B82F6";
-  const statusColors: Record<string, string> = {
-    active: "#3B82F6",
-    completed: "#22C55E",
-    paused: "#9CA3AF",
-  };
+  const progressColor = progressPct >= 75 ? statusMeta("completed").fg : BRAND;
+  const sm = statusMeta(status);
 
   return (
     <GlassCard hoverable={false} className="p-4">
@@ -568,10 +547,7 @@ function GoalCard({
         <p className="text-sm font-medium">{title}</p>
         <span
           className="rounded-full px-2 py-0.5 text-[10px] font-medium"
-          style={{
-            backgroundColor: (statusColors[status] ?? "#9CA3AF") + "15",
-            color: statusColors[status] ?? "#9CA3AF",
-          }}
+          style={{ backgroundColor: sm.bg, color: sm.fg }}
         >
           {status}
         </span>

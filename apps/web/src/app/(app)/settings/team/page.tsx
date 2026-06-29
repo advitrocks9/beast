@@ -3,12 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { db } from "@beast/db";
 import { companies, aiEmployees } from "@beast/db";
 import { GlassCard } from "@beast/ui";
-
-const ROLE_COLORS: Record<string, string> = {
-  marketing: "#E87B35",
-  sales: "#3B82F6",
-  support: "#22C55E",
-};
+import { roleColor } from "@/lib/colors";
 
 export default async function SettingsTeamPage() {
   const supabase = await createClient();
@@ -42,7 +37,7 @@ export default async function SettingsTeamPage() {
         <div className="space-y-3">
           {employees.map((emp) => {
             const autonomy = (emp.autonomySettings ?? {}) as Record<string, string>;
-            const roleHex = emp.roleType ? (ROLE_COLORS[emp.roleType] ?? "#9CA3AF") : "#9CA3AF";
+            const roleHex = roleColor(emp.roleType);
             return (
               <GlassCard key={emp.id} hoverable={false} className="p-4">
                 <div className="flex items-center justify-between gap-4">
@@ -74,7 +69,7 @@ export default async function SettingsTeamPage() {
 
           {employees.length === 0 && (
             <p className="text-sm text-text-muted">
-              No employees yet. <a href="/hire" className="text-accent hover:underline">Hire one.</a>
+              No employees yet. <a href="/hire" className="text-brand hover:underline">Hire one.</a>
             </p>
           )}
         </div>

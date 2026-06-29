@@ -5,6 +5,16 @@ import Link from "next/link";
 import { useMutation } from "@tanstack/react-query";
 import { useTRPC } from "@/trpc/client";
 import { GlassCard } from "@beast/ui";
+import { ROLE_COLORS, roleMeta, statusMeta } from "@/lib/colors";
+
+// Employee colors arrive as solid role hexes. Dots use the solid as-is, but a
+// name rendered as text on white needs the AA text shade for that role.
+const ROLE_TEXT_BY_SOLID: Record<string, string> = Object.fromEntries(
+  Object.entries(ROLE_COLORS).map(([role, solid]) => [solid, roleMeta(role).text]),
+);
+const roleTextColor = (solid: string): string => ROLE_TEXT_BY_SOLID[solid] ?? solid;
+
+const APPROVE = statusMeta("approved");
 
 export interface ProposalItem {
   id: string;
@@ -49,11 +59,11 @@ export function CollaborationProposals({ items }: CollaborationProposalsProps) {
                 />
                 <div className="min-w-0 flex-1">
                   <p className="text-xs text-text-secondary">
-                    <span className="font-medium" style={{ color: p.fromEmployeeColor }}>
+                    <span className="font-medium" style={{ color: roleTextColor(p.fromEmployeeColor) }}>
                       {p.fromEmployeeName}
                     </span>
                     {" wants "}
-                    <span className="font-medium" style={{ color: p.toEmployeeColor }}>
+                    <span className="font-medium" style={{ color: roleTextColor(p.toEmployeeColor) }}>
                       {p.toEmployeeName}
                     </span>
                     {" to take this on."}
@@ -62,7 +72,7 @@ export function CollaborationProposals({ items }: CollaborationProposalsProps) {
                   {p.sourceDeliverableId && (
                     <Link
                       href={`/review/${p.sourceDeliverableId}`}
-                      className="mt-1 inline-block text-[11px] text-accent hover:underline"
+                      className="mt-1 inline-block text-[11px] text-brand hover:underline"
                     >
                       Source deliverable &rarr;
                     </Link>
@@ -74,7 +84,8 @@ export function CollaborationProposals({ items }: CollaborationProposalsProps) {
                         respond.mutate({ proposalId: p.id, approved: true });
                       }}
                       disabled={respond.isPending}
-                      className="rounded-full border border-[#16A34A] bg-[#F0FDF4] px-3 py-1 text-xs font-medium text-[#166534] hover:opacity-90"
+                      className="rounded-full border px-3 py-1 text-xs font-medium hover:opacity-90"
+                      style={{ backgroundColor: APPROVE.bg, color: APPROVE.fg, borderColor: APPROVE.dot }}
                     >
                       Approve and create task
                     </button>

@@ -149,7 +149,7 @@ function DepartmentColumn({
 
       <button
         onClick={onAddFunction}
-        className="mt-3 flex items-center gap-1.5 rounded-lg border border-dashed border-[oklch(0.8_0.01_260/0.2)] px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:border-accent hover:text-accent"
+        className="mt-3 flex items-center gap-1.5 rounded-lg border border-dashed border-[oklch(0.8_0.01_260/0.2)] px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:border-brand hover:text-brand"
       >
         <span>+</span> Add function
       </button>
@@ -234,7 +234,7 @@ export function FunctionMapperShell({ companyName }: FunctionMapperShellProps) {
         </div>
         <div className="flex items-center gap-4">
           <span className="text-sm text-text-secondary">
-            <span className="font-semibold text-accent">{totalAi}</span>/{totalFunctions} set to AI
+            <span className="font-semibold text-brand">{totalAi}</span>/{totalFunctions} set to AI
           </span>
           <button
             onClick={handleContinue}
@@ -270,12 +270,12 @@ export function FunctionMapperShell({ companyName }: FunctionMapperShellProps) {
                       if (e.key === "Escape") setAddingTo(null);
                     }}
                     placeholder="Function name..."
-                    className="flex-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+                    className="flex-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
                   />
                   <button
                     onClick={() => addFunction(deptIdx)}
                     disabled={!newFnName.trim()}
-                    className="rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white disabled:opacity-30"
+                    className="rounded-lg bg-brand px-3 py-1.5 text-xs font-medium text-white disabled:opacity-30"
                   >
                     Add
                   </button>

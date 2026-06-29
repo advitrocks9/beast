@@ -143,7 +143,7 @@ export function CheckInModal({
               value={pickerValue}
               onChange={(e) => setPickerValue(e.target.value)}
               min={toLocalInputValue(new Date(Date.now() + 60 * 60 * 1000).toISOString())}
-              className="mt-2 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+              className="mt-2 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
             />
             <p className="mt-2 text-xs text-text-muted">
               Your local time. Must be at least 1 hour from now and within 30 days.

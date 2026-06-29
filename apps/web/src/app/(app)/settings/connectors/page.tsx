@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTRPC } from "@/trpc/client";
 import { GlassCard } from "@beast/ui";
+import { statusMeta } from "@/lib/colors";
 import { ExternalServicesSection } from "./_components/external-services-section";
 
 type Platform = "twitter" | "linkedin" | "wordpress" | "slack";
@@ -38,12 +39,14 @@ const PLATFORM_META: Record<Platform, { label: string; description: string; colo
   },
 };
 
-const STATUS_META: Record<string, { label: string; color: string; bg: string }> = {
-  connected: { label: "Connected", color: "#15803D", bg: "#DCFCE7" },
-  active: { label: "Connected", color: "#15803D", bg: "#DCFCE7" },
-  expired: { label: "Token expired", color: "#B45309", bg: "#FEF3C7" },
-  revoked: { label: "Disconnected", color: "#6B7280", bg: "#F3F4F6" },
-  pending: { label: "Pending", color: "#1D4ED8", bg: "#DBEAFE" },
+// Connector lifecycle states ride the shared status palette; labels stay
+// connector-specific while color comes from the central module.
+const CONNECTOR_STATUS: Record<string, { statusKey: string; label: string }> = {
+  connected: { statusKey: "approved", label: "Connected" },
+  active: { statusKey: "approved", label: "Connected" },
+  expired: { statusKey: "pending", label: "Token expired" },
+  revoked: { statusKey: "idle", label: "Disconnected" },
+  pending: { statusKey: "pending", label: "Pending" },
 };
 
 export default function SettingsConnectorsPage() {
@@ -96,6 +99,9 @@ export default function SettingsConnectorsPage() {
 
   const rows = list.data ?? [];
   const byPlatform = new Map(rows.map((r) => [r.platform, r]));
+  const bannerMeta = callbackBanner
+    ? statusMeta(callbackBanner.kind === "success" ? "completed" : "error")
+    : null;
 
   function handleConnect(platform: Platform) {
     setErrorByPlatform((prev) => ({ ...prev, [platform]: null }));
@@ -127,13 +133,13 @@ export default function SettingsConnectorsPage() {
 
   return (
     <div className="space-y-3">
-      {callbackBanner && (
+      {callbackBanner && bannerMeta && (
         <div
           className="flex items-start justify-between gap-3 rounded-xl border px-4 py-3 text-xs"
           style={{
-            borderColor: callbackBanner.kind === "success" ? "#86EFAC" : "#FCA5A5",
-            backgroundColor: callbackBanner.kind === "success" ? "#F0FDF4" : "#FEF2F2",
-            color: callbackBanner.kind === "success" ? "#166534" : "#991B1B",
+            borderColor: bannerMeta.dot,
+            backgroundColor: bannerMeta.bg,
+            color: bannerMeta.fg,
           }}
           role={callbackBanner.kind === "error" ? "alert" : "status"}
         >
@@ -159,7 +165,8 @@ export default function SettingsConnectorsPage() {
         const meta = PLATFORM_META[platform];
         const row = byPlatform.get(platform);
         const status = row?.status ?? null;
-        const statusMeta = status ? (STATUS_META[status] ?? STATUS_META.pending) : null;
+        const conn = status ? (CONNECTOR_STATUS[status] ?? CONNECTOR_STATUS.pending) : null;
+        const sm = conn ? statusMeta(conn.statusKey) : null;
         const lastError = errorByPlatform[platform];
 
         return (
@@ -173,12 +180,12 @@ export default function SettingsConnectorsPage() {
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="text-sm font-semibold">{meta.label}</p>
-                  {statusMeta && (
+                  {conn && sm && (
                     <span
                       className="rounded-full px-2 py-0.5 text-[10px] font-medium"
-                      style={{ backgroundColor: statusMeta.bg, color: statusMeta.color }}
+                      style={{ backgroundColor: sm.bg, color: sm.fg }}
                     >
-                      {statusMeta.label}
+                      {conn.label}
                     </span>
                   )}
                 </div>
