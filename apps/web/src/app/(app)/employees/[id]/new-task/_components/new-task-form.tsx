@@ -126,7 +126,7 @@ export function NewTaskForm({
               <select
                 value={pinnedGoalId}
                 onChange={(e) => setPinnedGoalId(e.target.value)}
-                className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+                className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
               >
                 {activeGoals.map((g) => (
                   <option key={g.id} value={g.id}>
@@ -153,7 +153,7 @@ export function NewTaskForm({
               onChange={(e) => setInput(e.target.value)}
               placeholder={getPlaceholder(taskType, employeeName)}
               rows={4}
-              className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent resize-none"
+              className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand resize-none"
             />
           </div>
 
@@ -177,7 +177,7 @@ export function NewTaskForm({
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium outline-none focus:border-brand focus:ring-1 focus:ring-brand"
             />
           </div>
 
@@ -188,7 +188,7 @@ export function NewTaskForm({
               value={objective}
               onChange={(e) => setObjective(e.target.value)}
               rows={3}
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent resize-none"
+              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand resize-none"
             />
           </div>
 
@@ -202,7 +202,7 @@ export function NewTaskForm({
                 value={audience}
                 onChange={(e) => setAudience(e.target.value)}
                 placeholder="e.g. Engineering leads at B2B SaaS"
-                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
               />
             </div>
             <div>
@@ -213,12 +213,12 @@ export function NewTaskForm({
                 value={tone}
                 onChange={(e) => setTone(e.target.value)}
                 placeholder="e.g. Technical but approachable"
-                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
               />
             </div>
           </div>
 
-          <div className="rounded-lg bg-accent-light/50 p-3">
+          <div className="rounded-lg bg-brand-light/50 p-3">
             <p className="text-xs text-text-secondary">
               <strong>{employeeName}</strong> will receive this brief and start working.
               You'll be notified when the deliverable is ready for review.

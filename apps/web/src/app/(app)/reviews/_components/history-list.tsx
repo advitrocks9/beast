@@ -7,13 +7,14 @@ import { useQuery } from "@tanstack/react-query";
 import { useTRPC } from "@/trpc/client";
 import { GlassCard } from "@beast/ui";
 import { Check, Send, X } from "lucide-react";
+import { roleMeta, statusMeta } from "@/lib/colors";
 
 type StatusFilter = "all" | "approved" | "rejected";
 
-const STATUS_FILTERS: Array<{ value: StatusFilter; label: string; color: string }> = [
-  { value: "all", label: "All", color: "#111827" },
-  { value: "approved", label: "Approved", color: "#22C55E" },
-  { value: "rejected", label: "Rejected", color: "#DC2626" },
+const STATUS_FILTERS: Array<{ value: StatusFilter; label: string }> = [
+  { value: "all", label: "All" },
+  { value: "approved", label: "Approved" },
+  { value: "rejected", label: "Rejected" },
 ];
 
 function parseStatusFilter(raw: string | null): StatusFilter {
@@ -45,16 +46,10 @@ function typeChipLabel(t: string): string {
   return t.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-const ROLE_COLORS: Record<string, string> = {
-  marketing: "#E87B35",
-  sales: "#3B82F6",
-  support: "#22C55E",
-};
-
-const STATUS_META: Record<string, { label: string; color: string; Icon: typeof Check }> = {
-  approved: { label: "Approved", color: "#22C55E", Icon: Check },
-  published: { label: "Published", color: "#3B82F6", Icon: Send },
-  rejected: { label: "Rejected", color: "#DC2626", Icon: X },
+const STATUS_ICONS: Record<string, typeof Check> = {
+  approved: Check,
+  published: Send,
+  rejected: X,
 };
 
 const PAGE_SIZE = 30;
@@ -169,15 +164,16 @@ export function HistoryList() {
     <div className="flex items-center gap-2">
       {STATUS_FILTERS.map((chip) => {
         const active = chip.value === statusFilter;
+        const m = chip.value === "all" ? null : statusMeta(chip.value);
         return (
           <button
             key={chip.value}
             onClick={() => handleFilterChange(chip.value)}
             className="rounded-full border px-3 py-1 text-xs font-medium transition-colors"
             style={{
-              borderColor: active ? chip.color : "oklch(0.85 0.01 260 / 0.4)",
-              backgroundColor: active ? `${chip.color}15` : "transparent",
-              color: active ? chip.color : "#6B7280",
+              borderColor: active ? (m ? m.dot : "#111827") : "oklch(0.85 0.01 260 / 0.4)",
+              backgroundColor: active ? (m ? m.bg : "#11182715") : "transparent",
+              color: active ? (m ? m.fg : "#111827") : "#6B7280",
             }}
           >
             {chip.label}
@@ -241,16 +237,16 @@ export function HistoryList() {
       </button>
       {employeeList.map((emp) => {
         const active = emp.id === employeeFilter;
-        const color = emp.roleType ? ROLE_COLORS[emp.roleType] ?? "#9CA3AF" : "#9CA3AF";
+        const rm = roleMeta(emp.roleType);
         return (
           <button
             key={emp.id}
             onClick={() => handleEmployeeChange(emp.id)}
             className="rounded-full border px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap"
             style={{
-              borderColor: active ? color : "oklch(0.85 0.01 260 / 0.4)",
-              backgroundColor: active ? `${color}15` : "transparent",
-              color: active ? color : "#6B7280",
+              borderColor: active ? rm.solid : "oklch(0.85 0.01 260 / 0.4)",
+              backgroundColor: active ? rm.tint : "transparent",
+              color: active ? rm.text : "#6B7280",
             }}
           >
             {emp.name}
@@ -313,12 +309,10 @@ export function HistoryList() {
         </p>
       </div>
       {items.map((item, i) => {
-        const meta = STATUS_META[item.status] ?? STATUS_META.approved!;
-        const empColor = item.employeeRoleType
-          ? ROLE_COLORS[item.employeeRoleType] ?? "#9CA3AF"
-          : "#9CA3AF";
+        const meta = statusMeta(item.status);
+        const empColor = roleMeta(item.employeeRoleType).text;
         const finalisedAt = item.approvedAt ?? item.updatedAt;
-        const Icon = meta.Icon;
+        const Icon = STATUS_ICONS[item.status] ?? Check;
         const isActive = i === activeIndex;
 
         return (
@@ -332,12 +326,12 @@ export function HistoryList() {
           >
             <GlassCard
               className="p-4 transition-shadow"
-              style={isActive ? { boxShadow: `0 0 0 2px ${meta.color}40` } : undefined}
+              style={isActive ? { boxShadow: `0 0 0 2px ${meta.dot}40` } : undefined}
             >
               <div className="flex items-start gap-3">
                 <div
                   className="flex h-8 w-8 items-center justify-center rounded-full text-white shrink-0"
-                  style={{ backgroundColor: meta.color }}
+                  style={{ backgroundColor: meta.fg }}
                   aria-label={meta.label}
                 >
                   <Icon size={14} />
@@ -348,8 +342,8 @@ export function HistoryList() {
                     <span
                       className="rounded-full px-2 py-0.5 text-[10px] font-medium shrink-0"
                       style={{
-                        backgroundColor: `${meta.color}20`,
-                        color: meta.color,
+                        backgroundColor: meta.bg,
+                        color: meta.fg,
                       }}
                     >
                       {meta.label}

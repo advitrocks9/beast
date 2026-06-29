@@ -8,6 +8,7 @@ import { GlassCard } from "@beast/ui";
 import { DeskActions } from "./_components/desk-actions";
 import { CheckInFrequencyPicker } from "./_components/check-in-frequency-picker";
 import { formatActivityPhrase, LOW_SIGNAL_ACTIVITY_TYPES } from "@/lib/activity-format";
+import { roleMeta, statusMeta } from "@/lib/colors";
 
 const TREND_WINDOW_DAYS = 30;
 
@@ -44,40 +45,10 @@ function buildTrendBuckets(rows: Array<{ status: string; updatedAt: Date | null;
   return buckets;
 }
 
-const TASK_STATUS: Record<string, { color: string; label: string }> = {
-  pending: { color: "#9CA3AF", label: "Pending" },
-  in_progress: { color: "#3B82F6", label: "Working" },
-  working: { color: "#3B82F6", label: "Working" },
-  review: { color: "#F59E0B", label: "Ready to review" },
-  approved: { color: "#22C55E", label: "Approved" },
-  completed: { color: "#22C55E", label: "Completed" },
-  rejected: { color: "#DC2626", label: "Rejected" },
-};
-
 const ROLE_HOOK_LINE: Record<string, string> = {
   marketing: "Tell me a competitor and I'll start a teardown pinned to your first goal.",
   sales: "Send me a target list and I'll draft outreach pinned to your first goal.",
   support: "Forward me a ticket and I'll draft a response pinned to your first goal.",
-};
-
-const ROLE_COLORS: Record<string, string> = {
-  marketing: "#E87B35",
-  sales: "#3B82F6",
-  support: "#22C55E",
-};
-
-const STATUS_MAP: Record<string, { color: string; label: string }> = {
-  idle: { color: "#9CA3AF", label: "Idle" },
-  working: { color: "#3B82F6", label: "Working" },
-  waiting_review: { color: "#F59E0B", label: "Needs review" },
-};
-
-const DELIVERABLE_STATUS: Record<string, { color: string; label: string }> = {
-  draft: { color: "#9CA3AF", label: "Draft" },
-  review: { color: "#F59E0B", label: "Ready to review" },
-  approved: { color: "#22C55E", label: "Approved" },
-  published: { color: "#3B82F6", label: "Published" },
-  revision: { color: "#EF4444", label: "Revision requested" },
 };
 
 interface PageProps {
@@ -167,8 +138,8 @@ export default async function EmployeeDeskPage({ params }: PageProps) {
     { shipped: 0, rejected: 0 },
   );
 
-  const roleHex = ROLE_COLORS[employee.roleType] ?? "#9CA3AF";
-  const st = STATUS_MAP[employee.status ?? "idle"] ?? STATUS_MAP.idle!;
+  const role = roleMeta(employee.roleType);
+  const st = statusMeta(employee.status ?? "idle");
   const completedCount = employeeTasks.filter((t) => t.status === "completed").length;
   const reviewCount = employeeDeliverables.filter((d) => d.status === "review").length;
 
@@ -180,7 +151,7 @@ export default async function EmployeeDeskPage({ params }: PageProps) {
           <div className="flex items-center gap-4">
             <div
               className="flex h-14 w-14 items-center justify-center rounded-full text-white text-xl font-bold"
-              style={{ backgroundColor: roleHex }}
+              style={{ backgroundColor: role.solid }}
             >
               {employee.name[0]}
             </div>
@@ -190,7 +161,7 @@ export default async function EmployeeDeskPage({ params }: PageProps) {
               </h1>
               <p className="text-sm text-text-secondary">{employee.roleTitle}</p>
               <div className="mt-1 flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: st.color }} />
+                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: st.dot }} />
                 <span className="text-xs text-text-secondary">{st.label}</span>
               </div>
             </div>
@@ -204,7 +175,7 @@ export default async function EmployeeDeskPage({ params }: PageProps) {
       {employeeGoals.length > 0 && (
         <GlassCard hoverable={false} className="p-6">
           <p className="text-sm text-text-secondary mb-3">
-            <span style={{ color: roleHex }} className="font-medium">
+            <span style={{ color: role.text }} className="font-medium">
               {employee.name}
             </span>{" "}
             says hi.
@@ -216,7 +187,7 @@ export default async function EmployeeDeskPage({ params }: PageProps) {
           <ul className="space-y-1.5 mb-4 ml-1">
             {employeeGoals.map((g) => (
               <li key={g.id} className="text-sm leading-relaxed">
-                <span className="mr-2" style={{ color: roleHex }}>
+                <span className="mr-2" style={{ color: role.text }}>
                   &bull;
                 </span>
                 {g.title}
@@ -260,7 +231,7 @@ export default async function EmployeeDeskPage({ params }: PageProps) {
           <h2 className="heading-gradient text-lg font-semibold mb-3">Goals</h2>
           <div className="space-y-3">
             {employeeGoals.map((goal) => {
-              const progressColor = goal.progressPct >= 75 ? "#22C55E" : goal.progressPct >= 40 ? "#F59E0B" : "#3B82F6";
+              const progressColor = goal.progressPct >= 100 ? "#15803D" : "#0F766E";
               return (
                 <GlassCard key={goal.id} hoverable={false} className="p-4">
                   <div className="flex items-center justify-between mb-2">
@@ -291,7 +262,7 @@ export default async function EmployeeDeskPage({ params }: PageProps) {
         {employeeTasks.length > 0 ? (
           <div className="space-y-3">
             {employeeTasks.slice(0, 8).map((t) => {
-              const ts = TASK_STATUS[t.status] ?? TASK_STATUS.pending!;
+              const ts = statusMeta(t.status);
               return (
                 <Link key={t.id} href={`/dashboard/tasks/${t.id}`}>
                   <GlassCard className="p-4">
@@ -304,7 +275,7 @@ export default async function EmployeeDeskPage({ params }: PageProps) {
                       </div>
                       <span
                         className="rounded-full px-2.5 py-0.5 text-xs font-medium shrink-0"
-                        style={{ backgroundColor: ts.color + "15", color: ts.color }}
+                        style={{ backgroundColor: ts.bg, color: ts.fg }}
                       >
                         {ts.label}
                       </span>
@@ -329,7 +300,7 @@ export default async function EmployeeDeskPage({ params }: PageProps) {
         {employeeDeliverables.length > 0 ? (
           <div className="space-y-3">
             {employeeDeliverables.slice(0, 8).map((del) => {
-              const ds = DELIVERABLE_STATUS[del.status] ?? DELIVERABLE_STATUS.draft!;
+              const ds = statusMeta(del.status);
               return (
                 <Link key={del.id} href={`/review/${del.id}`}>
                   <GlassCard className="p-4">
@@ -343,8 +314,8 @@ export default async function EmployeeDeskPage({ params }: PageProps) {
                       <span
                         className="rounded-full px-2.5 py-0.5 text-xs font-medium shrink-0"
                         style={{
-                          backgroundColor: ds.color + "15",
-                          color: ds.color,
+                          backgroundColor: ds.bg,
+                          color: ds.fg,
                         }}
                       >
                         {ds.label}
@@ -375,7 +346,7 @@ export default async function EmployeeDeskPage({ params }: PageProps) {
                 <div key={log.id} className="flex items-center gap-3 px-4 py-3">
                   <div
                     className="h-2 w-2 shrink-0 rounded-full"
-                    style={{ backgroundColor: roleHex }}
+                    style={{ backgroundColor: role.solid }}
                   />
                   <p className="flex-1 text-sm">
                     <span className="font-medium">{employee.name}</span>{" "}
@@ -418,6 +389,8 @@ function TrendStrip({
   shipped: number;
   rejected: number;
 }) {
+  const shippedMeta = statusMeta("approved");
+  const rejectedMeta = statusMeta("rejected");
   const peak = Math.max(1, ...buckets.map((b) => b.shipped + b.rejected));
   const colWidth = 8;
   const colGap = 2;
@@ -431,9 +404,9 @@ function TrendStrip({
           30-day outcome trend
         </p>
         <p className="text-[11px] text-text-muted">
-          <span className="text-[#22C55E] font-medium">{shipped} shipped</span>
+          <span className="font-medium" style={{ color: shippedMeta.fg }}>{shipped} shipped</span>
           {" / "}
-          <span className="text-[#DC2626] font-medium">{rejected} rejected</span>
+          <span className="font-medium" style={{ color: rejectedMeta.fg }}>{rejected} rejected</span>
         </p>
       </div>
       <svg width="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="block">
@@ -463,7 +436,7 @@ function TrendStrip({
                   y={height - rejectedH}
                   width={colWidth}
                   height={rejectedH}
-                  fill="#DC2626"
+                  fill={rejectedMeta.dot}
                 />
               )}
               {b.shipped > 0 && (
@@ -472,7 +445,7 @@ function TrendStrip({
                   y={height - rejectedH - shippedH}
                   width={colWidth}
                   height={shippedH}
-                  fill="#22C55E"
+                  fill={shippedMeta.dot}
                 />
               )}
             </g>

@@ -7,19 +7,7 @@ import { Bell, LogOut, Menu } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTRPC } from "@/trpc/client";
 import { createClient } from "@/lib/supabase/client";
-
-const ROLE_COLORS: Record<string, string> = {
-  marketing: "#E87B35",
-  sales: "#3B82F6",
-  support: "#22C55E",
-};
-
-const SOURCE_DOT: Record<string, string> = {
-  review: "#7C3AED",
-  checkin: "#22C55E",
-  autonomy: "#E87B35",
-  plan_approval: "#3B82F6",
-};
+import { ROLE_COLORS, statusMeta } from "@/lib/colors";
 
 function relativeTime(d: Date): string {
   const diff = Date.now() - d.getTime();
@@ -152,9 +140,9 @@ export function TopNav({ onMenu }: { onMenu?: () => void }) {
               )}
 
               {items.map((item) => {
-                const dotColor = item.employeeRoleType
-                  ? ROLE_COLORS[item.employeeRoleType] ?? SOURCE_DOT[item.sourceType] ?? "#9CA3AF"
-                  : SOURCE_DOT[item.sourceType] ?? "#9CA3AF";
+                const dotColor =
+                  (item.employeeRoleType ? ROLE_COLORS[item.employeeRoleType] : undefined) ??
+                  statusMeta(item.sourceType).dot;
                 const opacity = item.isRead ? "opacity-60" : "";
                 return (
                   <Link

@@ -76,7 +76,7 @@ export function MemoryReceipt({
   if (hidden) {
     const count = rules.length;
     return (
-      <div className="rounded-xl bg-[oklch(0.97_0.005_260/0.5)] px-4 py-2.5 text-sm text-text-secondary">
+      <div className="rounded-xl bg-surface-sunken px-4 py-2.5 text-sm text-text-secondary">
         {employeeName} {headlineClosedVerb} {count} {count === 1 ? "thing" : "things"} about your voice.{" "}
         <button
           type="button"
@@ -91,7 +91,7 @@ export function MemoryReceipt({
 
   return (
     <div
-      className="rounded-2xl border border-gray-200 bg-white p-6"
+      className="rounded-2xl border border-border bg-white p-6"
       style={pulseDone || dashboard ? undefined : { animation: `memory-receipt-pulse ${PULSE_MS}ms ease-out` }}
     >
       <div className="mb-3 flex items-center justify-between">
@@ -114,9 +114,9 @@ export function MemoryReceipt({
             title={provenanceTitle(rule)}
             className="flex items-start gap-2 text-sm leading-relaxed"
           >
-            <span aria-hidden className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-[oklch(0.7_0.18_280)]" />
+            <span aria-hidden className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" />
             <span className="flex-1">
-              <span className="font-medium text-text-primary">{rule.summary}</span>
+              <span className="font-medium text-text">{rule.summary}</span>
               {dashboard
                 ? renderDashboardRightClause(rule)
                 : rule.evidence && (
@@ -131,7 +131,7 @@ export function MemoryReceipt({
         <button
           type="button"
           onClick={() => setExpanded(true)}
-          className="mt-3 text-xs font-medium text-text-secondary hover:text-text-primary"
+          className="mt-3 text-xs font-medium text-text-secondary hover:text-text"
         >
           + {remaining} more
         </button>

@@ -2,11 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 
-const ROLE_HEX: Record<string, string> = {
-  marketing: "#E87B35",
-  sales: "#3B82F6",
-  support: "#22C55E",
-};
+import { roleMeta } from "@/lib/colors";
 
 interface ChipEmployee {
   id: string;
@@ -49,16 +45,16 @@ export function ActivityEmployeeChips({ employees, activeEmployeeId }: ActivityE
       </button>
       {employees.map((emp) => {
         const active = emp.id === activeEmployeeId;
-        const color = emp.roleType ? ROLE_HEX[emp.roleType] ?? "#9CA3AF" : "#9CA3AF";
+        const m = roleMeta(emp.roleType);
         return (
           <button
             key={emp.id}
             onClick={() => handleChange(emp.id)}
             className="rounded-full border px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap"
             style={{
-              borderColor: active ? color : "oklch(0.85 0.01 260 / 0.4)",
-              backgroundColor: active ? `${color}15` : "transparent",
-              color: active ? color : "#6B7280",
+              borderColor: active ? m.solid : "oklch(0.85 0.01 260 / 0.4)",
+              backgroundColor: active ? m.tint : "transparent",
+              color: active ? m.text : "#6B7280",
             }}
           >
             {emp.name}

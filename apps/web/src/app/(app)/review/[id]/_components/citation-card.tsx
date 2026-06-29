@@ -1,10 +1,10 @@
-import { Globe, FileText, Sparkles, Wrench } from "lucide-react";
+import { Globe, FileText, BookMarked, Wrench } from "lucide-react";
 import type { Citation } from "@beast/shared";
 
 const TYPE_ICON = {
   web: Globe,
   kb: FileText,
-  memory: Sparkles,
+  memory: BookMarked,
   tool: Wrench,
 } as const;
 

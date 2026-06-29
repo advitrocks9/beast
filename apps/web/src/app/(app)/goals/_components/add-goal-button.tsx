@@ -90,7 +90,7 @@ export function AddGoalButton({ variant = "header" }: { variant?: "header" | "bl
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
                     placeholder="e.g. 50 qualified leads from LinkedIn this quarter"
-                    className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+                    className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
                     autoFocus
                   />
                 </Field>
@@ -101,7 +101,7 @@ export function AddGoalButton({ variant = "header" }: { variant?: "header" | "bl
                     onChange={(e) => setDescription(e.target.value)}
                     rows={3}
                     placeholder="Why this goal? Any constraints or context."
-                    className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent resize-none"
+                    className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand resize-none"
                   />
                 </Field>
 
@@ -110,7 +110,7 @@ export function AddGoalButton({ variant = "header" }: { variant?: "header" | "bl
                     value={targetMetric}
                     onChange={(e) => setTargetMetric(e.target.value)}
                     placeholder="e.g. 50 leads"
-                    className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+                    className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
                   />
                 </Field>
 
@@ -119,7 +119,7 @@ export function AddGoalButton({ variant = "header" }: { variant?: "header" | "bl
                     type="date"
                     value={targetDate}
                     onChange={(e) => setTargetDate(e.target.value)}
-                    className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+                    className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
                   />
                 </Field>
               </div>

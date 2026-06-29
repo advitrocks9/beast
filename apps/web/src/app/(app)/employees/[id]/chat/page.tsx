@@ -3,13 +3,8 @@ import { notFound } from "next/navigation";
 import { eq, and } from "drizzle-orm";
 import { createClient } from "@/lib/supabase/server";
 import { db, companies, aiEmployees } from "@beast/db";
+import { roleColor } from "@/lib/colors";
 import { ChatThread } from "./_components/chat-thread";
-
-const ROLE_COLORS: Record<string, string> = {
-  marketing: "#E87B35",
-  sales: "#3B82F6",
-  support: "#22C55E",
-};
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -36,7 +31,7 @@ export default async function EmployeeChatPage({ params }: PageProps) {
     notFound();
   }
 
-  const roleHex = ROLE_COLORS[employee.roleType] ?? "#9CA3AF";
+  const roleHex = roleColor(employee.roleType);
 
   return (
     <div className="space-y-4">

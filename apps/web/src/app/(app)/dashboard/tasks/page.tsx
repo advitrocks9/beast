@@ -4,29 +4,21 @@ import { createClient } from "@/lib/supabase/server";
 import { db } from "@beast/db";
 import { companies, tasks, aiEmployees } from "@beast/db";
 import { GlassCard } from "@beast/ui";
+import { roleColor, statusMeta, BRAND, BRAND_LIGHT, BRAND_DEEP } from "@/lib/colors";
 import { TasksList, type TaskRow } from "./_components/tasks-list";
 
-const STATUS_GROUPS: Record<string, { label: string; statuses: string[]; color: string }> = {
-  in_flight: { label: "In flight", statuses: ["pending", "in_progress", "working"], color: "#3B82F6" },
-  ready: { label: "Ready to review", statuses: ["review"], color: "#F59E0B" },
-  done: { label: "Done", statuses: ["approved", "completed"], color: "#22C55E" },
-  rejected: { label: "Rejected", statuses: ["rejected"], color: "#DC2626" },
+const STATUS_GROUPS: Record<string, { label: string; statuses: string[]; status: string }> = {
+  in_flight: { label: "In flight", statuses: ["pending", "in_progress", "working"], status: "working" },
+  ready: { label: "Ready to review", statuses: ["review"], status: "review" },
+  done: { label: "Done", statuses: ["approved", "completed"], status: "approved" },
+  rejected: { label: "Rejected", statuses: ["rejected"], status: "rejected" },
 };
 
-const STATUS_PILL: Record<string, { color: string; label: string }> = {
-  pending: { color: "#9CA3AF", label: "Pending" },
-  in_progress: { color: "#3B82F6", label: "Working" },
-  working: { color: "#3B82F6", label: "Working" },
-  review: { color: "#F59E0B", label: "Ready" },
-  approved: { color: "#22C55E", label: "Approved" },
-  completed: { color: "#22C55E", label: "Completed" },
-  rejected: { color: "#DC2626", label: "Rejected" },
-};
-
-const ROLE_COLORS: Record<string, string> = {
-  marketing: "#E87B35",
-  sales: "#3B82F6",
-  support: "#22C55E",
+// Pill copy that intentionally diverges from the statusMeta default label; the
+// color always comes from statusMeta().
+const STATUS_LABELS: Record<string, string> = {
+  in_progress: "Working",
+  review: "Ready",
 };
 
 const VALID_FILTERS = ["all", "in_flight", "ready", "done", "rejected"] as const;
@@ -140,17 +132,20 @@ export default async function TasksIndexPage({ searchParams }: PageProps) {
 
       <div className="flex flex-wrap gap-2">
         <FilterChip filter="all" label="All" count={groupCounts.all} active={filter === "all"} parent={parentId} />
-        {Object.entries(STATUS_GROUPS).map(([key, group]) => (
-          <FilterChip
-            key={key}
-            filter={key as Filter}
-            label={group.label}
-            count={groupCounts[key as Filter]}
-            active={filter === key}
-            color={group.color}
-            parent={parentId}
-          />
-        ))}
+        {Object.entries(STATUS_GROUPS).map(([key, group]) => {
+          const m = statusMeta(group.status);
+          return (
+            <FilterChip
+              key={key}
+              filter={key as Filter}
+              label={group.label}
+              count={groupCounts[key as Filter]}
+              active={filter === key}
+              tone={{ bg: m.bg, fg: m.fg, border: m.dot }}
+              parent={parentId}
+            />
+          );
+        })}
       </div>
 
       {taskRows.length === 0 ? (
@@ -192,19 +187,18 @@ function serializeRows(
 ): TaskRow[] {
   return taskRows.map((t) => {
     const emp = employeeMap.get(t.aiEmployeeId);
-    const empColor = ROLE_COLORS[emp?.roleType ?? ""] ?? "#9CA3AF";
-    const status = STATUS_PILL[t.status] ?? STATUS_PILL.pending!;
+    const status = statusMeta(t.status);
     return {
       id: t.id,
       title: t.title,
       taskType: t.taskType,
       status: t.status,
-      statusLabel: status.label,
-      statusColor: status.color,
+      statusLabel: STATUS_LABELS[t.status] ?? status.label,
+      statusColor: status.dot,
       createdAt: t.createdAt.toISOString(),
       employeeName: emp?.name ?? "Unknown",
       employeeInitial: emp?.name?.[0] ?? "?",
-      employeeColor: empColor,
+      employeeColor: roleColor(emp?.roleType),
       inFlight: IN_FLIGHT_STATUSES.has(t.status),
     };
   });
@@ -230,7 +224,7 @@ function EmptyState({ employees }: { employees: EmployeeRef[] }) {
       {employees.length > 0 ? (
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           {employees.map((emp) => {
-            const hex = ROLE_COLORS[emp.roleType] ?? "#9CA3AF";
+            const hex = roleColor(emp.roleType);
             return (
               <Link
                 key={emp.id}
@@ -267,7 +261,7 @@ function EmptyState({ employees }: { employees: EmployeeRef[] }) {
             >
               <span
                 className="mr-2 inline-block h-1.5 w-1.5 rounded-full align-middle"
-                style={{ backgroundColor: ROLE_COLORS[ex.role] ?? "#9CA3AF" }}
+                style={{ backgroundColor: roleColor(ex.role) }}
               />
               &ldquo;{ex.example}&rdquo;
             </li>
@@ -283,17 +277,17 @@ function FilterChip({
   label,
   count,
   active,
-  color,
+  tone,
   parent,
 }: {
   filter: Filter;
   label: string;
   count: number;
   active: boolean;
-  color?: string;
+  tone?: { bg: string; fg: string; border: string };
   parent?: string | null;
 }) {
-  const hex = color ?? "#3B82F6";
+  const t = tone ?? { bg: BRAND_LIGHT, fg: BRAND_DEEP, border: BRAND };
   const params = new URLSearchParams();
   if (filter !== "all") params.set("filter", filter);
   if (parent) params.set("parent", parent);
@@ -304,9 +298,9 @@ function FilterChip({
       href={href}
       className="rounded-full border px-3 py-1.5 text-xs font-medium transition-colors"
       style={{
-        backgroundColor: active ? `${hex}10` : "white",
-        borderColor: active ? hex : "oklch(0.85 0.01 260 / 0.4)",
-        color: active ? hex : "var(--color-text-secondary)",
+        backgroundColor: active ? t.bg : "white",
+        borderColor: active ? t.border : "oklch(0.85 0.01 260 / 0.4)",
+        color: active ? t.fg : "var(--color-text-secondary)",
       }}
     >
       {label}

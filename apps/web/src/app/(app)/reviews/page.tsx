@@ -8,12 +8,7 @@ import { HistoryList } from "./_components/history-list";
 import { StatsStrip } from "./_components/stats-strip";
 import { AutoPublishPill } from "./_components/auto-publish-pill";
 import { PendingList, type PendingItem } from "./_components/pending-list";
-
-const ROLE_COLORS: Record<string, string> = {
-  marketing: "#E87B35",
-  sales: "#3B82F6",
-  support: "#22C55E",
-};
+import { roleColor } from "@/lib/colors";
 
 export default async function ReviewQueuePage() {
   const supabase = await createClient();
@@ -68,7 +63,7 @@ export default async function ReviewQueuePage() {
   const pendingItems: PendingItem[] = pendingDeliverables.map((d) => {
     const emp = employeeMap[d.aiEmployeeId];
     const task = d.taskId ? taskMap[d.taskId] : null;
-    const empColor = ROLE_COLORS[emp?.roleType ?? ""] ?? "#9CA3AF";
+    const empColor = roleColor(emp?.roleType);
     return {
       id: d.id,
       title: d.title,
@@ -151,7 +146,7 @@ function FreshTenantEmptyState({ employees }: { employees: EmployeeRef[] }) {
           Open Tasks
         </Link>
         {employees.map((emp) => {
-          const hex = ROLE_COLORS[emp.roleType] ?? "#9CA3AF";
+          const hex = roleColor(emp.roleType);
           return (
             <Link
               key={emp.id}

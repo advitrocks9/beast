@@ -6,12 +6,16 @@ import { useTRPC } from "@/trpc/client";
 import { GlassCard } from "@beast/ui";
 import { createClient } from "@/lib/supabase/client";
 import { DEMO_MODE } from "@/lib/demo";
+import { statusMeta } from "@/lib/colors";
 
 export default function SettingsDangerPage() {
   const router = useRouter();
   const trpc = useTRPC();
 
   const dbHealth = useQuery(trpc.system.dbHealth.queryOptions());
+
+  // migration drift is a "needs your attention" warning, so it borrows the amber status tokens
+  const warnMeta = statusMeta("blocked");
 
   const resetOnboarding = useMutation({
     ...trpc.company.updateOnboardingStatus.mutationOptions(),
@@ -33,11 +37,11 @@ export default function SettingsDangerPage() {
           hoverable={false}
           className="p-5"
           style={{
-            borderColor: "#B45309",
-            backgroundColor: "color-mix(in oklab, #FBBF24 8%, white)",
+            borderColor: warnMeta.fg,
+            backgroundColor: warnMeta.bg,
           }}
         >
-          <h2 className="text-base font-semibold mb-1" style={{ color: "#B45309" }}>
+          <h2 className="text-base font-semibold mb-1" style={{ color: warnMeta.fg }}>
             Database migrations are not tracked
           </h2>
           <p className="text-xs text-text-secondary mb-3">

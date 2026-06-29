@@ -4,17 +4,12 @@ import { createClient } from "@/lib/supabase/server";
 import { db } from "@beast/db";
 import { companies, checkIns, aiEmployees } from "@beast/db";
 import { GlassCard } from "@beast/ui";
+import { roleColor, statusMeta } from "@/lib/colors";
 
-const ROLE_COLORS: Record<string, string> = {
-  marketing: "#E87B35",
-  sales: "#3B82F6",
-  support: "#22C55E",
-};
-
-const RESPONSE_LABEL: Record<string, { label: string; color: string; bg: string }> = {
-  used: { label: "Used it", color: "#166534", bg: "#dcfce7" },
-  not_used: { label: "Did not use it", color: "#991b1b", bg: "#fee2e2" },
-  edited: { label: "Edited it", color: "#92400e", bg: "#fef3c7" },
+const RESPONSE_LABEL: Record<string, { label: string; status: string }> = {
+  used: { label: "Used it", status: "approved" },
+  not_used: { label: "Did not use it", status: "rejected" },
+  edited: { label: "Edited it", status: "revision" },
 };
 
 export const metadata = {
@@ -134,9 +129,9 @@ function Section({
   children: React.ReactNode;
 }) {
   const accentByTone = {
-    overdue: "#92400e",
-    upcoming: "#3B82F6",
-    history: "#9CA3AF",
+    overdue: statusMeta("pending").fg,
+    upcoming: statusMeta("in_progress").fg,
+    history: "#6B7280",
   };
   return (
     <div>
@@ -168,21 +163,16 @@ function CheckInRow({
       ? content.deliverableType.replace(/_/g, " ")
       : null;
   const employee = employeeById.get(checkIn.aiEmployeeId);
-  const employeeColor = employee
-    ? ROLE_COLORS[employee.roleType] ?? "#9CA3AF"
-    : "#9CA3AF";
+  const employeeColor = roleColor(employee?.roleType);
 
   const scheduledLabel = checkIn.scheduledFor
     ? formatScheduled(checkIn.scheduledFor)
     : "Unscheduled";
 
-  const responseBadge = checkIn.response
-    ? RESPONSE_LABEL[checkIn.response] ?? {
-        label: checkIn.response,
-        color: "#374151",
-        bg: "#f3f4f6",
-      }
+  const responseDef = checkIn.response
+    ? RESPONSE_LABEL[checkIn.response] ?? { label: checkIn.response, status: "" }
     : null;
+  const responseMeta = responseDef ? statusMeta(responseDef.status) : null;
 
   return (
     <Link href={`/checkins/${checkIn.id}`} className="block">
@@ -199,20 +189,23 @@ function CheckInRow({
             <span>{scheduledLabel}</span>
           </div>
         </div>
-        {responseBadge ? (
+        {responseDef && responseMeta ? (
           <span
             className="rounded-full px-2.5 py-0.5 text-xs font-medium"
             style={{
-              backgroundColor: responseBadge.bg,
-              color: responseBadge.color,
+              backgroundColor: responseMeta.bg,
+              color: responseMeta.fg,
             }}
           >
-            {responseBadge.label}
+            {responseDef.label}
           </span>
         ) : (
           <span
             className="rounded-full px-2.5 py-0.5 text-xs font-medium"
-            style={{ backgroundColor: "#fef3c7", color: "#92400e" }}
+            style={{
+              backgroundColor: statusMeta("pending").bg,
+              color: statusMeta("pending").fg,
+            }}
           >
             Pending
           </span>

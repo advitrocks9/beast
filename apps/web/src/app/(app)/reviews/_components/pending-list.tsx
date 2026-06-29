@@ -154,7 +154,7 @@ export function PendingList({ items }: PendingListProps) {
             <button
               onClick={handleBulkApprove}
               disabled={bulkPending}
-              className="rounded-full bg-[#22C55E] px-3 py-1 text-xs font-medium text-white hover:bg-[#16A34A] disabled:opacity-50"
+              className="rounded-full bg-[#15803D] px-3 py-1 text-xs font-medium text-white hover:bg-[#166534] disabled:opacity-50"
             >
               {bulkPending ? "Approving..." : `Approve ${selected.size}`}
             </button>
@@ -181,7 +181,7 @@ export function PendingList({ items }: PendingListProps) {
               <span
                 className={`flex h-4 w-4 items-center justify-center rounded border ${
                   isSelected
-                    ? "border-[#16A34A] bg-[#16A34A] text-white"
+                    ? "border-[#15803D] bg-[#15803D] text-white"
                     : "border-gray-300 bg-white"
                 }`}
               >

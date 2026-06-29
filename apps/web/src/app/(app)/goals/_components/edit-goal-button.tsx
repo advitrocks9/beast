@@ -111,7 +111,7 @@ export function EditGoalButton({ goal }: { goal: GoalEditPayload }) {
                   <input
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+                    className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
                   />
                 </Field>
 
@@ -120,7 +120,7 @@ export function EditGoalButton({ goal }: { goal: GoalEditPayload }) {
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     rows={3}
-                    className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent resize-none"
+                    className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand resize-none"
                   />
                 </Field>
 
@@ -129,7 +129,7 @@ export function EditGoalButton({ goal }: { goal: GoalEditPayload }) {
                     value={targetMetric}
                     onChange={(e) => setTargetMetric(e.target.value)}
                     placeholder="e.g. 50 qualified leads / month"
-                    className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+                    className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
                   />
                 </Field>
 
@@ -139,7 +139,7 @@ export function EditGoalButton({ goal }: { goal: GoalEditPayload }) {
                       type="date"
                       value={targetDate}
                       onChange={(e) => setTargetDate(e.target.value)}
-                      className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+                      className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
                     />
                   </Field>
 
@@ -147,7 +147,7 @@ export function EditGoalButton({ goal }: { goal: GoalEditPayload }) {
                     <select
                       value={status}
                       onChange={(e) => setStatus(e.target.value)}
-                      className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+                      className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
                     >
                       <option value="active">Active</option>
                       <option value="paused">Paused</option>

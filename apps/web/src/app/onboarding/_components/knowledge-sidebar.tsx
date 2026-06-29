@@ -2,6 +2,8 @@
 
 import { GlassPanel } from "@beast/ui";
 
+import { BRAND, BRAND_DEEP, statusMeta } from "@/lib/colors";
+
 const CATEGORY_LABELS: Record<string, string> = {
   company_overview: "Company Overview",
   products: "Products & Services",
@@ -57,8 +59,8 @@ function ContextScoreRing({ score }: { score: number }) {
           />
           <defs>
             <linearGradient id="scoreGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#1E82E0" />
-              <stop offset="100%" stopColor="#1C38EA" />
+              <stop offset="0%" stopColor={BRAND} />
+              <stop offset="100%" stopColor={BRAND_DEEP} />
             </linearGradient>
           </defs>
         </svg>
@@ -76,6 +78,7 @@ function ContextScoreRing({ score }: { score: number }) {
 
 export function KnowledgeSidebar({ contextScore, categories, totalItems, onRevisitCategory }: KnowledgeSidebarProps) {
   const filledCount = categories.filter((c) => c.filled).length;
+  const done = statusMeta("completed");
 
   return (
     <GlassPanel variant="sidebar" className="flex h-full w-80 flex-col p-6">
@@ -95,7 +98,7 @@ export function KnowledgeSidebar({ contextScore, categories, totalItems, onRevis
                 <div
                   className="flex h-5 w-5 items-center justify-center rounded-full text-xs transition-colors"
                   style={{
-                    backgroundColor: cat.filled ? "#22C55E" : "oklch(0.85 0.01 260 / 0.4)",
+                    backgroundColor: cat.filled ? done.fg : "oklch(0.85 0.01 260 / 0.4)",
                     color: cat.filled ? "white" : "oklch(0.5 0.01 260)",
                   }}
                 >
@@ -113,7 +116,7 @@ export function KnowledgeSidebar({ contextScore, categories, totalItems, onRevis
             );
             const styleProps = {
               backgroundColor: cat.filled
-                ? "oklch(0.95 0.02 145 / 0.3)"
+                ? done.bg
                 : "oklch(0.97 0.005 260 / 0.3)",
             };
             if (clickable) {
@@ -144,9 +147,9 @@ export function KnowledgeSidebar({ contextScore, categories, totalItems, onRevis
       </div>
 
       <div className="mt-auto pt-6">
-        <div className="rounded-lg bg-accent-light/50 p-3 text-center">
+        <div className="rounded-lg bg-brand-light/50 p-3 text-center">
           <p className="text-xs text-text-secondary">
-            <span className="font-semibold text-accent">{totalItems}</span> knowledge items collected
+            <span className="font-semibold text-brand">{totalItems}</span> knowledge items collected
           </p>
         </div>
       </div>
