@@ -3,12 +3,18 @@ import Stripe from "stripe";
 import { db, companies } from "@beast/db";
 import { eq } from "drizzle-orm";
 import { getStripe } from "@/lib/stripe/client";
+import { DEMO_MODE } from "@/lib/demo";
 
 /**
  * Stripe webhook handler.
  * Processes subscription lifecycle events to keep billing state in sync.
  */
 export async function POST(request: NextRequest) {
+  // No billing in the read-only demo; refuse before touching Stripe or the DB.
+  if (DEMO_MODE) {
+    return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
+
   const stripe = getStripe();
   const body = await request.text();
   const signature = request.headers.get("stripe-signature");
