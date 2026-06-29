@@ -3,8 +3,8 @@ import type { ModelTier } from "./types";
 
 const MODEL_MAP: Record<ModelTier, string> = {
   haiku: "claude-haiku-4-5-20251001",
-  sonnet: "claude-sonnet-4-5-20250929",
-  opus: "claude-opus-4-6-20250918",
+  sonnet: "claude-sonnet-4-6",
+  opus: "claude-opus-4-8",
 };
 
 const MAX_TOKENS: Record<ModelTier, number> = {

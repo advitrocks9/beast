@@ -28,7 +28,7 @@ export class Scratchpad {
   }
 
   getItems(): ScratchpadItem[] {
-    return [...this.items];
+    return this.items.map((i) => ({ ...i }));
   }
 
   render(): string {
