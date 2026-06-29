@@ -5,6 +5,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useTRPC } from "@/trpc/client";
 import { GlassCard } from "@beast/ui";
 import { createClient } from "@/lib/supabase/client";
+import { DEMO_MODE } from "@/lib/demo";
 
 export default function SettingsDangerPage() {
   const router = useRouter();
@@ -93,11 +94,14 @@ export default function SettingsDangerPage() {
         </p>
         <button
           onClick={() => resetOnboarding.mutate({ status: "started" })}
-          disabled={resetOnboarding.isPending}
+          disabled={DEMO_MODE || resetOnboarding.isPending}
           className="rounded-xl border border-error bg-white px-4 py-2 text-sm font-medium text-error hover:bg-[oklch(0.97_0.05_25)] disabled:opacity-50"
         >
           {resetOnboarding.isPending ? "Resetting..." : "Reset onboarding"}
         </button>
+        {DEMO_MODE && (
+          <p className="mt-2 text-xs text-text-muted">Disabled in the read-only demo.</p>
+        )}
         {resetOnboarding.error && (
           <p className="mt-2 text-xs text-error">
             {resetOnboarding.error.message}
@@ -117,11 +121,14 @@ export default function SettingsDangerPage() {
         </p>
         <button
           onClick={() => registerSchedules.mutate()}
-          disabled={registerSchedules.isPending}
+          disabled={DEMO_MODE || registerSchedules.isPending}
           className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-foreground hover:bg-gray-50 disabled:opacity-50"
         >
           {registerSchedules.isPending ? "Registering..." : "Register schedules"}
         </button>
+        {DEMO_MODE && (
+          <p className="mt-2 text-xs text-text-muted">Disabled in the read-only demo.</p>
+        )}
         {registerSchedules.isSuccess && registerSchedules.data && (
           <p className="mt-2 text-xs text-text-secondary">
             Registered for timezone {registerSchedules.data.timezone}. Tick id{" "}
@@ -148,10 +155,14 @@ export default function SettingsDangerPage() {
         </p>
         <button
           onClick={handleSignOutEverywhere}
-          className="rounded-xl border border-error bg-white px-4 py-2 text-sm font-medium text-error hover:bg-[oklch(0.97_0.05_25)]"
+          disabled={DEMO_MODE}
+          className="rounded-xl border border-error bg-white px-4 py-2 text-sm font-medium text-error hover:bg-[oklch(0.97_0.05_25)] disabled:opacity-50"
         >
           Sign out everywhere
         </button>
+        {DEMO_MODE && (
+          <p className="mt-2 text-xs text-text-muted">Disabled in the read-only demo.</p>
+        )}
       </GlassCard>
     </div>
   );
