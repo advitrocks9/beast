@@ -22,11 +22,15 @@ export function scrubText(input: string): string {
   return input.replace(EMAIL_RE, REDACTED).replace(PHONE_RE, REDACTED);
 }
 
+// Keys that carry internal/tenant identifiers or credentials and must never be
+// exposed on a public share, regardless of their string value.
+const INTERNAL_KEY = /(^|_)(id|ids)$|company|tenant|user|owner|email|secret|token|enc$|password|internal/i;
+
 /**
  * Recursively scrub a JSONB-ish value. Leaves numbers, booleans, null untouched;
- * walks arrays + plain objects; replaces strings via scrubText. Arrays are
- * walked in-place to preserve order; objects keep their key shape so the
- * downstream JSON renderer doesn't break.
+ * walks arrays + plain objects; replaces strings via scrubText and drops keys
+ * that name internal identifiers/credentials. Objects keep their remaining key
+ * shape so the downstream JSON renderer doesn't break.
  */
 export function scrubPII<T>(value: T): T {
   if (typeof value === "string") {
@@ -38,6 +42,7 @@ export function scrubPII<T>(value: T): T {
   if (value && typeof value === "object") {
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (INTERNAL_KEY.test(k)) continue;
       out[k] = scrubPII(v);
     }
     return out as T;

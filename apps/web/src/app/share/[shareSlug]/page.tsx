@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { eq, and, isNotNull } from "drizzle-orm";
 import { db, deliverables, aiEmployees } from "@beast/db";
 import { GlassCard } from "@beast/ui";
-import { scrubPII } from "@/lib/share/scrub";
+import { scrubPII, scrubText } from "@/lib/share/scrub";
 import { roleMeta } from "@/lib/colors";
 
 interface PageProps {
@@ -50,11 +50,16 @@ export default async function SharePage({ params, searchParams }: PageProps) {
   const sourceContent = (deliverable.shareSnapshot ?? deliverable.content) as Record<string, unknown>;
   const scrubbed = scrubPII(sourceContent);
 
-  const pickString = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined);
+  // Render only known text fields. Never JSON.stringify the whole object onto a
+  // public page: an unknown deliverable shape would dump internal structure.
+  const pickString = (v: unknown): string | undefined =>
+    typeof v === "string" && v.trim().length > 0 ? v : undefined;
   const mainContent = pickString(scrubbed.content)
     ?? pickString(scrubbed.body)
     ?? pickString(scrubbed.response)
-    ?? JSON.stringify(scrubbed, null, 2);
+    ?? "This deliverable can't be previewed here.";
+
+  const shareTitle = scrubText(deliverable.title);
 
   const signUpHref = ref ? `/sign-up?ref=${encodeURIComponent(ref)}` : "/sign-up";
 
@@ -65,7 +70,7 @@ export default async function SharePage({ params, searchParams }: PageProps) {
       </div>
 
       <h1 className="font-(--font-display) text-3xl font-bold tracking-tight">
-        {deliverable.title}
+        {shareTitle}
       </h1>
 
       <p className="text-sm text-text-secondary">
