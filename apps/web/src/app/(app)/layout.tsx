@@ -3,9 +3,7 @@ import { eq, and, inArray, count } from "drizzle-orm";
 import { createClient } from "@/lib/supabase/server";
 import { db } from "@beast/db";
 import { companies, aiEmployees, deliverables } from "@beast/db";
-import { Sidebar } from "@/components/sidebar";
-import { TopNav } from "@/components/top-nav";
-import { DemoBanner } from "@/components/demo-banner";
+import { AppShell } from "@/components/app-shell";
 import { DEMO_MODE } from "@/lib/demo";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -51,15 +49,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }));
 
   return (
-    <div className="flex h-screen flex-col bg-bg-warm">
-      {DEMO_MODE && <DemoBanner />}
-      <div className="flex flex-1 overflow-hidden">
-        <Sidebar employees={sidebarEmployees} reviewCount={reviewCount} />
-        <div className="flex flex-1 flex-col overflow-hidden">
-          <TopNav />
-          <main className="flex-1 overflow-y-auto p-6">{children}</main>
-        </div>
-      </div>
-    </div>
+    <AppShell employees={sidebarEmployees} reviewCount={reviewCount} demoMode={DEMO_MODE}>
+      {children}
+    </AppShell>
   );
 }
