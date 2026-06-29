@@ -1,0 +1,69 @@
+name: Deploy Workers (Trigger.dev)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/workers/**"
+      - "packages/ai/**"
+      - "packages/db/**"
+      - "packages/shared/**"
+      - "pnpm-lock.yaml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-workers
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  TRIGGER_PROJECT_ID: ${{ secrets.TRIGGER_PROJECT_ID }}
+  TRIGGER_CLI_VERSION: 4.4.3
+
+jobs:
+  deploy:
+    name: Deploy harness + workers to Trigger.dev (PROD)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TRIGGER_ACCESS_TOKEN: ${{ secrets.TRIGGER_ACCESS_TOKEN }}
+
+    steps:
+      - name: Guard on TRIGGER_ACCESS_TOKEN
+        id: guard
+        run: |
+          if [ -z "${TRIGGER_ACCESS_TOKEN}" ]; then
+            echo "::warning::TRIGGER_ACCESS_TOKEN secret not set. Skipping deploy."
+            echo "Push a Personal Access Token from https://cloud.trigger.dev/account/personal-access-tokens"
+            echo "to repo secrets as TRIGGER_ACCESS_TOKEN to enable this workflow."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.guard.outputs.skip == 'false'
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        if: steps.guard.outputs.skip == 'false'
+
+      - uses: actions/setup-node@v4
+        if: steps.guard.outputs.skip == 'false'
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        if: steps.guard.outputs.skip == 'false'
+        run: pnpm install --frozen-lockfile
+
+      - name: Deploy to Trigger.dev (PROD)
+        if: steps.guard.outputs.skip == 'false'
+        working-directory: apps/workers
+        run: |
+          npx -y trigger.dev@${{ env.TRIGGER_CLI_VERSION }} deploy \
+            --project-ref="${{ env.TRIGGER_PROJECT_ID }}"

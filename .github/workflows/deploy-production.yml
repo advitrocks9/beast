@@ -1,0 +1,100 @@
+name: Deploy Production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  deployments: write
+
+env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+jobs:
+  # Skip the deploy cleanly when Vercel secrets are not configured (e.g. forks
+  # or a fresh clone), so the workflow reports success instead of a red failure.
+  guard:
+    runs-on: ubuntu-latest
+    outputs:
+      ok: ${{ steps.check.outputs.ok }}
+    steps:
+      - id: check
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -n "${VERCEL_TOKEN}" ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::VERCEL_TOKEN secret not set; skipping production deploy."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  deploy:
+    needs: guard
+    if: needs.guard.outputs.ok == 'true'
+    name: Build & deploy to Vercel production
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment:
+      name: production
+      url: ${{ steps.deploy.outputs.url }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Pull Vercel environment (production)
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      # Apply Drizzle migrations BEFORE build/deploy so a failed migration
+      # aborts the run instead of shipping code that expects schema the DB
+      # does not have. The wrapper script distinguishes a real migration
+      # failure (fresh DB or genuine bug) from a drift state (tables exist
+      # but __drizzle_migrations is empty); the latter logs a loud warning
+      # and exits 0 so the deploy can still ship. DATABASE_URL is sourced
+      # from the repo secret since vercel pull strips sensitive DB
+      # credentials from the env file.
+      - name: Apply database migrations
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          set -e
+          if [ -z "${DATABASE_URL:-}" ]; then
+            echo "DATABASE_URL secret not configured on this repo"; exit 1
+          fi
+          pnpm --filter @beast/db db:migrate-or-skip
+
+      - name: Build (production)
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy prebuilt artifact (production)
+        id: deploy
+        run: |
+          url="$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }})"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Deployed: $url"
+
+      - name: Scrub pulled env files
+        if: always()
+        run: rm -f .vercel/.env.*.local
