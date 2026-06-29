@@ -775,4 +775,26 @@ export const deliverablesRouter = createTRPCRouter({
 
       return { shareSlug, referralCode };
     }),
+
+  /**
+   * Revoke a public share link. Clears shareEnabledAt so both the SSR page and
+   * the public share.get (which require shareEnabledAt IS NOT NULL) stop serving
+   * it. The slug + snapshot are kept so a later re-share is idempotent.
+   */
+  unshare: protectedProcedure
+    .input(z.object({ deliverableId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.db
+        .update(deliverables)
+        .set({ shareEnabledAt: null })
+        .where(and(
+          eq(deliverables.id, input.deliverableId),
+          eq(deliverables.companyId, ctx.companyId),
+        ))
+        .returning({ id: deliverables.id });
+      if (result.length === 0) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Deliverable not found" });
+      }
+      return { ok: true };
+    }),
 });
