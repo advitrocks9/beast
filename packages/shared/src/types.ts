@@ -8,7 +8,7 @@ import type {
 
 export interface Company {
   id: string;
-  clerkOrgId: string;
+  userId: string;
   name: string;
   websiteUrl: string | null;
   industry: string | null;
