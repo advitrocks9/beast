@@ -19,6 +19,20 @@ import { AgentEventEmitter } from "./streaming";
 const DEFAULT_MAX_ITERATIONS = 50;
 const DEFAULT_MAX_DURATION_MS = 60 * 60 * 1000; // 60 min
 
+const PROGRESS_TOOL: Anthropic.Tool = {
+  name: "update_progress",
+  description:
+    "Mark a scratchpad step in_progress, done, or blocked as you work, so the progress list stays accurate. Use the step id (#N) shown in the scratchpad.",
+  input_schema: {
+    type: "object",
+    properties: {
+      stepId: { type: "string", description: "Step id from the scratchpad, without the # prefix" },
+      status: { type: "string", enum: ["in_progress", "done", "blocked"] },
+    },
+    required: ["stepId", "status"],
+  },
+};
+
 export interface RunOptions {
   config: AgentConfig;
   task: AgentTask;
@@ -69,7 +83,9 @@ export async function run(opts: RunOptions): Promise<RunResult> {
   });
 
   const messages: Anthropic.MessageParam[] = [...ctx.messages];
-  const anthropicTools = tools.getAnthropicTools();
+  const baseTools = tools.getAnthropicTools();
+  const anthropicTools =
+    scratchpad.getItems().length > 0 ? [...baseTools, PROGRESS_TOOL] : baseTools;
   const toolCallLog: ToolCallTrace[] = [];
   const citationsById = new Map<string, Citation>();
   let totalInputTokens = 0;
@@ -181,6 +197,20 @@ export async function run(opts: RunOptions): Promise<RunResult> {
       const toolResults: Anthropic.ToolResultBlockParam[] = [];
 
       for (const toolUse of toolUseBlocks) {
+        if (toolUse.name === "update_progress") {
+          const { stepId, status } = toolUse.input as { stepId?: string; status?: string };
+          const id = stepId?.replace(/^#/, "");
+          if (id && status === "in_progress") scratchpad.start(id);
+          else if (id && status === "done") scratchpad.complete(id);
+          else if (id && status === "blocked") scratchpad.block(id);
+          toolResults.push({
+            type: "tool_result",
+            tool_use_id: toolUse.id,
+            content: "Progress updated.",
+          });
+          continue;
+        }
+
         emitter.emit({
           type: "tool_call_start",
           toolName: toolUse.name,
