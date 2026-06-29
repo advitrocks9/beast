@@ -1,0 +1,22 @@
+{
+  "name": "@beast/workers",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "npx trigger.dev@latest dev",
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@beast/ai": "workspace:*",
+    "@beast/db": "workspace:*",
+    "@beast/shared": "workspace:*",
+    "@trigger.dev/sdk": "^4.0.0",
+    "drizzle-orm": "^0.36.0",
+    "resend": "^6.10.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.8.0"
+  }
+}

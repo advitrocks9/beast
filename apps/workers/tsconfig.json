@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@beast/shared": ["../../packages/shared/src/index.ts"],
+      "@beast/db": ["../../packages/db/src/index.ts"],
+      "@beast/ai": ["../../packages/ai/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}
