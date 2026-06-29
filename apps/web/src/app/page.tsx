@@ -61,7 +61,7 @@ function Hero() {
   return (
     <section className="px-6 pt-20 pb-16 sm:pt-28 sm:pb-24">
       <div className="mx-auto max-w-3xl text-center">
-        <p className="mb-4 text-xs font-semibold uppercase tracking-wider text-[oklch(0.55_0.18_30)]">
+        <p className="mb-4 text-xs font-semibold uppercase tracking-wider text-[oklch(0.5_0.09_185)]">
           For non-technical CEOs at 10-50 person companies
         </p>
         <h1 className="font-(--font-display) text-4xl font-bold tracking-tight sm:text-6xl">
@@ -233,7 +233,7 @@ function HowItWorks() {
         <div className="mt-12 grid grid-cols-1 gap-6 md:grid-cols-3">
           {steps.map((s) => (
             <div key={s.n} className="rounded-xl border border-gray-100 bg-white p-6">
-              <p className="font-(--font-display) text-3xl font-bold tracking-tight text-[oklch(0.55_0.18_30)]">
+              <p className="font-(--font-display) text-3xl font-bold tracking-tight text-[oklch(0.5_0.09_185)]">
                 {s.n}
               </p>
               <h3 className="mt-2 font-(--font-display) text-lg font-bold tracking-tight">
