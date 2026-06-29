@@ -78,7 +78,7 @@ function SignInForm() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#FAFAFA] px-6 py-16">
+    <main className="flex min-h-screen items-center justify-center bg-bg-warm px-6 py-16">
       <div className="w-full max-w-md">
         <div className="mb-6 text-center">
           <p className="text-xs font-medium uppercase tracking-wider text-text-secondary">

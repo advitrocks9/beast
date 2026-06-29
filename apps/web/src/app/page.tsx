@@ -43,7 +43,7 @@ export default async function Home() {
   return (
     <>
       <LandingNav />
-      <main className="bg-[#FAFAFA]">
+      <main className="bg-bg-warm">
         <Hero />
         <ProblemSection />
         <TeamSection />
