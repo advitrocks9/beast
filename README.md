@@ -105,6 +105,25 @@ approval or edit is fed back into procedural memory.
   encrypted at rest. Approved deliverables can auto-publish behind a drift
   guard.
 
+### Engineering highlights
+
+If you only read a few files, read these:
+
+- [`packages/ai/src/agent.ts`](packages/ai/src/agent.ts) - the tool-using agent
+  loop: tool dispatch, a scratchpad the model plans against, streamed run
+  events, and per-task model tiering.
+- [`packages/ai/src/memory/consolidation.ts`](packages/ai/src/memory/consolidation.ts)
+  - the nightly pass that merges, decays by salience, and archives memories so
+  the store does not grow without bound.
+- [`packages/ai/src/memory/extraction.ts`](packages/ai/src/memory/extraction.ts)
+  - how a founder's edit becomes a procedural rule: diff and chip signals
+  accumulate into rule candidates that promote past a confidence threshold.
+- [`packages/ai/src/orchestrator/tick.ts`](packages/ai/src/orchestrator/tick.ts)
+  - the scheduled loop that advances goals and detects drift, auto-rolling-back
+  a rule that starts hurting approval rate.
+- [`apps/web/src/trpc/init.ts`](apps/web/src/trpc/init.ts) - the read-only demo
+  guard that blocks every mutation at the tRPC layer.
+
 ## Tech stack
 
 TypeScript end to end. Next.js 16, React 19, tRPC v11, TanStack Query,
