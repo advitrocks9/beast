@@ -125,11 +125,14 @@ function buildTaskMessage(
   if (scratchpad.length > 0) {
     const items = scratchpad
       .map((s) => {
-        const marker = s.status === "done" ? "x" : s.status === "in_progress" ? ">" : " ";
-        return `- [${marker}] ${s.description}`;
+        const marker =
+          s.status === "done" ? "x" : s.status === "in_progress" ? ">" : s.status === "blocked" ? "!" : " ";
+        return `- [${marker}] #${s.id} ${s.description}`;
       })
       .join("\n");
-    sections.push(`## Scratchpad\n${items}`);
+    sections.push(
+      `## Scratchpad\nUpdate a step with the update_progress tool as you work.\n${items}`,
+    );
   }
 
   return sections.join("\n\n");

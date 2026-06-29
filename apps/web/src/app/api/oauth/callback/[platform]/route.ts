@@ -63,48 +63,29 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
   } catch (err) {
     console.error(`[OAuth] ${platform} callback error:`, err);
-    const message = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.redirect(`${appUrl}/settings/connectors?error=${encodeURIComponent(message)}`);
+    return NextResponse.redirect(`${appUrl}/settings/connectors?error=oauth_failed`);
   }
 }
 
 async function handleTwitterCallback(params: URLSearchParams, appUrl: string) {
-  const oauthToken = params.get("oauth_token") ?? "";
-  const oauthVerifier = params.get("oauth_verifier") ?? "";
-
-  // Twitter uses oauth_token as part of the state flow
-  // Find matching state entry by scanning (Twitter doesn't pass our state param back)
-  const denied = params.get("denied");
-  if (denied) {
+  if (params.get("denied")) {
     return NextResponse.redirect(`${appUrl}/settings/connectors?error=twitter_denied`);
   }
 
-  // Verify via the state store - we stored the oauthTokenSecret there
-  // For Twitter, we need to find the state entry that has this oauthToken
-  // This is a limitation of OAuth 1.0a - no state param in callback
-  // We match by checking the extra.oauthTokenSecret presence
-  const consumerKey = process.env.TWITTER_API_KEY!;
-  const consumerSecret = process.env.TWITTER_API_SECRET!;
-
-  // Exchange for access token (we need the tokenSecret from initOAuth)
-  // Since Twitter 1.0a doesn't pass state back, we use a simplified flow
-  // The tokenSecret was stored in the state entry during initOAuth
-  const result = await exchangeTwitterToken(
-    oauthToken,
-    oauthVerifier,
-    consumerKey,
-    consumerSecret,
-    "", // tokenSecret - Twitter's access token exchange works without it for the verifier step
-  );
-
-  // Find the company - look up from state store by scanning for twitter entries
-  // In production, encode companyId in the callback URL or use a session
-  // For now, we'll encode it in the OAuth callback URL as a query param
-  const stateParam = params.get("state") ?? "";
-  const stateData = verifyState(stateParam);
+  // OAuth 1.0a does not echo our state param, so initOAuth carries a signed
+  // token in the callback URL (?st=); Twitter preserves it and appends
+  // oauth_token + oauth_verifier.
+  const stateData = verifyState(params.get("st") ?? "");
   if (!stateData) {
     return NextResponse.redirect(`${appUrl}/settings/connectors?error=invalid_state`);
   }
+
+  const oauthToken = params.get("oauth_token") ?? "";
+  const oauthVerifier = params.get("oauth_verifier") ?? "";
+  const consumerKey = process.env.TWITTER_API_KEY!;
+  const consumerSecret = process.env.TWITTER_API_SECRET!;
+
+  const result = await exchangeTwitterToken(oauthToken, oauthVerifier, consumerKey, consumerSecret, "");
 
   await replaceConnector({
     companyId: stateData.companyId,
