@@ -88,7 +88,6 @@ Return a JSON plan:
       step.taskType = "custom";
     }
 
-    // Resolve employee ID from role if available
     const employeeForRole = input.employeesByRole?.[step.assignedRole];
 
     return {

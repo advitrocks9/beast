@@ -196,7 +196,6 @@ What implicit preference does this edit pattern reveal?`,
     salienceScore: feedbackType === "edit" ? 0.8 : 0.6,
   });
 
-  // Accumulate signals into rule candidates (T4.2)
   for (const signal of signals) {
     await accumulateSignal({
       agentId: input.agentId,
