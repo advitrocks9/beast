@@ -1,5 +1,9 @@
 # Beast
 
+[![CI](https://github.com/advitrocks9/beast/actions/workflows/ci.yml/badge.svg)](https://github.com/advitrocks9/beast/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Live demo](https://img.shields.io/badge/demo-live-22C55E.svg)](https://beast-demo.vercel.app)
+
 An autonomous AI-employee platform. You hire a named agent (Alex in marketing,
 Jordan in sales, Sam in support), give it a goal, and it ships real
 deliverables for review, learns your voice from your edits, and keeps working
@@ -159,3 +163,7 @@ packages/
 Beast is a personal build, not a live business; the pricing and billing flows
 are wired end to end but run against Stripe test mode. The demo deploy is
 deliberately read-only.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

@@ -1,6 +1,7 @@
 {
   "name": "beast",
   "private": true,
+  "license": "MIT",
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
@@ -16,7 +17,6 @@
   "packageManager": "pnpm@10.33.0",
   "pnpm": {
     "onlyBuiltDependencies": [
-      "@clerk/shared",
       "esbuild",
       "protobufjs",
       "sharp"
