@@ -1,0 +1,25 @@
+# Local Postgres with the pgvector extension, matching the DATABASE_URL in
+# .env.example. Enough to run the app in demo mode with zero cloud accounts:
+#
+#   docker compose up -d
+#   pnpm --filter @beast/db db:migrate
+#   pnpm --filter @beast/db db:seed
+#   NEXT_PUBLIC_DEMO_MODE=1 pnpm --filter @beast/web dev
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_PASSWORD: beast
+      POSTGRES_DB: beast
+    ports:
+      - "5544:5432"
+    volumes:
+      - beast-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  beast-pgdata:
