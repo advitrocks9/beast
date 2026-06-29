@@ -51,7 +51,7 @@ export function OnboardingShell({ companyName, initialProgress }: OnboardingShel
   }
 
   return (
-    <div className="flex h-screen bg-[#FAFBFF]">
+    <div className="flex h-screen bg-[#FAFAFA]">
       {/* Chat area */}
       <div className="flex flex-1 flex-col">
         {/* Minimal header */}

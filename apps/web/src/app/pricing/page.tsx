@@ -135,7 +135,7 @@ const TRUST_CLAIMS = [
 
 export default function PricingPage() {
   return (
-    <main className="min-h-screen bg-[oklch(0.98_0.005_260)] px-6 py-16 sm:py-24">
+    <main className="min-h-screen bg-[#FAFAFA] px-6 py-16 sm:py-24">
       <div className="mx-auto max-w-5xl">
         {/* Hero */}
         <div className="mb-12 text-center">
