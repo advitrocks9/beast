@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, desc, eq, gte, inArray, sql, isNotNull } from "drizzle-orm";
+import { and, desc, eq, gte, lte, inArray, sql, isNotNull } from "drizzle-orm";
 import {
   deliverables,
   checkIns,
@@ -79,7 +79,7 @@ export const notificationsRouter = createTRPCRouter({
             eq(checkIns.companyId, ctx.companyId),
             eq(checkIns.acknowledged, false),
             isNotNull(checkIns.scheduledFor),
-            sql`${checkIns.scheduledFor} <= ${horizon}`,
+            lte(checkIns.scheduledFor, horizon),
           ),
         )
         .orderBy(desc(checkIns.scheduledFor))
@@ -236,7 +236,7 @@ export const notificationsRouter = createTRPCRouter({
             eq(checkIns.companyId, ctx.companyId),
             eq(checkIns.acknowledged, false),
             isNotNull(checkIns.scheduledFor),
-            sql`${checkIns.scheduledFor} <= ${horizon}`,
+            lte(checkIns.scheduledFor, horizon),
           ),
         ),
       ctx.db
