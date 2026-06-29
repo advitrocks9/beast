@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { DEMO_MODE } from "@/lib/demo";
 import { check as rateLimitCheck, clientIpFrom } from "@/lib/rate-limit";
 
 const IP_LIMIT = 10;
@@ -8,21 +10,25 @@ const EMAIL_LIMIT = 5;
 const EMAIL_WINDOW_MS = 10 * 60 * 1000;
 
 /**
- * Auto-confirm a just-signed-up user, bypassing the email-confirmation
- * round trip. Supabase email confirmation may or may not
- * be enabled at the project level; either way, the founder-facing demo
- * needs sign-up -> instant sign-in.
+ * Confirm a just-signed-up user so v0 founders go straight from sign-up to
+ * onboarding without the email round trip.
  *
- * Security model: looks up the user by the email in the request body and
- * confirms ONLY if `email_confirmed_at` is null (i.e., they just signed
- * up and haven't been confirmed yet). Already-confirmed users are not
- * re-confirmed. This prevents an attacker from triggering this endpoint
- * on someone else's email to gain anything (the endpoint does not
- * issue sessions; it just toggles email_confirmed_at).
+ * Security model: the caller must prove control of the account by sending the
+ * password they just set. We verify it with an anon sign-in BEFORE any
+ * service-role action, so this endpoint can only ever confirm an email whose
+ * password the caller already knows. That removes the previous behaviour where
+ * an unauthenticated body of just `{ email }` could flip email_confirmed_at on
+ * any pending signup (user enumeration + confirm-someone-elses-email). Every
+ * response is a uniform 200 so the endpoint leaks nothing about which emails
+ * exist. Disabled entirely in the read-only demo.
  */
 export async function POST(request: Request) {
-  // Per-IP rate limit fires before parsing - cheap defense against a
-  // bot looping on this endpoint without varying input..
+  // The demo has no real sign-up flow and no service-role key; the route is
+  // pure liability there, so refuse structurally rather than relying on env.
+  if (DEMO_MODE) {
+    return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
+
   const ip = clientIpFrom(request);
   const ipCheck = rateLimitCheck(`autoconfirm:ip:${ip}`, IP_LIMIT, IP_WINDOW_MS);
   if (!ipCheck.ok) {
@@ -43,9 +49,13 @@ export async function POST(request: Request) {
     typeof body === "object" && body && "email" in body
       ? (body as { email: unknown }).email
       : null;
+  const password =
+    typeof body === "object" && body && "password" in body
+      ? (body as { password: unknown }).password
+      : null;
 
-  if (typeof email !== "string" || !email.includes("@")) {
-    return NextResponse.json({ error: "missing_email" }, { status: 400 });
+  if (typeof email !== "string" || !email.includes("@") || typeof password !== "string" || !password) {
+    return NextResponse.json({ error: "missing_credentials" }, { status: 400 });
   }
 
   const normalizedEmail = email.toLowerCase();
@@ -61,42 +71,44 @@ export async function POST(request: Request) {
     );
   }
 
-  const admin = createAdminClient();
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !anonKey) {
+    return NextResponse.json({ error: "not_configured" }, { status: 500 });
+  }
 
-  // listUsers takes pagination but no email filter; use generous page size
-  // and filter client-side. the user count is small, so this is fine.
-  const { data, error: listError } = await admin.auth.admin.listUsers({
-    page: 1,
-    perPage: 1000,
+  // Verify the caller knows the password for this email using the anon client.
+  const anon = createClient(url, anonKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
   });
+  const { data: signIn, error: signInError } = await anon.auth.signInWithPassword({
+    email: normalizedEmail,
+    password,
+  });
+
+  // Already confirmed (sign-in succeeded): nothing to do.
+  if (signIn?.session) {
+    return NextResponse.json({ ok: true });
+  }
+
+  // Only the "email not confirmed" failure means the password was correct but
+  // the account is pending. Any other error (wrong password, no such user) is
+  // answered with the same uniform 200 and no action, so existence never leaks.
+  const pendingConfirmation =
+    signInError?.code === "email_not_confirmed" ||
+    /email not confirmed/i.test(signInError?.message ?? "");
+  if (!pendingConfirmation) {
+    return NextResponse.json({ ok: true });
+  }
+
+  const admin = createAdminClient();
+  const { data, error: listError } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
   if (listError) {
-    return NextResponse.json(
-      { error: "list_failed", detail: listError.message },
-      { status: 500 },
-    );
+    return NextResponse.json({ ok: true });
   }
-
-  const target = data.users.find(
-    (u) => u.email?.toLowerCase() === normalizedEmail,
-  );
-  if (!target) {
-    return NextResponse.json({ error: "user_not_found" }, { status: 404 });
+  const target = data.users.find((u) => u.email?.toLowerCase() === normalizedEmail);
+  if (target && !target.email_confirmed_at) {
+    await admin.auth.admin.updateUserById(target.id, { email_confirm: true });
   }
-
-  if (target.email_confirmed_at) {
-    return NextResponse.json({ ok: true, alreadyConfirmed: true });
-  }
-
-  const { error: updateError } = await admin.auth.admin.updateUserById(
-    target.id,
-    { email_confirm: true },
-  );
-  if (updateError) {
-    return NextResponse.json(
-      { error: "update_failed", detail: updateError.message },
-      { status: 500 },
-    );
-  }
-
-  return NextResponse.json({ ok: true, confirmed: true });
+  return NextResponse.json({ ok: true });
 }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { and, eq, ne } from "drizzle-orm";
-import { db, connectors } from "@beast/db";
+import { db, connectors, companies } from "@beast/db";
 import { encryptToken } from "@beast/shared";
 import {
   exchangeTwitterToken,
@@ -11,9 +11,38 @@ import {
   ensureBeastChannel,
 } from "@beast/ai";
 import { verifyState } from "@/trpc/routers/connectors";
+import { createClient } from "@/lib/supabase/server";
+import { DEMO_MODE } from "@/lib/demo";
 
 interface RouteParams {
   params: Promise<{ platform: string }>;
+}
+
+/**
+ * The companyId of the currently signed-in user, or null. Binds the callback to
+ * the session that is completing it: the encrypted state already pins the write
+ * to a companyId, and this additionally requires that company to belong to the
+ * live session, so a leaked/replayed state cannot be completed by a different
+ * browser.
+ */
+async function sessionCompanyId(): Promise<string | null> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+  const company = await db.query.companies.findFirst({
+    where: eq(companies.userId, user.id),
+    columns: { id: true },
+  });
+  return company?.id ?? null;
+}
+
+/** Verify state, platform, and session binding in one step. */
+async function resolveCompanyId(state: string, platform: string): Promise<string | null> {
+  const stateData = verifyState(state, platform);
+  if (!stateData) return null;
+  const sessionCo = await sessionCompanyId();
+  if (!sessionCo || sessionCo !== stateData.companyId) return null;
+  return stateData.companyId;
 }
 
 type ConnectorInsert = typeof connectors.$inferInsert;
@@ -45,8 +74,14 @@ async function replaceConnector(values: ConnectorInsert): Promise<void> {
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const { platform } = await params;
-  const searchParams = request.nextUrl.searchParams;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+
+  // No connectors in the read-only demo; refuse before any token exchange.
+  if (DEMO_MODE) {
+    return NextResponse.redirect(`${appUrl}/dashboard`);
+  }
+
+  const searchParams = request.nextUrl.searchParams;
 
   try {
     switch (platform) {
@@ -75,8 +110,8 @@ async function handleTwitterCallback(params: URLSearchParams, appUrl: string) {
   // OAuth 1.0a does not echo our state param, so initOAuth carries a signed
   // token in the callback URL (?st=); Twitter preserves it and appends
   // oauth_token + oauth_verifier.
-  const stateData = verifyState(params.get("st") ?? "");
-  if (!stateData) {
+  const companyId = await resolveCompanyId(params.get("st") ?? "", "twitter");
+  if (!companyId) {
     return NextResponse.redirect(`${appUrl}/settings/connectors?error=invalid_state`);
   }
 
@@ -88,12 +123,14 @@ async function handleTwitterCallback(params: URLSearchParams, appUrl: string) {
   const result = await exchangeTwitterToken(oauthToken, oauthVerifier, consumerKey, consumerSecret, "");
 
   await replaceConnector({
-    companyId: stateData.companyId,
+    companyId,
     platform: "twitter",
     status: "connected",
     accessTokenEnc: encryptToken(result.accessToken),
     metadata: {
-      accessTokenSecret: result.accessTokenSecret,
+      // OAuth 1.0a token secret is a credential: encrypt at rest like the
+      // access token, never store it as plaintext in the metadata jsonb.
+      accessTokenSecretEnc: encryptToken(result.accessTokenSecret).toString("base64"),
       userId: result.userId,
       screenName: result.screenName,
     },
@@ -106,8 +143,8 @@ async function handleLinkedInCallback(params: URLSearchParams, platform: string,
   const code = params.get("code") ?? "";
   const state = params.get("state") ?? "";
 
-  const stateData = verifyState(state);
-  if (!stateData) {
+  const companyId = await resolveCompanyId(state, platform);
+  if (!companyId) {
     return NextResponse.redirect(`${appUrl}/settings/connectors?error=invalid_state`);
   }
 
@@ -121,7 +158,7 @@ async function handleLinkedInCallback(params: URLSearchParams, platform: string,
   const expiresAt = new Date(Date.now() + tokenResult.expiresIn * 1000);
 
   await replaceConnector({
-    companyId: stateData.companyId,
+    companyId,
     platform: "linkedin",
     status: "connected",
     accessTokenEnc: encryptToken(tokenResult.accessToken),
@@ -137,8 +174,8 @@ async function handleWordPressCallback(params: URLSearchParams, platform: string
   const code = params.get("code") ?? "";
   const state = params.get("state") ?? "";
 
-  const stateData = verifyState(state);
-  if (!stateData) {
+  const companyId = await resolveCompanyId(state, platform);
+  if (!companyId) {
     return NextResponse.redirect(`${appUrl}/settings/connectors?error=invalid_state`);
   }
 
@@ -149,7 +186,7 @@ async function handleWordPressCallback(params: URLSearchParams, platform: string
   const tokenResult = await exchangeWordPressCode(code, clientId, clientSecret, redirectUri);
 
   await replaceConnector({
-    companyId: stateData.companyId,
+    companyId,
     platform: "wordpress",
     status: "connected",
     accessTokenEnc: encryptToken(tokenResult.accessToken),
@@ -163,8 +200,8 @@ async function handleSlackCallback(params: URLSearchParams, appUrl: string) {
   const code = params.get("code") ?? "";
   const state = params.get("state") ?? "";
 
-  const stateData = verifyState(state);
-  if (!stateData) {
+  const companyId = await resolveCompanyId(state, "slack");
+  if (!companyId) {
     return NextResponse.redirect(`${appUrl}/settings/connectors?error=invalid_state`);
   }
 
@@ -178,7 +215,7 @@ async function handleSlackCallback(params: URLSearchParams, appUrl: string) {
   const channel = await ensureBeastChannel(tokenResult.accessToken);
 
   await replaceConnector({
-    companyId: stateData.companyId,
+    companyId,
     platform: "slack",
     status: "connected",
     accessTokenEnc: encryptToken(tokenResult.accessToken),

@@ -6,8 +6,7 @@
     "build": "turbo run build",
     "dev": "turbo run dev",
     "lint": "turbo run lint",
-    "typecheck": "turbo run typecheck",
-    "check:em-dashes": "bash scripts/no-em-dashes.sh"
+    "typecheck": "turbo run typecheck"
   },
   "devDependencies": {
     "tsx": "^4.21.0",

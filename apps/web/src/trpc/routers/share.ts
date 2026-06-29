@@ -3,7 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { eq, and, isNotNull } from "drizzle-orm";
 import { deliverables, aiEmployees } from "@beast/db";
 import { createTRPCRouter, publicProcedure } from "../init";
-import { scrubPII } from "@/lib/share/scrub";
+import { scrubPII, scrubText } from "@/lib/share/scrub";
 
 /**
  * Public read-only router for /share/[slug]. NO companyId scoping.
@@ -45,7 +45,7 @@ export const shareRouter = createTRPCRouter({
       const sourceContent = (deliverable.shareSnapshot ?? deliverable.content) as Record<string, unknown>;
 
       return {
-        title: deliverable.title,
+        title: scrubText(deliverable.title),
         deliverableType: deliverable.deliverableType,
         content: scrubPII(sourceContent),
         sharedAt: deliverable.shareEnabledAt,
