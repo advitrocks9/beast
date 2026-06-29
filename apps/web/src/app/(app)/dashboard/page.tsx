@@ -14,8 +14,25 @@ import { ActivityFeed, type ActivityItem } from "./_components/activity-feed";
 import { ActivityEmployeeChips } from "./_components/activity-employee-chips";
 import { LOW_SIGNAL_ACTIVITY_TYPES } from "@/lib/activity-format";
 import { CollaborationProposals, type ProposalItem } from "./_components/collaboration-proposals";
+import { RunReplay, type RunReplayData, type RunStep } from "./_components/run-replay";
+import { VoiceLoop, type VoiceLoopData } from "./_components/voice-loop";
 import type { StarterRole } from "@beast/shared";
 import { roleColor, roleMeta, statusMeta, BRAND } from "@/lib/colors";
+
+type DeliverableTrailStep = { name: string; inputSummary: string; resultSummary: string };
+type DeliverableContent = {
+  trail?: DeliverableTrailStep[];
+  content?: string;
+  citations?: unknown[];
+  appliedRules?: Array<{ summary: string }>;
+};
+const TYPE_LABEL: Record<string, string> = {
+  report: "teardown",
+  social_linkedin: "post",
+  blog: "blog post",
+  email: "email",
+  faq: "FAQ",
+};
 
 const MEMORY_PILL_CONFIDENCE_FLOOR = 0.7;
 const MEMORY_PILL_MAX = 8;
@@ -222,6 +239,8 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           signalWeight: true,
           createdAt: true,
           tasksAppliedTo: true,
+          examples: true,
+          approvalRateDelta: true,
         },
         orderBy: (pm, { desc }) => [desc(pm.signalWeight), desc(pm.tasksAppliedTo)],
       })
@@ -317,6 +336,74 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     roleType: e.roleType,
   }));
 
+  // Showcase run for the "Watch Alex work" replay. Built from a real seeded
+  // deliverable's reasoning trail, so it works on the read-only demo with no
+  // extra data. Prefer a research-heavy report.
+  const showcaseRows = await db.query.deliverables.findMany({
+    where: eq(deliverables.companyId, company!.id),
+    orderBy: (d, { desc }) => [desc(d.createdAt)],
+    limit: 25,
+  });
+  const showcase = showcaseRows
+    .map((d) => ({ d, c: (d.content ?? {}) as DeliverableContent }))
+    .filter((x) => (x.c.trail?.length ?? 0) >= 2)
+    .sort((a, b) => (b.d.deliverableType === "report" ? 1 : 0) - (a.d.deliverableType === "report" ? 1 : 0))[0];
+
+  let replayData: RunReplayData | null = null;
+  if (showcase) {
+    const emp = employees.find((e) => e.id === showcase.d.aiEmployeeId);
+    const trail = showcase.c.trail ?? [];
+    const typeLabel = TYPE_LABEL[showcase.d.deliverableType] ?? "deliverable";
+    const steps: RunStep[] = [
+      { kind: "plan", title: "Picked up the task", detail: showcase.d.title },
+      ...trail.map((t): RunStep => {
+        const search = /search/i.test(t.name);
+        return {
+          kind: search ? "search" : "read",
+          title: search ? "Searched the web" : "Read a source",
+          detail: t.inputSummary,
+          result: t.resultSummary,
+        };
+      }),
+      { kind: "draft", title: `Drafted the ${typeLabel}`, detail: "Grounded every claim in a cited source." },
+    ];
+    const body = showcase.c.content ?? "";
+    replayData = {
+      employeeName: emp?.name ?? "Alex",
+      roleColor: roleMeta(emp?.roleType).solid,
+      taskTitle: showcase.d.title,
+      deliverableTitle: showcase.d.title,
+      steps,
+      citations: showcase.c.citations?.length ?? 0,
+      preview: body.length > 220 ? `${body.slice(0, 220).trim()}…` : body,
+      ruleApplied: showcase.c.appliedRules?.[0]?.summary,
+    };
+  }
+
+  // Voice-loop: the learn->apply story for the strongest rule, from real
+  // provenance (the feedback that taught it, the example it now follows, the lift).
+  let voiceLoopData: VoiceLoopData | null = null;
+  const loopRule =
+    memoryRules.find((r) => (r.tasksAppliedTo ?? 0) > 0 && (r.sourceEpisodes?.length ?? 0) > 0) ??
+    memoryRules[0];
+  if (loopRule) {
+    const source = showcaseRows.find((d) => d.id === loopRule.sourceEpisodes?.[0]);
+    const example = (loopRule.examples as { good?: string } | null)?.good;
+    const rationale = source?.approvalRationale?.split(". ")[0]?.replace(/\.$/, "");
+    const primaryEmp = employees.find((e) => e.id === primaryEmployeeId);
+    if (source && example && rationale) {
+      voiceLoopData = {
+        employeeName: primaryEmp?.name ?? "Alex",
+        feedback: rationale,
+        feedbackSource: source.title,
+        ruleTitle: loopRule.title,
+        example,
+        appliedCount: loopRule.tasksAppliedTo ?? 0,
+        approvalDelta: loopRule.approvalRateDelta ?? 0,
+      };
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Greeting */}
@@ -334,6 +421,8 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           )}
         </p>
       </GlassCard>
+
+      {replayData && <RunReplay data={replayData} />}
 
       {missingCoreIntegrations.length > 0 && (
         <div
@@ -395,6 +484,8 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         rejectedCount={weeklyRejectedRes[0]?.value ?? 0}
         latestRule={latestRule}
       />
+
+      {voiceLoopData && <VoiceLoop data={voiceLoopData} />}
 
       {inlineCheckIns.length > 0 && (
         <CheckInsInline checkIns={inlineCheckIns} employees={inlineEmployees} />
