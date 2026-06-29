@@ -101,21 +101,21 @@ const EVERY_PLAN: Pillar[] = [
     label: "Memory that learns your voice",
     detail:
       "Every approval and edit teaches the model. Outputs sound more like you each week.",
-    hex: "#E87B35",
+    hex: "#A85D44",
   },
   {
     Icon: Quote,
     label: "Source grounding",
     detail:
       "Every claim cites where it came from. No silent hallucinations.",
-    hex: "#3B82F6",
+    hex: "#834A6A",
   },
   {
     Icon: Calendar,
     label: "Weekly check-in",
     detail:
       "Monday morning email with what shipped and what is awaiting your approval.",
-    hex: "#22C55E",
+    hex: "#15803D",
   },
   {
     Icon: ShieldCheck,
@@ -189,12 +189,12 @@ export default function PricingPage() {
               hoverable={false}
               className={`flex flex-col p-7 ${
                 t.emphasis
-                  ? "ring-2 ring-[oklch(0.7_0.15_30)] shadow-lg"
+                  ? "ring-2 ring-[oklch(0.62_0.08_185)] shadow-lg"
                   : ""
               }`}
             >
               {t.emphasis && (
-                <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-[oklch(0.55_0.18_30)]">
+                <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-[oklch(0.5_0.09_185)]">
                   Most popular
                 </p>
               )}

@@ -5,12 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTRPC } from "@/trpc/client";
 import { GlassCard } from "@beast/ui";
 import { Plus, RotateCcw, Trash2 } from "lucide-react";
-
-const ROLE_COLORS: Record<string, string> = {
-  marketing: "#E87B35",
-  sales: "#3B82F6",
-  support: "#22C55E",
-};
+import { roleMeta, statusMeta } from "@/lib/colors";
 
 const RULE_TYPE_LABEL: Record<string, string> = {
   style_rule: "Always do",
@@ -18,11 +13,17 @@ const RULE_TYPE_LABEL: Record<string, string> = {
   approved_example: "Reference example",
 };
 
-const RULE_TYPE_COLOR: Record<string, string> = {
-  style_rule: "#22C55E",
-  avoid_pattern: "#DC2626",
-  approved_example: "#3B82F6",
+// Rule types reuse the status namespace: always-do reads as approved (green),
+// never-do as rejected (red), reference as in-progress (brand teal).
+const RULE_TYPE_STATUS: Record<string, string> = {
+  style_rule: "approved",
+  avoid_pattern: "rejected",
+  approved_example: "in_progress",
 };
+
+function ruleTypeMeta(ruleType: string) {
+  return statusMeta(RULE_TYPE_STATUS[ruleType]);
+}
 
 export default function SettingsRulesPage() {
   const trpc = useTRPC();
@@ -81,7 +82,7 @@ export default function SettingsRulesPage() {
           <div className="flex flex-wrap gap-2 mb-5">
             {employeesData.map((emp) => {
               const active = (selected ?? employeesData[0]?.id) === emp.id;
-              const hex = ROLE_COLORS[emp.roleType ?? ""] ?? "#9CA3AF";
+              const meta = roleMeta(emp.roleType);
               return (
                 <button
                   key={emp.id}
@@ -92,13 +93,13 @@ export default function SettingsRulesPage() {
                       : "bg-transparent text-text-secondary hover:bg-[oklch(0.97_0.005_260/0.5)]"
                   }`}
                   style={{
-                    borderColor: active ? hex : "oklch(0.85_0.01_260/0.4)",
-                    color: active ? hex : undefined,
+                    borderColor: active ? meta.solid : "oklch(0.85_0.01_260/0.4)",
+                    color: active ? meta.text : undefined,
                   }}
                 >
                   <span
                     className="inline-block h-2 w-2 rounded-full"
-                    style={{ backgroundColor: hex }}
+                    style={{ backgroundColor: meta.solid }}
                   />
                   {emp.name}
                 </button>
@@ -177,10 +178,16 @@ function trendBadge(delta: number | null): { label: string; color: string; bg: s
   if (delta === null) return null;
   const pct = Math.round(delta * 100);
   if (pct === 0) return null;
-  if (pct >= 5) return { label: `+${pct}% approval`, color: "#15803D", bg: "#DCFCE7" };
-  if (pct <= -10) return { label: `${pct}% approval`, color: "#B91C1C", bg: "#FEE2E2" };
-  if (pct < 0) return { label: `${pct}% approval`, color: "#B45309", bg: "#FEF3C7" };
-  return { label: `+${pct}% approval`, color: "#1D4ED8", bg: "#DBEAFE" };
+  const meta =
+    pct >= 5
+      ? statusMeta("approved")
+      : pct <= -10
+        ? statusMeta("rejected")
+        : pct < 0
+          ? statusMeta("pending")
+          : statusMeta("in_progress");
+  const sign = pct > 0 ? "+" : "";
+  return { label: `${sign}${pct}% approval`, color: meta.fg, bg: meta.bg };
 }
 
 const GROUP_ORDER: Array<"style_rule" | "avoid_pattern" | "approved_example"> = [
@@ -210,14 +217,14 @@ function RuleGroups({
       {GROUP_ORDER.map((type) => {
         const list = grouped.get(type);
         if (!list || list.length === 0) return null;
-        const color = RULE_TYPE_COLOR[type]!;
+        const meta = ruleTypeMeta(type);
         const label = RULE_TYPE_LABEL[type]!;
         return (
           <div key={type}>
             <div className="mb-2 flex items-baseline gap-2">
               <span
                 className="text-[11px] font-semibold uppercase tracking-wider"
-                style={{ color }}
+                style={{ color: meta.fg }}
               >
                 {label}
               </span>
@@ -251,14 +258,14 @@ function RuleCard({
   onDeactivate: (ruleId: string, title: string) => void;
   deactivatePending: boolean;
 }) {
-  const color = RULE_TYPE_COLOR[rule.ruleType] ?? "#9CA3AF";
+  const meta = ruleTypeMeta(rule.ruleType);
   const trend = trendBadge(rule.approvalRateDelta);
   return (
     <GlassCard hoverable={false} className="p-4">
       <div className="flex items-start gap-3">
         <span
           className="mt-1 h-2 w-2 shrink-0 rounded-full"
-          style={{ backgroundColor: color }}
+          style={{ backgroundColor: meta.dot }}
           aria-hidden
         />
         <div className="flex-1 min-w-0">
@@ -337,14 +344,14 @@ function DeprecatedRules({
   return (
     <div className="space-y-2">
       {rules.map((rule) => {
-        const color = RULE_TYPE_COLOR[rule.ruleType] ?? "#9CA3AF";
+        const meta = ruleTypeMeta(rule.ruleType);
         const label = RULE_TYPE_LABEL[rule.ruleType] ?? rule.ruleType;
         return (
           <GlassCard key={rule.id} hoverable={false} className="p-4 opacity-90">
             <div className="flex items-start gap-3">
               <span
                 className="mt-1 h-2 w-2 shrink-0 rounded-full"
-                style={{ backgroundColor: color }}
+                style={{ backgroundColor: meta.dot }}
                 aria-hidden
               />
               <div className="flex-1 min-w-0">
@@ -354,7 +361,7 @@ function DeprecatedRules({
                   </p>
                   <span
                     className="rounded-full px-2 py-0.5 text-[10px] font-medium"
-                    style={{ backgroundColor: `${color}20`, color }}
+                    style={{ backgroundColor: meta.bg, color: meta.fg }}
                   >
                     {label}
                   </span>
@@ -426,7 +433,7 @@ function CreateRuleForm({ employeeId }: { employeeId: string }) {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="flex items-center gap-2 rounded-xl border border-dashed border-[oklch(0.8_0.01_260/0.4)] bg-white px-4 py-2.5 text-sm font-medium text-text-secondary hover:border-accent hover:text-accent"
+        className="flex items-center gap-2 rounded-xl border border-dashed border-[oklch(0.8_0.01_260/0.4)] bg-white px-4 py-2.5 text-sm font-medium text-text-secondary hover:border-brand hover:text-brand"
       >
         <Plus size={14} />
         Add rule
@@ -439,16 +446,16 @@ function CreateRuleForm({ employeeId }: { employeeId: string }) {
       <div className="grid grid-cols-3 gap-2">
         {(["style_rule", "avoid_pattern", "approved_example"] as const).map((t) => {
           const active = ruleType === t;
-          const color = RULE_TYPE_COLOR[t]!;
+          const meta = ruleTypeMeta(t);
           return (
             <button
               key={t}
               onClick={() => setRuleType(t)}
               className="rounded-xl border px-3 py-2 text-xs font-medium transition-colors"
               style={{
-                borderColor: active ? color : "oklch(0.85_0.01_260/0.4)",
-                backgroundColor: active ? `${color}10` : "white",
-                color: active ? color : "var(--color-text-secondary)",
+                borderColor: active ? meta.dot : "oklch(0.85_0.01_260/0.4)",
+                backgroundColor: active ? meta.bg : "white",
+                color: active ? meta.fg : "var(--color-text-secondary)",
               }}
             >
               {RULE_TYPE_LABEL[t]}
@@ -463,7 +470,7 @@ function CreateRuleForm({ employeeId }: { employeeId: string }) {
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="e.g. Open every tweet with a specific number"
-          className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+          className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
         />
       </div>
 
@@ -474,7 +481,7 @@ function CreateRuleForm({ employeeId }: { employeeId: string }) {
           onChange={(e) => setDescription(e.target.value)}
           rows={3}
           placeholder="Explain when and why. The agent reads this verbatim."
-          className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent resize-none"
+          className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand resize-none"
         />
       </div>
 
@@ -486,7 +493,7 @@ function CreateRuleForm({ employeeId }: { employeeId: string }) {
           value={scopeText}
           onChange={(e) => setScopeText(e.target.value)}
           placeholder="e.g. social_post, blog_post"
-          className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+          className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
         />
       </div>
 

@@ -39,7 +39,7 @@ function Hero() {
   return (
     <section className="px-6 pt-20 pb-14 sm:pt-28 sm:pb-20">
       <div className="mx-auto max-w-3xl text-center">
-        <p className="mb-4 text-xs font-semibold uppercase tracking-wider text-[oklch(0.55_0.18_30)]">
+        <p className="mb-4 text-xs font-semibold uppercase tracking-wider text-[oklch(0.5_0.09_185)]">
           Beast vs Sintra AI
         </p>
         <h1 className="font-(--font-display) text-4xl font-bold tracking-tight sm:text-5xl">
@@ -100,7 +100,7 @@ function Differentiators() {
         <div className="mt-12 space-y-6">
           {items.map((item) => (
             <GlassCard key={item.tag} hoverable={false} className="p-7">
-              <p className="text-xs font-semibold uppercase tracking-wider text-[oklch(0.55_0.18_30)]">
+              <p className="text-xs font-semibold uppercase tracking-wider text-[oklch(0.5_0.09_185)]">
                 {item.tag}
               </p>
               <h3 className="mt-2 font-(--font-display) text-2xl font-bold tracking-tight">
@@ -115,7 +115,7 @@ function Differentiators() {
                   href={item.cite_href}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-[oklch(0.55_0.18_30)] hover:underline"
+                  className="text-[oklch(0.5_0.09_185)] hover:underline"
                 >
                   Source: {item.cite_label}
                 </Link>
@@ -254,7 +254,7 @@ function Sources() {
                 href={s.href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[oklch(0.55_0.18_30)] hover:underline"
+                className="text-[oklch(0.5_0.09_185)] hover:underline"
               >
                 {s.label}
               </Link>

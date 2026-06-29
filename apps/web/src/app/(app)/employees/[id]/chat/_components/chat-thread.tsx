@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTRPC } from "@/trpc/client";
 import { GlassCard } from "@beast/ui";
+import { roleMeta } from "@/lib/colors";
 
 interface DraftMessage {
   role: "user" | "assistant";
@@ -17,12 +18,6 @@ interface ChatThreadProps {
   employeeName: string;
   employeeRoleType: "marketing" | "sales" | "support";
 }
-
-const ROLE_COLORS: Record<string, string> = {
-  marketing: "#E87B35",
-  sales: "#3B82F6",
-  support: "#22C55E",
-};
 
 const HISTORY_LIMIT = 200;
 const MIN_TASK_CHARS = 8;
@@ -164,7 +159,7 @@ export function ChatThread({ employeeId, employeeName, employeeRoleType }: ChatT
     }
   }
 
-  const roleHex = ROLE_COLORS[employeeRoleType] ?? "#9CA3AF";
+  const roleHex = roleMeta(employeeRoleType).text;
 
   return (
     <GlassCard hoverable={false} className="relative flex flex-col h-[70vh] p-0 overflow-hidden">
@@ -207,7 +202,7 @@ export function ChatThread({ employeeId, employeeName, employeeRoleType }: ChatT
               {msg.taskHref && (
                 <Link
                   href={msg.taskHref}
-                  className="mt-2 inline-block text-xs font-medium text-accent hover:underline"
+                  className="mt-2 inline-block text-xs font-medium text-brand hover:underline"
                 >
                   Open task
                 </Link>

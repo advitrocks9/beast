@@ -217,7 +217,7 @@ export function ChatPanel({ employeeName, employeeId, open, onClose }: ChatPanel
                 <Link
                   href={msg.taskHref}
                   onClick={onClose}
-                  className="mt-2 inline-block text-xs font-medium text-accent hover:underline"
+                  className="mt-2 inline-block text-xs font-medium text-brand hover:underline"
                 >
                   Open task
                 </Link>

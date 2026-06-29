@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { db } from "@beast/db";
 import { companies, aiEmployees, deliverables, activityLog } from "@beast/db";
 import { GlassCard } from "@beast/ui";
+import { roleColor, roleMeta, statusMeta, MUTED } from "@/lib/colors";
 
 const PERFORMANCE_WINDOW_DAYS = 30;
 
@@ -12,18 +13,6 @@ interface Performance {
   rejected: number;
   approvalRate: number | null;
 }
-
-const ROLE_COLORS: Record<string, string> = {
-  marketing: "#E87B35",
-  sales: "#3B82F6",
-  support: "#22C55E",
-};
-
-const STATUS_MAP: Record<string, { color: string; label: string }> = {
-  idle: { color: "#9CA3AF", label: "Idle" },
-  working: { color: "#3B82F6", label: "Working" },
-  waiting_review: { color: "#F59E0B", label: "Needs review" },
-};
 
 const ROLE_TAGLINE: Record<string, string> = {
   marketing: "Ships teardowns, posts, and cold drafts pinned to your goals.",
@@ -183,9 +172,8 @@ export default async function EmployeesIndexPage() {
       ) : (
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
           {employees.map((employee) => {
-            const roleHex = ROLE_COLORS[employee.roleType] ?? "#9CA3AF";
-            const status =
-              STATUS_MAP[employee.status ?? "idle"] ?? STATUS_MAP.idle!;
+            const role = roleMeta(employee.roleType);
+            const status = statusMeta(employee.status ?? "idle");
             const reviewCount = reviewCountsByEmployee.get(employee.id) ?? 0;
             const lastActivity = lastActivityByEmployee.get(employee.id);
             const perf = performanceByEmployee.get(employee.id);
@@ -200,7 +188,7 @@ export default async function EmployeesIndexPage() {
                   <div className="flex items-center gap-4">
                     <div
                       className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-base font-bold text-white"
-                      style={{ backgroundColor: roleHex }}
+                      style={{ backgroundColor: role.solid }}
                     >
                       {employee.name[0]}
                     </div>
@@ -223,7 +211,7 @@ export default async function EmployeesIndexPage() {
                     <div className="flex items-center gap-1.5">
                       <span
                         className="h-2 w-2 rounded-full"
-                        style={{ backgroundColor: status.color }}
+                        style={{ backgroundColor: status.dot }}
                       />
                       <span className="text-text-secondary">{status.label}</span>
                     </div>
@@ -234,7 +222,7 @@ export default async function EmployeesIndexPage() {
                     </span>
                   </div>
 
-                  <PerformanceRow perf={perf} roleHex={roleHex} />
+                  <PerformanceRow perf={perf} roleText={role.text} />
 
                   <div className="mt-4 flex items-center justify-between border-t border-gray-100 pt-4 text-xs">
                     <span className="text-text-secondary">
@@ -261,7 +249,7 @@ export default async function EmployeesIndexPage() {
           <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
             {unhiredRoles.map((role) => {
               const tmpl = TEMPLATE_TIER[role]!;
-              const hex = ROLE_COLORS[role]!;
+              const hex = roleColor(role);
               return (
                 <GlassCard
                   key={role}
@@ -308,10 +296,10 @@ export default async function EmployeesIndexPage() {
 
 function PerformanceRow({
   perf,
-  roleHex,
+  roleText,
 }: {
   perf: Performance | undefined;
-  roleHex: string;
+  roleText: string;
 }) {
   const shipped = perf?.shipped ?? 0;
   const rejected = perf?.rejected ?? 0;
@@ -329,23 +317,27 @@ function PerformanceRow({
   const ratePct = rate !== null ? Math.round(rate! * 100) : null;
   const rateColor =
     ratePct === null
-      ? "#9CA3AF"
+      ? MUTED
       : ratePct >= 80
-        ? "#22C55E"
+        ? statusMeta("approved").fg
         : ratePct >= 50
-          ? "#F59E0B"
-          : "#DC2626";
+          ? statusMeta("review").fg
+          : statusMeta("rejected").fg;
 
   return (
     <div className="mt-4 flex items-center gap-4 text-[11px]">
-      <Metric label="Shipped (30d)" value={String(shipped)} hex={roleHex} />
+      <Metric label="Shipped (30d)" value={String(shipped)} hex={roleText} />
       <Metric
         label="Approval"
         value={ratePct === null ? "no data" : `${ratePct}%`}
         hex={rateColor}
       />
       {rejected > 0 && (
-        <Metric label="Rejected (30d)" value={String(rejected)} hex="#DC2626" />
+        <Metric
+          label="Rejected (30d)"
+          value={String(rejected)}
+          hex={statusMeta("rejected").fg}
+        />
       )}
     </div>
   );

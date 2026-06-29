@@ -10,6 +10,7 @@ import { CheckInModal } from "./check-in-modal";
 import { ReasoningTrail } from "./reasoning-trail";
 import { MemoryReceipt } from "./memory-receipt";
 import { CitedBody, unresolvedCitationCount } from "./cited-body";
+import { roleMeta, statusMeta } from "@/lib/colors";
 
 interface ToolCallTrace {
   toolCallId: string;
@@ -50,21 +51,15 @@ const PUBLISHABLE_TYPES = new Set([
 ]);
 
 const FEEDBACK_CHIPS = [
-  { value: "love_this", label: "Love this", color: "#16A34A", bg: "#F0FDF4" },
-  { value: "too_long", label: "Too long", color: "#DC2626", bg: "#FEF2F2" },
-  { value: "too_formal", label: "Too formal", color: "#DC2626", bg: "#FEF2F2" },
-  { value: "too_casual", label: "Too casual", color: "#DC2626", bg: "#FEF2F2" },
-  { value: "make_punchier", label: "Make punchier", color: "#7C3AED", bg: "#F5F3FF" },
-  { value: "add_data", label: "Add data", color: "#7C3AED", bg: "#F5F3FF" },
-  { value: "stronger_cta", label: "Stronger CTA", color: "#7C3AED", bg: "#F5F3FF" },
-  { value: "different_angle", label: "Different angle", color: "#7C3AED", bg: "#F5F3FF" },
+  { value: "love_this", label: "Love this", color: "#15803D", bg: "#ECFDF3" },
+  { value: "too_long", label: "Too long", color: "#B91C1C", bg: "#FEF2F2" },
+  { value: "too_formal", label: "Too formal", color: "#B91C1C", bg: "#FEF2F2" },
+  { value: "too_casual", label: "Too casual", color: "#B91C1C", bg: "#FEF2F2" },
+  { value: "make_punchier", label: "Make punchier", color: "#52525B", bg: "#F4F4F5" },
+  { value: "add_data", label: "Add data", color: "#52525B", bg: "#F4F4F5" },
+  { value: "stronger_cta", label: "Stronger CTA", color: "#52525B", bg: "#F4F4F5" },
+  { value: "different_angle", label: "Different angle", color: "#52525B", bg: "#F4F4F5" },
 ] as const;
-
-const ROLE_COLORS: Record<string, string> = {
-  marketing: "#E87B35",
-  sales: "#3B82F6",
-  support: "#22C55E",
-};
 
 interface ReviewShellProps {
   deliverable: DeliverableData;
@@ -94,7 +89,7 @@ export function ReviewShell({
   const queueAutoPublish = useMutation(trpc.deliverables.queueAutoPublish.mutationOptions());
   const cancelAutoPublish = useMutation(trpc.deliverables.cancelAutoPublish.mutationOptions());
 
-  const roleHex = ROLE_COLORS[employeeRoleType] ?? "#9CA3AF";
+  const roleText = roleMeta(employeeRoleType).text;
   const pickString = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined);
   const originalBody = pickString(deliverable.content.content)
     ?? pickString(deliverable.content.body)
@@ -203,7 +198,7 @@ export function ReviewShell({
             {deliverable.title}
           </h1>
           <p className="mt-0.5 text-sm text-text-secondary">
-            by <span style={{ color: roleHex }} className="font-medium">{employeeName}</span>
+            by <span style={{ color: roleText }} className="font-medium">{employeeName}</span>
             {taskTitle && <> · {taskTitle}</>}
           </p>
         </div>
@@ -290,7 +285,7 @@ export function ReviewShell({
             value={draftText}
             onChange={(e) => setDraftText(e.target.value)}
             rows={Math.max(8, draftText.split("\n").length + 2)}
-            className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm leading-relaxed outline-none focus:border-accent focus:ring-1 focus:ring-accent resize-y"
+            className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm leading-relaxed outline-none focus:border-brand focus:ring-1 focus:ring-brand resize-y"
             autoFocus
           />
         ) : deliverable.deliverableType === "social_twitter" || deliverable.deliverableType === "social_linkedin" ? (
@@ -299,7 +294,7 @@ export function ReviewShell({
             platform={deliverable.deliverableType === "social_twitter" ? "Twitter" : "LinkedIn"}
           />
         ) : (
-          <CitedBody body={mainContent} citations={citations} hex={roleHex} />
+          <CitedBody body={mainContent} citations={citations} hex={roleText} />
         )}
       </GlassCard>
 
@@ -339,7 +334,7 @@ export function ReviewShell({
           onChange={(e) => setFeedbackText(e.target.value)}
           placeholder={`What worked here that ${employeeName} should repeat? What should they avoid next time?`}
           rows={3}
-          className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent resize-none"
+          className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand resize-none"
         />
         <p className="mt-1 text-xs text-text-muted">
           One or two sentences becomes a rule {employeeName} applies to similar work.
@@ -410,9 +405,9 @@ export function ReviewShell({
         <button
           onClick={handleApprove}
           disabled={approve.isPending}
-          className="flex-1 rounded-xl bg-[#22C55E] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#16A34A] disabled:opacity-50"
+          className="flex-1 rounded-xl bg-[#15803D] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#166534] disabled:opacity-50"
         >
-          {approve.isPending ? "Approving..." : "Approve ✓"}
+          {approve.isPending ? "Approving..." : "Approve"}
         </button>
       </div>
 
@@ -459,9 +454,9 @@ function PublishBanner({
   if (status === "auto_publishing" && publishAfter) {
     const left = Math.max(0, Math.round((new Date(publishAfter).getTime() - now) / 1000));
     return (
-      <div className="rounded-xl border border-accent bg-accent-light px-4 py-3 flex items-center justify-between gap-3">
+      <div className="rounded-xl border border-brand bg-brand-light px-4 py-3 flex items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-medium text-accent">
+          <p className="text-sm font-medium text-brand">
             Publishing in {left}s
           </p>
           <p className="text-xs text-text-secondary mt-0.5">
@@ -502,9 +497,10 @@ function PublishBanner({
   }
 
   if (status === "published") {
+    const published = statusMeta("published");
     return (
-      <div className="rounded-xl border border-[#22C55E40] bg-[#22C55E10] px-4 py-3">
-        <p className="text-sm font-medium text-[#16A34A]">Published.</p>
+      <div className="rounded-xl border border-brand bg-brand-light px-4 py-3">
+        <p className="text-sm font-medium" style={{ color: published.fg }}>Published.</p>
       </div>
     );
   }

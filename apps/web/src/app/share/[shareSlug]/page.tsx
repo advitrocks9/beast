@@ -4,12 +4,7 @@ import { eq, and, isNotNull } from "drizzle-orm";
 import { db, deliverables, aiEmployees } from "@beast/db";
 import { GlassCard } from "@beast/ui";
 import { scrubPII } from "@/lib/share/scrub";
-
-const ROLE_COLORS: Record<string, string> = {
-  marketing: "#E87B35",
-  sales: "#3B82F6",
-  support: "#22C55E",
-};
+import { roleMeta } from "@/lib/colors";
 
 interface PageProps {
   params: Promise<{ shareSlug: string }>;
@@ -49,7 +44,7 @@ export default async function SharePage({ params, searchParams }: PageProps) {
   });
 
   const employeeName = employee?.name ?? "Beast";
-  const roleHex = ROLE_COLORS[employee?.roleType ?? "marketing"] ?? "#9CA3AF";
+  const roleTextColor = roleMeta(employee?.roleType ?? "marketing").text;
   // Prefer share-time snapshot; fall back to live content
   // for older shares.
   const sourceContent = (deliverable.shareSnapshot ?? deliverable.content) as Record<string, unknown>;
@@ -74,7 +69,7 @@ export default async function SharePage({ params, searchParams }: PageProps) {
       </h1>
 
       <p className="text-sm text-text-secondary">
-        Made by <span style={{ color: roleHex }} className="font-medium">{employeeName}</span>
+        Made by <span style={{ color: roleTextColor }} className="font-medium">{employeeName}</span>
       </p>
 
       <GlassCard hoverable={false} className="p-8">

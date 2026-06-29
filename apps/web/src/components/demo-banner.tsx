@@ -5,11 +5,12 @@ const REPO_URL = "https://github.com/advitrocks9/beast";
 export function DemoBanner() {
   return (
     <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 bg-black px-4 py-1.5 text-center text-xs text-white">
-      <span className="font-medium">Live demo</span>
-      <span className="text-white/50">·</span>
+      <span className="font-medium">Beast</span>
       <span className="text-white/80">
-        seeded data, read-only demo
+        autonomous AI coworkers that ship work you review
       </span>
+      <span className="text-white/50">·</span>
+      <span className="text-white/80">live, seeded, read-only</span>
       <span className="text-white/50">·</span>
       <Link
         href={REPO_URL}

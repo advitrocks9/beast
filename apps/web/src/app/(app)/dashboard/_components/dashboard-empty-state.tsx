@@ -1,12 +1,7 @@
 import { GlassCard } from "@beast/ui";
 import { startersForRole, type StarterRole } from "@beast/shared";
+import { roleColor } from "@/lib/colors";
 import { StarterCard } from "./starter-card";
-
-const ROLE_HEX: Record<StarterRole, string> = {
-  marketing: "#E87B35",
-  sales: "#3B82F6",
-  support: "#22C55E",
-};
 
 interface EmployeeRef {
   id: string;
@@ -36,7 +31,7 @@ export function DashboardEmptyState({ employees }: DashboardEmptyStateProps) {
         {employees.map((employee) => {
           const starters = startersForRole(employee.roleType);
           if (starters.length === 0) return null;
-          const hex = ROLE_HEX[employee.roleType];
+          const hex = roleColor(employee.roleType);
           return (
             <div key={employee.id}>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
