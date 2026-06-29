@@ -47,7 +47,7 @@ export function WeeklyDigest({
   }
 
   const showRejected = rejectedCount > 0;
-  const gridCols = showRejected ? "grid-cols-4" : "grid-cols-3";
+  const gridCols = showRejected ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-2 sm:grid-cols-3";
 
   return (
     <GlassCard hoverable={false} className="p-5">
