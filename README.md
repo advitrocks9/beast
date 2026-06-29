@@ -9,10 +9,10 @@ It is a full product surface built as a monorepo: a tool-using agent runtime,
 a three-tier memory system on pgvector, a background orchestrator loop, a
 human-in-the-loop review queue, publishing connectors, and billing.
 
-**Live demo:** <LIVE_DEMO_URL> (seeded data, agent runs and publishing are
-disabled in the demo)
+**Live demo: [beast-demo.vercel.app](https://beast-demo.vercel.app)** (seeded
+data; agent runs and publishing are disabled in the demo)
 
-<!-- screenshots added below after deploy -->
+![Beast dashboard](docs/dashboard.png)
 
 ## What it does
 
@@ -130,7 +130,9 @@ founder.
 ### Full setup (real auth + live agents)
 
 1. Create a free [Supabase](https://supabase.com) project. Put its URL and anon
-   key in `.env.local`, and its connection string in `DATABASE_URL`.
+   key in `.env.local`, and its connection string in `DATABASE_URL`. On a
+   serverless host (Vercel), use the transaction-mode pooler connection string;
+   the app sets `prepare: false` so it works behind pgbouncer.
 2. Add an `ANTHROPIC_API_KEY` and `GEMINI_API_KEY` for live agents and
    embeddings.
 3. Run the migrations, leave `NEXT_PUBLIC_DEMO_MODE` unset, and `pnpm dev`.
