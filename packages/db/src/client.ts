@@ -12,7 +12,10 @@ function getDb(): Drizzle {
   if (!connectionString) {
     throw new Error("DATABASE_URL environment variable is required");
   }
-  cached = drizzle(postgres(connectionString), { schema });
+  // prepare: false keeps this compatible with a pgbouncer transaction-mode
+  // pooler (the right choice for serverless), which is the connection a hosted
+  // deploy should use. Harmless on a direct/session connection too.
+  cached = drizzle(postgres(connectionString, { prepare: false }), { schema });
   return cached;
 }
 
