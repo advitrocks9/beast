@@ -14,7 +14,7 @@ a three-tier memory system on pgvector, a background orchestrator loop, a
 human-in-the-loop review queue, publishing connectors, and billing.
 
 **Live demo: [beast-demo.vercel.app](https://beast-demo.vercel.app)** (seeded
-data; agent runs and publishing are disabled in the demo)
+data, read-only)
 
 ![Beast dashboard](docs/dashboard.png)
 
@@ -144,6 +144,16 @@ founder.
    `pnpm --filter @beast/workers dev`.
 
 `.env.example` documents every variable and what is optional.
+
+## Screens
+
+The human review queue, where every deliverable lands for sign-off:
+
+![Review queue](docs/reviews.png)
+
+An employee desk: chat with a hire, its memory and reasoning in context:
+
+![Employee desk](docs/employee.png)
 
 ## Repo layout
 
