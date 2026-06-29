@@ -181,7 +181,7 @@ export function HireEmployeesShell({ companyName, employeeOptions }: HireEmploye
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#FAFBFF]">
+    <div className="flex min-h-screen flex-col bg-[#FAFAFA]">
       {/* Header */}
       <header className="flex items-center justify-between border-b border-[oklch(0.8_0.01_260/0.15)] px-8 py-4">
         <div>
