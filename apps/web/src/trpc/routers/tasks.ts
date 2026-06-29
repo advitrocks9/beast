@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { eq, and, isNotNull, desc, inArray } from "drizzle-orm";
 import { tasks, aiEmployees, companies, goals, chatMessages, activityLog } from "@beast/db";
 import { TASK_STATUSES, ONBOARDING_STARTERS, starterById } from "@beast/shared";
@@ -44,15 +45,30 @@ export const tasksRouter = createTRPCRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       assertNotDemo("Running a live agent task");
+
+      // Verify the target employee belongs to this company before writing a
+      // task that references it (otherwise a caller could point a task at
+      // another tenant's employee id).
+      const employee = await ctx.db.query.aiEmployees.findFirst({
+        where: and(eq(aiEmployees.id, input.aiEmployeeId), eq(aiEmployees.companyId, ctx.companyId)),
+        columns: { name: true, roleType: true },
+      });
+      if (!employee) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Employee not found" });
+      }
+
       // Hydrate brief.pinnedGoal from goalId so the agent persona's
-      // "Pinned founder goal" line lands in the task message.
+      // "Pinned founder goal" line lands in the task message. goalId is only
+      // persisted when it resolves to a goal in this company.
       let briefForInsert = input.brief;
+      let validGoalId: string | undefined = undefined;
       if (input.goalId) {
         const goal = await ctx.db.query.goals.findFirst({
           where: and(eq(goals.id, input.goalId), eq(goals.companyId, ctx.companyId)),
           columns: { id: true, title: true, description: true, targetDate: true },
         });
         if (goal) {
+          validGoalId = goal.id;
           briefForInsert = {
             ...input.brief,
             pinnedGoal: {
@@ -69,22 +85,18 @@ export const tasksRouter = createTRPCRouter({
         companyId: ctx.companyId,
         origin: "user_created",
         ...input,
+        goalId: validGoalId,
         brief: briefForInsert,
       }).returning();
 
       if (!task) throw new Error("Failed to create task");
-
-      const employee = await ctx.db.query.aiEmployees.findFirst({
-        where: eq(aiEmployees.id, input.aiEmployeeId),
-        columns: { name: true, roleType: true },
-      });
 
       const company = await ctx.db.query.companies.findFirst({
         where: eq(companies.id, ctx.companyId),
         columns: { name: true },
       });
 
-      if (!employee || !company) throw new Error("Employee or company not found");
+      if (!company) throw new Error("Company not found");
 
       // Auto-detect: is this a multi-step task?
       const objective = (input.brief as Record<string, string>).objective ?? input.title;
@@ -409,6 +421,23 @@ export const tasksRouter = createTRPCRouter({
       ),
     }))
     .mutation(async ({ ctx, input }) => {
+      const employee = await ctx.db.query.aiEmployees.findFirst({
+        where: and(eq(aiEmployees.id, input.aiEmployeeId), eq(aiEmployees.companyId, ctx.companyId)),
+        columns: { id: true },
+      });
+      if (!employee) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Employee not found" });
+      }
+
+      let validGoalId: string | undefined = undefined;
+      if (input.goalId) {
+        const goal = await ctx.db.query.goals.findFirst({
+          where: and(eq(goals.id, input.goalId), eq(goals.companyId, ctx.companyId)),
+          columns: { id: true },
+        });
+        validGoalId = goal?.id;
+      }
+
       const company = await ctx.db.query.companies.findFirst({
         where: eq(companies.id, ctx.companyId),
         columns: { timezone: true },
@@ -431,7 +460,7 @@ export const tasksRouter = createTRPCRouter({
         title: input.title,
         brief: input.brief,
         taskType: input.taskType,
-        goalId: input.goalId,
+        goalId: validGoalId,
         origin: "recurring",
         recurrence: config as unknown as Record<string, unknown>,
       }).returning();
@@ -587,7 +616,19 @@ export const tasksRouter = createTRPCRouter({
 
   getStreamToken: protectedProcedure
     .input(z.object({ triggerRunId: z.string() }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      // All tenants share one Trigger.dev project, so a read token for an
+      // arbitrary run id would cross tenants. Only mint for a run that belongs
+      // to a task in the caller's company. assertNotDemo because the demo guard
+      // only blocks mutations, and this hits live Trigger.dev infra.
+      assertNotDemo("Streaming a run");
+      const owned = await ctx.db.query.tasks.findFirst({
+        where: and(eq(tasks.triggerRunId, input.triggerRunId), eq(tasks.companyId, ctx.companyId)),
+        columns: { id: true },
+      });
+      if (!owned) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Run not found" });
+      }
       const token = await triggerAuth.createPublicToken({
         scopes: {
           read: {
