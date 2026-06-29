@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { useTRPC } from "@/trpc/client";
+import { BRAND, statusMeta } from "@/lib/colors";
 
 interface ProgressSliderProps {
   goalId: string;
@@ -11,10 +12,10 @@ interface ProgressSliderProps {
   size?: "default" | "compact";
 }
 
+const COMPLETE = statusMeta("completed").fg;
+
 function pickColor(pct: number): string {
-  if (pct >= 75) return "#22C55E";
-  if (pct >= 40) return "#F59E0B";
-  return "#3B82F6";
+  return pct >= 100 ? COMPLETE : BRAND;
 }
 
 export function ProgressSlider({

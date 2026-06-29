@@ -44,7 +44,7 @@ export function AutoPublishPill() {
   return (
     <GlassCard hoverable={false} className="p-4">
       <div className="flex items-center gap-2 mb-3">
-        <Send size={14} className="text-accent" />
+        <Send size={14} className="text-brand" />
         <p className="text-sm font-medium">
           {items.length} {items.length === 1 ? "deliverable" : "deliverables"} publishing soon
         </p>
@@ -77,7 +77,7 @@ export function AutoPublishPill() {
               </div>
               <div className="h-1 w-full rounded-full bg-[oklch(0.95_0.005_260)] overflow-hidden">
                 <div
-                  className="h-full bg-accent transition-[width] duration-500"
+                  className="h-full bg-brand transition-[width] duration-500"
                   style={{ width: `${pct}%` }}
                 />
               </div>

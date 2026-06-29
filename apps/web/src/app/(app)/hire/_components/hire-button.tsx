@@ -47,7 +47,7 @@ export function HireButton({
           onChange={(e) => setFocus(e.target.value)}
           rows={3}
           placeholder={FOCUS_PLACEHOLDER[roleType] ?? ""}
-          className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs leading-relaxed outline-none focus:border-accent focus:ring-1 focus:ring-accent resize-none"
+          className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs leading-relaxed outline-none focus:border-brand focus:ring-1 focus:ring-brand resize-none"
         />
       )}
 

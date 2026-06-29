@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useTRPC } from "@/trpc/client";
 import { GlassCard } from "@beast/ui";
+import { statusMeta } from "@/lib/colors";
 
 const CATEGORY_LABEL: Record<string, string> = {
   core: "Core",
@@ -58,12 +59,14 @@ export function ExternalServicesSection() {
             <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
               {CATEGORY_LABEL[cat] ?? cat}
             </p>
-            {rows.map((r) => (
+            {rows.map((r) => {
+              const m = statusMeta(r.configured ? "approved" : "pending");
+              return (
               <GlassCard key={r.key} hoverable={false} className="p-3">
                 <div className="flex items-start gap-3">
                   <span
                     className="mt-1 h-2 w-2 shrink-0 rounded-full"
-                    style={{ backgroundColor: r.configured ? "#22C55E" : "#F59E0B" }}
+                    style={{ backgroundColor: m.dot }}
                     aria-hidden
                   />
                   <div className="min-w-0 flex-1">
@@ -71,10 +74,7 @@ export function ExternalServicesSection() {
                       <p className="text-sm font-medium">{r.label}</p>
                       <span
                         className="rounded-full px-2 py-0.5 text-[10px] font-medium"
-                        style={{
-                          backgroundColor: r.configured ? "#DCFCE7" : "#FEF3C7",
-                          color: r.configured ? "#15803D" : "#B45309",
-                        }}
+                        style={{ backgroundColor: m.bg, color: m.fg }}
                       >
                         {r.configured ? "Configured" : "Not configured"}
                       </span>
@@ -94,7 +94,8 @@ export function ExternalServicesSection() {
                   </div>
                 </div>
               </GlassCard>
-            ))}
+              );
+            })}
           </div>
         );
       })}

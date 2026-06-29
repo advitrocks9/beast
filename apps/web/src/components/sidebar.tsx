@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Building2, Users, Settings, Plus, Bell, LayoutDashboard, Target, ListTodo, BookOpen, Repeat } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { roleColor, statusMeta } from "@/lib/colors";
 
 interface SidebarEmployee {
   id: string;
@@ -18,19 +19,6 @@ interface SidebarProps {
   open?: boolean;
   onClose?: () => void;
 }
-
-const roleColors: Record<string, string> = {
-  marketing: "bg-[#E87B35]",
-  sales: "bg-[#3B82F6]",
-  support: "bg-[#22C55E]",
-};
-
-const statusColors: Record<string, string> = {
-  idle: "bg-[#9CA3AF]",
-  working: "bg-[#3B82F6]",
-  review: "bg-[#F59E0B]",
-  active: "bg-[#22C55E]",
-};
 
 export function Sidebar({ employees = [], reviewCount = 0, open = false, onClose }: SidebarProps) {
   const pathname = usePathname();
@@ -118,8 +106,8 @@ export function Sidebar({ employees = [], reviewCount = 0, open = false, onClose
             active={pathname === `/employees/${emp.id}`}
             icon={
               <span className="relative flex h-5 w-5 items-center justify-center">
-                <span className={cn("h-5 w-5 rounded-full", roleColors[emp.roleType], "opacity-20")} />
-                <span className={cn("absolute bottom-0 right-0 h-1.5 w-1.5 rounded-full ring-2 ring-white", statusColors[emp.status])} />
+                <span className="h-5 w-5 rounded-full opacity-20" style={{ backgroundColor: roleColor(emp.roleType) }} />
+                <span className="absolute bottom-0 right-0 h-1.5 w-1.5 rounded-full ring-2 ring-white" style={{ backgroundColor: statusMeta(emp.status).dot }} />
               </span>
             }
           >
@@ -168,7 +156,7 @@ function NavItem({
       {icon}
       <span className="flex-1">{children}</span>
       {badge !== undefined && badge > 0 && (
-        <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent text-[11px] font-medium text-white px-1.5">
+        <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-brand text-[11px] font-medium text-white px-1.5">
           {badge}
         </span>
       )}

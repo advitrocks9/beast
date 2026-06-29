@@ -7,6 +7,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useTRPC } from "@/trpc/client";
 import { GlassCard } from "@beast/ui";
 import { Plus, Repeat, Trash2 } from "lucide-react";
+import { roleColor } from "@/lib/colors";
 
 export interface RecurringEmployee {
   id: string;
@@ -36,12 +37,6 @@ interface RecurringShellProps {
   employees: RecurringEmployee[];
   timezone: string;
 }
-
-const ROLE_COLORS: Record<string, string> = {
-  marketing: "#E87B35",
-  sales: "#3B82F6",
-  support: "#22C55E",
-};
 
 const DAY_OF_WEEK_LABEL = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -112,7 +107,7 @@ function RecurringRow({ row }: { row: RecurringTaskRow }) {
   const trpc = useTRPC();
   const router = useRouter();
   const cancel = useMutation(trpc.tasks.cancelRecurring.mutationOptions());
-  const roleHex = ROLE_COLORS[row.employeeRoleType] ?? "#9CA3AF";
+  const roleHex = roleColor(row.employeeRoleType);
 
   const cadenceLabel = (() => {
     const time = `${pad(row.hour)}:${pad(row.minute)}`;
@@ -262,7 +257,7 @@ function CreateRecurringForm({
         <select
           value={employeeId}
           onChange={(e) => setEmployeeId(e.target.value)}
-          className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+          className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
         >
           {employees.map((e) => (
             <option key={e.id} value={e.id}>
@@ -280,7 +275,7 @@ function CreateRecurringForm({
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="e.g. Weekly product update tweet"
-          className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+          className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
         />
       </div>
 
@@ -293,7 +288,7 @@ function CreateRecurringForm({
           onChange={(e) => setInstructions(e.target.value)}
           rows={3}
           placeholder="What should the agent do every time? Include voice, length, and any links."
-          className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent resize-none"
+          className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand resize-none"
         />
       </div>
 
@@ -305,7 +300,7 @@ function CreateRecurringForm({
           <select
             value={frequency}
             onChange={(e) => setFrequency(e.target.value as typeof frequency)}
-            className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+            className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
           >
             <option value="daily">Daily</option>
             <option value="weekly">Weekly</option>
@@ -320,7 +315,7 @@ function CreateRecurringForm({
             <select
               value={dayOfWeek}
               onChange={(e) => setDayOfWeek(Number(e.target.value))}
-              className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+              className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
             >
               {DAY_OF_WEEK_LABEL.map((label, i) => (
                 <option key={label} value={i}>
@@ -338,7 +333,7 @@ function CreateRecurringForm({
             <select
               value={dayOfMonth}
               onChange={(e) => setDayOfMonth(Number(e.target.value))}
-              className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+              className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
             >
               {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
                 <option key={d} value={d}>
@@ -358,7 +353,7 @@ function CreateRecurringForm({
             max={23}
             value={hour}
             onChange={(e) => setHour(clampInt(e.target.value, 0, 23))}
-            className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+            className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
           />
         </div>
         <div>
@@ -371,7 +366,7 @@ function CreateRecurringForm({
             max={59}
             value={minute}
             onChange={(e) => setMinute(clampInt(e.target.value, 0, 59))}
-            className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+            className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
           />
         </div>
       </div>

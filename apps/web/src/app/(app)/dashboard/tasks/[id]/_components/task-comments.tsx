@@ -5,18 +5,13 @@ import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTRPC } from "@/trpc/client";
 import { GlassCard } from "@beast/ui";
+import { roleColor } from "@/lib/colors";
 
 interface TaskCommentsProps {
   taskId: string;
   employeeName: string;
   employeeRoleType: "marketing" | "sales" | "support";
 }
-
-const ROLE_COLORS: Record<string, string> = {
-  marketing: "#E87B35",
-  sales: "#3B82F6",
-  support: "#22C55E",
-};
 
 const MIN_COMMENT_CHARS = 2;
 
@@ -50,7 +45,7 @@ export function TaskComments({ taskId, employeeName, employeeRoleType }: TaskCom
   });
 
   const items = comments.data ?? [];
-  const roleHex = ROLE_COLORS[employeeRoleType] ?? "#9CA3AF";
+  const roleHex = roleColor(employeeRoleType);
   const hasFounderComment = items.some((c) => c.role === "user");
 
   function handleSubmit(e: React.FormEvent) {

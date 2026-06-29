@@ -4,13 +4,13 @@ import { createClient } from "@/lib/supabase/server";
 import { db } from "@beast/db";
 import { companies, aiEmployees } from "@beast/db";
 import { GlassCard } from "@beast/ui";
+import { roleColor } from "@/lib/colors";
 import { HireButton } from "./_components/hire-button";
 
 interface RoleCard {
   roleType: "marketing" | "sales" | "support";
   name: string;
   roleTitle: string;
-  hex: string;
   blurb: string;
   willHandle: string[];
 }
@@ -20,7 +20,6 @@ const ROLE_CARDS: RoleCard[] = [
     roleType: "marketing",
     name: "Alex",
     roleTitle: "Marketing Manager",
-    hex: "#E87B35",
     blurb: "Writes blog posts, social copy, newsletters. Energetic and data-driven.",
     willHandle: ["Twitter / LinkedIn drafts", "Long-form blog posts", "Newsletter sections", "Competitor teardowns"],
   },
@@ -28,7 +27,6 @@ const ROLE_CARDS: RoleCard[] = [
     roleType: "sales",
     name: "Jordan",
     roleTitle: "Sales Development Rep",
-    hex: "#3B82F6",
     blurb: "Drafts outreach emails, sequences, and proposals. Direct, warm, consultative.",
     willHandle: ["Cold email sequences", "ICP company lists", "Outreach personalization", "Follow-up cadences"],
   },
@@ -36,7 +34,6 @@ const ROLE_CARDS: RoleCard[] = [
     roleType: "support",
     name: "Sam",
     roleTitle: "Support Lead",
-    hex: "#22C55E",
     blurb: "Handles tickets, FAQ articles, KB updates. Calm, empathetic, thorough.",
     willHandle: ["Ticket replies", "FAQ + help-center articles", "Macros + canned responses", "Escalation triage"],
   },
@@ -70,12 +67,13 @@ export default async function HirePage() {
       <div className="grid gap-4 md:grid-cols-3">
         {ROLE_CARDS.map((card) => {
           const already = existingByRole.get(card.roleType);
+          const color = roleColor(card.roleType);
           return (
             <GlassCard key={card.roleType} hoverable={false} className="p-5 flex flex-col">
               <div className="flex items-start gap-3 mb-3">
                 <div
                   className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-white text-lg font-bold"
-                  style={{ backgroundColor: card.hex }}
+                  style={{ backgroundColor: color }}
                 >
                   {card.name[0]}
                 </div>
@@ -95,7 +93,7 @@ export default async function HirePage() {
                   <li key={item} className="flex items-start gap-2">
                     <span
                       className="mt-1.5 inline-block h-1 w-1 rounded-full shrink-0"
-                      style={{ backgroundColor: card.hex }}
+                      style={{ backgroundColor: color }}
                     />
                     {item}
                   </li>
@@ -111,7 +109,7 @@ export default async function HirePage() {
                     Open {already.name}&rsquo;s desk
                   </Link>
                 ) : (
-                  <HireButton roleType={card.roleType} hex={card.hex} />
+                  <HireButton roleType={card.roleType} hex={color} />
                 )}
               </div>
             </GlassCard>
