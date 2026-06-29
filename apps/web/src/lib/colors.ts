@@ -15,12 +15,12 @@ export type RoleType = "marketing" | "sales" | "support";
 type RoleMeta = { solid: string; tint: string; text: string };
 
 const ROLE_META: Record<RoleType, RoleMeta> = {
-  marketing: { solid: "#B05A38", tint: "#F6EBE4", text: "#9A4A2C" }, // clay, Alex
-  sales: { solid: "#8A3D63", tint: "#F4E8EF", text: "#7A3457" }, // mulberry, Jordan
-  support: { solid: "#46618A", tint: "#E8EDF4", text: "#3C5478" }, // slate-blue, Sam
+  marketing: { solid: "#A85D44", tint: "#F1ECEA", text: "#9A4A2C" }, // muted clay, Alex
+  sales: { solid: "#834A6A", tint: "#F0EAEF", text: "#7A3457" }, // muted plum, Jordan
+  support: { solid: "#46618A", tint: "#E9EDF3", text: "#3C5478" }, // slate-blue, Sam
 };
 
-const ROLE_FALLBACK: RoleMeta = { solid: MUTED, tint: "#F1F1F0", text: MUTED };
+const ROLE_FALLBACK: RoleMeta = { solid: MUTED, tint: "#F1F2F4", text: MUTED };
 
 // Solid hexes only, in the shape the app's inline maps used (drop-in replacement).
 export const ROLE_COLORS: Record<string, string> = {
