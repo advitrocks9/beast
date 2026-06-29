@@ -1,0 +1,25 @@
+{
+  "name": "beast",
+  "private": true,
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "check:em-dashes": "bash scripts/no-em-dashes.sh"
+  },
+  "devDependencies": {
+    "tsx": "^4.21.0",
+    "turbo": "^2.5.0",
+    "typescript": "^5.8.0"
+  },
+  "packageManager": "pnpm@10.33.0",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@clerk/shared",
+      "esbuild",
+      "protobufjs",
+      "sharp"
+    ]
+  }
+}

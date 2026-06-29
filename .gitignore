@@ -1,0 +1,43 @@
+# dependencies
+node_modules/
+
+# build
+.next/
+dist/
+.turbo/
+*.tsbuildinfo
+
+# env
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# debug
+npm-debug.log*
+pnpm-debug.log*
+
+# Claude Code
+.claude/
+
+# MCP config
+.mcp.json
+
+# Trigger.dev
+.trigger/
+
+# Supabase
+supabase/.temp/
+
+# Vercel
+.vercel/
+
+# Autonomous loop bookkeeping (state, tasks, logs, research). Local only.
+autonomous/
