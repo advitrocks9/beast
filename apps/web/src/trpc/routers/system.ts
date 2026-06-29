@@ -2,6 +2,7 @@ import { sql, eq } from "drizzle-orm";
 import { schedules } from "@trigger.dev/sdk";
 import { companies } from "@beast/db";
 import { createTRPCRouter, protectedProcedure } from "../init";
+import { DEMO_MODE } from "@/lib/demo";
 
 export interface DbHealth {
   status: "healthy" | "drifted" | "unknown";
@@ -16,6 +17,11 @@ export const systemRouter = createTRPCRouter({
    * /settings/danger page surfaces the result so the founder can act.
    */
   dbHealth: protectedProcedure.query(async ({ ctx }): Promise<DbHealth> => {
+    // Demo visitors auto-resolve to the seeded founder; don't expose prod
+    // migration/connection internals to an anonymous viewer.
+    if (DEMO_MODE) {
+      return { status: "healthy", journalRowCount: null, message: "Demo." };
+    }
     try {
       const result = await ctx.db.execute<{ n: number }>(
         sql`SELECT count(*)::int AS n FROM drizzle.__drizzle_migrations`,
@@ -43,10 +49,12 @@ export const systemRouter = createTRPCRouter({
         message: `${journalRowCount} migrations tracked.`,
       };
     } catch (err) {
+      // Log server-side; never echo the raw DB/connection error to the client.
+      console.error("[system.dbHealth] check failed:", err);
       return {
         status: "unknown",
         journalRowCount: null,
-        message: err instanceof Error ? err.message : "Health check failed.",
+        message: "Health check failed.",
       };
     }
   }),
@@ -59,7 +67,10 @@ export const systemRouter = createTRPCRouter({
    * "Serper is unconfigured" instead of grepping logs.
    */
   integrations: protectedProcedure.query(async () => {
+    // Don't disclose which prod integrations are wired up to an anonymous
+    // demo visitor; report everything as configured for the showcase.
     const present = (key: string): boolean => {
+      if (DEMO_MODE) return true;
       const v = process.env[key];
       return typeof v === "string" && v.length > 0;
     };

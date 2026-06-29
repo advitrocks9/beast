@@ -41,8 +41,13 @@ export async function publishToPlatform(
       const text = extractText(deliverable);
       const consumerKey = process.env.TWITTER_API_KEY!;
       const consumerSecret = process.env.TWITTER_API_SECRET!;
-      // Twitter stores both token + secret in metadata
-      const tokenSecret = (connector.metadata.accessTokenSecret as string) ?? "";
+      // OAuth 1.0a token secret is encrypted at rest in metadata.
+      // accessTokenSecretEnc (base64 of the AES-GCM blob); fall back to a legacy
+      // plaintext accessTokenSecret for rows minted before encryption.
+      const encSecret = connector.metadata.accessTokenSecretEnc as string | undefined;
+      const tokenSecret = encSecret
+        ? decryptToken(Buffer.from(encSecret, "base64"))
+        : ((connector.metadata.accessTokenSecret as string) ?? "");
 
       const result = await postTweet(text, accessToken, tokenSecret, consumerKey, consumerSecret);
       return { url: result.url, platformPostId: result.id };

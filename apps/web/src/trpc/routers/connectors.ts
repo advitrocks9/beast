@@ -24,11 +24,17 @@ function generateState(companyId: string, platform: string): string {
   return encryptToken(JSON.stringify(payload)).toString("base64url");
 }
 
-export function verifyState(state: string): { companyId: string; platform: string } | null {
+export function verifyState(
+  state: string,
+  expectedPlatform?: string,
+): { companyId: string; platform: string } | null {
   if (!state) return null;
   try {
     const payload = JSON.parse(decryptToken(Buffer.from(state, "base64url"))) as OAuthState;
     if (Date.now() > payload.exp) return null;
+    // Reject a state minted for a different platform being replayed on another
+    // platform's callback.
+    if (expectedPlatform !== undefined && payload.platform !== expectedPlatform) return null;
     return { companyId: payload.companyId, platform: payload.platform };
   } catch {
     return null;
@@ -40,9 +46,26 @@ function getCallbackUrl(platform: string): string {
   return `${base}/api/oauth/callback/${platform}`;
 }
 
+/**
+ * Strip credential-bearing keys from connector metadata before it crosses the
+ * wire. The encrypted token columns are already excluded by the column select,
+ * but metadata is a free-form jsonb that historically also carried secrets
+ * (e.g. the Twitter OAuth1 token secret), so deny anything that looks like one.
+ */
+const SECRET_METADATA_KEY = /secret|token|enc$|password/i;
+function sanitizeMetadata(metadata: unknown): Record<string, unknown> {
+  if (!metadata || typeof metadata !== "object") return {};
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(metadata as Record<string, unknown>)) {
+    if (SECRET_METADATA_KEY.test(k)) continue;
+    out[k] = v;
+  }
+  return out;
+}
+
 export const connectorsRouter = createTRPCRouter({
   list: protectedProcedure.query(async ({ ctx }) => {
-    return ctx.db.query.connectors.findMany({
+    const rows = await ctx.db.query.connectors.findMany({
       where: eq(connectors.companyId, ctx.companyId),
       columns: {
         id: true,
@@ -53,6 +76,7 @@ export const connectorsRouter = createTRPCRouter({
         createdAt: true,
       },
     });
+    return rows.map((r) => ({ ...r, metadata: sanitizeMetadata(r.metadata) }));
   }),
 
   initOAuth: protectedProcedure

@@ -1,11 +1,18 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { createClient } from "@/lib/supabase/server";
+import { DEMO_MODE } from "@/lib/demo";
 import { db } from "@beast/db";
 import { companies } from "@beast/db";
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
+
+  // The read-only demo has no real auth; structurally refuse the callback
+  // rather than depending on the seeded session never reaching it.
+  if (DEMO_MODE) {
+    return NextResponse.redirect(`${origin}/dashboard`);
+  }
   const code = searchParams.get("code");
 
   if (code) {

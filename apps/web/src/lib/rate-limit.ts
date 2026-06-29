@@ -59,12 +59,22 @@ export function check(key: string, limit: number, windowMs: number): RateLimitRe
 }
 
 /**
- * Best-effort caller IP from a Next.js Request. Vercel + standard proxy
- * patterns set x-forwarded-for; fall through to the connecting peer
- * pseudo-header used by some edge runtimes.
+ * Best-effort caller IP from a Next.js Request. On Vercel the trustworthy
+ * value is the platform-injected hop (x-vercel-forwarded-for / x-real-ip),
+ * NOT the leftmost x-forwarded-for entry, which the client controls and can
+ * rotate to mint a fresh rate-limit bucket per request. Prefer the injected
+ * headers; only fall back to the rightmost x-forwarded-for hop (closest to
+ * the platform), and never the spoofable leftmost one.
  */
 export function clientIpFrom(request: Request): string {
+  const vercel = request.headers.get("x-vercel-forwarded-for");
+  if (vercel) return vercel.split(",")[0]!.trim();
+  const real = request.headers.get("x-real-ip");
+  if (real) return real.trim();
   const xff = request.headers.get("x-forwarded-for");
-  if (xff) return xff.split(",")[0]!.trim();
-  return request.headers.get("x-real-ip") ?? "unknown";
+  if (xff) {
+    const hops = xff.split(",").map((h) => h.trim()).filter(Boolean);
+    if (hops.length > 0) return hops[hops.length - 1]!;
+  }
+  return "unknown";
 }

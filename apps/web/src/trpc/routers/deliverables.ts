@@ -142,6 +142,15 @@ export const deliverablesRouter = createTRPCRouter({
   getVersions: protectedProcedure
     .input(z.object({ deliverableId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
+      // deliverable_versions has no company_id of its own, so verify the
+      // parent deliverable belongs to the caller before returning history.
+      const owner = await ctx.db.query.deliverables.findFirst({
+        where: and(eq(deliverables.id, input.deliverableId), eq(deliverables.companyId, ctx.companyId)),
+        columns: { id: true },
+      });
+      if (!owner) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Deliverable not found" });
+      }
       return ctx.db.query.deliverableVersions.findMany({
         where: eq(deliverableVersions.deliverableId, input.deliverableId),
         orderBy: (v, { desc }) => [desc(v.version)],
@@ -765,5 +774,27 @@ export const deliverablesRouter = createTRPCRouter({
       });
 
       return { shareSlug, referralCode };
+    }),
+
+  /**
+   * Revoke a public share link. Clears shareEnabledAt so both the SSR page and
+   * the public share.get (which require shareEnabledAt IS NOT NULL) stop serving
+   * it. The slug + snapshot are kept so a later re-share is idempotent.
+   */
+  unshare: protectedProcedure
+    .input(z.object({ deliverableId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.db
+        .update(deliverables)
+        .set({ shareEnabledAt: null })
+        .where(and(
+          eq(deliverables.id, input.deliverableId),
+          eq(deliverables.companyId, ctx.companyId),
+        ))
+        .returning({ id: deliverables.id });
+      if (result.length === 0) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Deliverable not found" });
+      }
+      return { ok: true };
     }),
 });
