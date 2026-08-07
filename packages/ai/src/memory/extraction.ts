@@ -22,7 +22,7 @@ export type SignalCategory = keyof typeof PROMOTION_THRESHOLDS;
 
 const CONFIDENCE_GATE = 0.6;
 
-function confidenceFrom(weightSum: number): number {
+export function confidenceFrom(weightSum: number): number {
   return 1 - Math.exp(-weightSum / 2);
 }
 
