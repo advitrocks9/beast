@@ -4,29 +4,25 @@ import { TRPCReactProvider } from "@/trpc/client";
 import { cn } from "@/lib/utils";
 import "./globals.css";
 
-const satoshi = localFont({
+const archivo = localFont({
   src: [
-    { path: "./fonts/Satoshi-Regular.woff2", weight: "400" },
-    { path: "./fonts/Satoshi-Medium.woff2", weight: "500" },
-    { path: "./fonts/Satoshi-Bold.woff2", weight: "700" },
+    { path: "./fonts/Archivo-Variable.woff2", style: "normal" },
+    { path: "./fonts/Archivo-VariableItalic.woff2", style: "italic" },
   ],
-  variable: "--font-body",
+  variable: "--font-archivo",
   display: "swap",
   preload: true,
   adjustFontFallback: "Arial",
 });
 
-// Cabinet Grotesk paints the H1 (LCP candidate) on /, /pricing, and
-// /vs/sintra. Bold-only preload because Extrabold is below the fold.
-const cabinetGrotesk = localFont({
+const fragmentMono = localFont({
   src: [
-    { path: "./fonts/CabinetGrotesk-Bold.woff2", weight: "700" },
-    { path: "./fonts/CabinetGrotesk-Extrabold.woff2", weight: "800" },
+    { path: "./fonts/FragmentMono-Regular.woff2", weight: "400", style: "normal" },
+    { path: "./fonts/FragmentMono-Italic.woff2", weight: "400", style: "italic" },
   ],
-  variable: "--font-display",
+  variable: "--font-fragment",
   display: "swap",
-  preload: true,
-  adjustFontFallback: "Arial",
+  preload: false,
 });
 
 const SITE_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://beast.team";
@@ -34,35 +30,26 @@ const SITE_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://beast.team";
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: "Beast - AI employees for non-technical CEOs",
+    default: "Beast - an autonomous AI company you manage",
     template: "%s - Beast",
   },
   description:
-    "AI marketing, sales, and support employees that produce real deliverables, learn your voice, and keep you accountable. Built for 10-50 person companies.",
+    "Brief it, agent employees do the work in bounded tool loops, deliverables land in your review queue, and your edits become the company's standing operating rules.",
   applicationName: "Beast",
-  keywords: [
-    "AI employees",
-    "AI marketing manager",
-    "AI SDR",
-    "AI support agent",
-    "AI for SMB",
-    "Sintra alternative",
-    "Lindy alternative",
-  ],
   authors: [{ name: "Beast" }],
   openGraph: {
     type: "website",
     siteName: "Beast",
     url: SITE_URL,
-    title: "Beast - AI employees for non-technical CEOs",
+    title: "Beast - an autonomous AI company you manage",
     description:
-      "Hire Alex (Marketing), Jordan (Sales), Sam (Support). Real deliverables, learns your voice, weekly accountability.",
+      "Agent employees run briefs in bounded tool loops. You review; the company learns your standards permanently.",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Beast - AI employees for non-technical CEOs",
+    title: "Beast - an autonomous AI company you manage",
     description:
-      "AI marketing, sales, and support that finishes work. Built for 10-50 person companies.",
+      "Agent employees run briefs in bounded tool loops. You review; the company learns your standards permanently.",
   },
   robots: {
     index: true,
@@ -82,8 +69,21 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={cn(satoshi.variable, cabinetGrotesk.variable)}>
-      <body className="font-(--font-body) text-foreground bg-background antialiased">
+    <html lang="en" className={cn(archivo.variable, fragmentMono.variable)}>
+      <body className="font-sans text-foreground bg-background antialiased">
+        {/*
+        THESIS: An AI company rendered as its own corporate identity program; the interface is the
+        company's standards manual in use. Refuses the neon agent-ops dashboard and the shadcn admin.
+        OWN-WORLD: white coated stock, ink #131311, identity #E8420C, paper-gray panels, 1px ink
+        rules, Archivo (wdth 122/800 display) + Fragment Mono spec voice, squared chips, flat depth.
+        STORY: visitor watches a run stamp through stations, commissions a job, edits a deliverable,
+        sees the company amend its own manual with a confidence-scored candidate rule.
+        FIRST VIEWPORT: masthead over ink rule; press floor: roster rail, production board with live
+        run ticket + queue, review tray + latest amendments; primary action "Commission a job".
+        FORM: Swiss corporate identity program / standards manual; own list candidate 4/7; seed 1bd9927c.
+        FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review,
+        the verdict, and DESIGN.md.
+        */}
         <TRPCReactProvider>
           {children}
         </TRPCReactProvider>
