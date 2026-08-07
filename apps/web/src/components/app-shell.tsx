@@ -9,7 +9,7 @@ interface SidebarEmployee {
   id: string;
   name: string;
   roleType: "marketing" | "sales" | "support";
-  status: "idle" | "working" | "review" | "active";
+  status: string;
 }
 
 interface AppShellProps {
@@ -23,7 +23,7 @@ export function AppShell({ employees, reviewCount, demoMode, children }: AppShel
   const [navOpen, setNavOpen] = useState(false);
 
   return (
-    <div className="flex h-screen flex-col bg-bg-warm">
+    <div className="flex h-screen flex-col bg-bg">
       {demoMode && <DemoBanner />}
       <div className="relative flex flex-1 overflow-hidden">
         <Sidebar
@@ -36,12 +36,14 @@ export function AppShell({ employees, reviewCount, demoMode, children }: AppShel
           <button
             aria-label="Close menu"
             onClick={() => setNavOpen(false)}
-            className="fixed inset-0 z-30 bg-black/20 backdrop-blur-sm md:hidden"
+            className="fixed inset-0 z-30 bg-black/25 md:hidden"
           />
         )}
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-          <TopNav onMenu={() => setNavOpen(true)} />
-          <main className="flex-1 overflow-x-hidden overflow-y-auto p-6">{children}</main>
+          <TopNav onMenu={() => setNavOpen(true)} demoMode={demoMode} />
+          <main className="flex-1 overflow-x-hidden overflow-y-auto px-6 py-6 md:px-8">
+            {children}
+          </main>
         </div>
       </div>
     </div>

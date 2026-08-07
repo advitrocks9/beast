@@ -2,15 +2,28 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2, Users, Settings, Plus, Bell, LayoutDashboard, Target, ListTodo, BookOpen, Repeat } from "lucide-react";
+import {
+  LayoutGrid,
+  Stamp,
+  ListTodo,
+  Repeat,
+  Users,
+  Target,
+  Archive,
+  BookOpen,
+  Settings,
+  Plus,
+  CircleHelp,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
-import { roleColor, statusMeta } from "@/lib/colors";
+import { statusMeta } from "@/lib/colors";
+import { Monogram } from "@/components/monogram";
 
 interface SidebarEmployee {
   id: string;
   name: string;
   roleType: "marketing" | "sales" | "support";
-  status: "idle" | "working" | "review" | "active";
+  status: string;
 }
 
 interface SidebarProps {
@@ -27,107 +40,105 @@ export function Sidebar({ employees = [], reviewCount = 0, open = false, onClose
     <aside
       onClick={onClose}
       className={cn(
-        "z-40 flex h-full w-[240px] flex-col bg-[oklch(1_0_0/0.6)] backdrop-blur-[16px] backdrop-saturate-[1.2] border-r border-[oklch(0.8_0.01_260/0.15)]",
+        "z-40 flex h-full w-[232px] flex-col border-r border-hairline bg-bg",
         "fixed inset-y-0 left-0 transition-transform duration-200 md:static md:translate-x-0",
         open ? "translate-x-0" : "-translate-x-full",
       )}
     >
-      {/* Logo */}
-      <div className="flex h-14 items-center px-4 border-b border-[oklch(0.8_0.01_260/0.1)]">
-        <Link href="/dashboard" className="font-(--font-display) text-lg font-bold tracking-tight">
+      <div className="rule-b mx-4 flex flex-col pt-5 pb-3">
+        <Link href="/dashboard" className="display-caps text-[22px] leading-none">
           Beast
         </Link>
+        <span className="spec-label mt-1.5">Autonomous AI company</span>
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-1">
-        <NavItem href="/dashboard" icon={<LayoutDashboard size={18} />} active={pathname === "/dashboard"}>
+      <nav className="flex-1 overflow-y-auto px-2 py-3">
+        <SectionLabel>Operations</SectionLabel>
+        <NavItem href="/dashboard" icon={<LayoutGrid size={16} strokeWidth={1.5} />} active={pathname === "/dashboard"}>
           The Office
         </NavItem>
-
-        {/* Review queue */}
-        {reviewCount > 0 && (
-          <NavItem href="/reviews" icon={<Bell size={18} />} active={pathname === "/reviews"} badge={reviewCount}>
-            Review Queue
-          </NavItem>
-        )}
-
+        <NavItem
+          href="/reviews"
+          icon={<Stamp size={16} strokeWidth={1.5} />}
+          active={pathname === "/reviews" || pathname.startsWith("/review/")}
+          badge={reviewCount}
+        >
+          Review
+        </NavItem>
         <NavItem
           href="/dashboard/tasks"
-          icon={<ListTodo size={18} />}
-          active={pathname === "/dashboard/tasks" || pathname.startsWith("/dashboard/tasks/")}
+          icon={<ListTodo size={16} strokeWidth={1.5} />}
+          active={pathname.startsWith("/dashboard/tasks")}
         >
-          Tasks
+          Jobs
         </NavItem>
-
         <NavItem
           href="/dashboard/recurring"
-          icon={<Repeat size={18} />}
+          icon={<Repeat size={16} strokeWidth={1.5} />}
           active={pathname.startsWith("/dashboard/recurring")}
         >
           Recurring
         </NavItem>
 
-        <NavItem
-          href="/employees"
-          icon={<Users size={18} />}
-          active={pathname === "/employees"}
-        >
-          Employees
+        <SectionLabel className="mt-5">Company</SectionLabel>
+        <NavItem href="/employees" icon={<Users size={16} strokeWidth={1.5} />} active={pathname === "/employees"}>
+          Roster
         </NavItem>
-
-        <NavItem
-          href="/goals"
-          icon={<Target size={18} />}
-          active={pathname === "/goals"}
-        >
+        <NavItem href="/memory" icon={<Archive size={16} strokeWidth={1.5} />} active={pathname.startsWith("/memory")}>
+          Memory
+        </NavItem>
+        <NavItem href="/knowledge" icon={<BookOpen size={16} strokeWidth={1.5} />} active={pathname.startsWith("/knowledge")}>
+          Knowledge
+        </NavItem>
+        <NavItem href="/goals" icon={<Target size={16} strokeWidth={1.5} />} active={pathname === "/goals"}>
           Goals
         </NavItem>
 
-        <NavItem
-          href="/knowledge"
-          icon={<BookOpen size={18} />}
-          active={pathname.startsWith("/knowledge")}
-        >
-          Knowledge
-        </NavItem>
-
-        {/* Employee list */}
-        <div className="pt-3 pb-1 px-3">
-          <span className="text-[11px] font-medium uppercase tracking-wider text-text-muted">
-            Team
-          </span>
-        </div>
-
-        {employees.map((emp) => (
-          <NavItem
-            key={emp.id}
-            href={`/employees/${emp.id}`}
-            active={pathname === `/employees/${emp.id}`}
-            icon={
-              <span className="relative flex h-5 w-5 items-center justify-center">
-                <span className="h-5 w-5 rounded-full opacity-20" style={{ backgroundColor: roleColor(emp.roleType) }} />
-                <span className="absolute bottom-0 right-0 h-1.5 w-1.5 rounded-full ring-2 ring-white" style={{ backgroundColor: statusMeta(emp.status).dot }} />
+        <SectionLabel className="mt-5">Roster</SectionLabel>
+        {employees.map((emp) => {
+          const meta = statusMeta(emp.status);
+          return (
+            <NavItem
+              key={emp.id}
+              href={`/employees/${emp.id}`}
+              active={pathname.startsWith(`/employees/${emp.id}`)}
+              icon={<Monogram name={emp.name} roleType={emp.roleType} size="sm" />}
+            >
+              <span className="flex flex-1 items-center justify-between gap-2">
+                {emp.name}
+                <span
+                  aria-label={meta.label}
+                  title={meta.label}
+                  className="h-1.5 w-1.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: meta.dot }}
+                />
               </span>
-            }
-          >
-            {emp.name}
-          </NavItem>
-        ))}
-
-        <NavItem href="/hire" icon={<Plus size={18} />} active={pathname === "/hire"}>
-          Hire Employee
+            </NavItem>
+          );
+        })}
+        <NavItem href="/hire" icon={<Plus size={16} strokeWidth={1.5} />} active={pathname === "/hire"}>
+          Hire
         </NavItem>
       </nav>
 
-      {/* Bottom */}
-      <div className="border-t border-[oklch(0.8_0.01_260/0.1)] px-2 py-2">
-        <NavItem href="/settings" icon={<Settings size={18} />} active={pathname.startsWith("/settings")}>
+      <div className="border-t border-hairline px-2 py-2">
+        <NavItem
+          href="/how-it-works"
+          icon={<CircleHelp size={16} strokeWidth={1.5} />}
+          active={pathname === "/how-it-works"}
+        >
+          How it works
+        </NavItem>
+        <NavItem href="/settings" icon={<Settings size={16} strokeWidth={1.5} />} active={pathname.startsWith("/settings")}>
           Settings
         </NavItem>
       </div>
     </aside>
   );
+}
+
+function SectionLabel({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <p className={cn("spec-label px-3 pb-1.5", className)}>{children}</p>;
 }
 
 function NavItem({
@@ -146,19 +157,18 @@ function NavItem({
   return (
     <Link
       href={href}
+      aria-current={active ? "page" : undefined}
       className={cn(
-        "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors",
+        "flex items-center gap-2.5 rounded-[2px] px-3 py-[7px] text-[13.5px] transition-colors duration-150",
         active
-          ? "bg-[oklch(0.97_0.005_260/0.6)] text-text font-medium"
-          : "text-text-secondary hover:bg-[oklch(0.97_0.005_260/0.4)] hover:text-text",
+          ? "bg-panel font-semibold text-ink shadow-[inset_2px_0_0_0_var(--color-ink)]"
+          : "text-ink-secondary hover:bg-panel hover:text-ink",
       )}
     >
       {icon}
       <span className="flex-1">{children}</span>
       {badge !== undefined && badge > 0 && (
-        <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-brand text-[11px] font-medium text-white px-1.5">
-          {badge}
-        </span>
+        <span className="spec bg-ink px-1.5 py-0.5 text-[10px] text-white">{badge}</span>
       )}
     </Link>
   );

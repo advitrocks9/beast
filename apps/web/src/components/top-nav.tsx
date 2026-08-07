@@ -7,7 +7,8 @@ import { Bell, LogOut, Menu } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTRPC } from "@/trpc/client";
 import { createClient } from "@/lib/supabase/client";
-import { ROLE_COLORS, statusMeta } from "@/lib/colors";
+import { cn } from "@/lib/utils";
+import { roleColor, statusMeta } from "@/lib/colors";
 
 function relativeTime(d: Date): string {
   const diff = Date.now() - d.getTime();
@@ -20,7 +21,7 @@ function relativeTime(d: Date): string {
   return `${dy}d ago`;
 }
 
-export function TopNav({ onMenu }: { onMenu?: () => void }) {
+export function TopNav({ onMenu, demoMode }: { onMenu?: () => void; demoMode?: boolean }) {
   const [showNotifs, setShowNotifs] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -38,6 +39,12 @@ export function TopNav({ onMenu }: { onMenu?: () => void }) {
   const items = list.data?.items ?? [];
   const unreadCount = list.data?.unreadCount ?? 0;
 
+  const today = new Intl.DateTimeFormat("en-GB", {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+  }).format(new Date());
+
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
@@ -54,7 +61,11 @@ export function TopNav({ onMenu }: { onMenu?: () => void }) {
     window.location.href = "/sign-in";
   }
 
-  function handleItemClick(sourceType: "review" | "checkin" | "autonomy" | "plan_approval", sourceId: string, href: string) {
+  function handleItemClick(
+    sourceType: "review" | "checkin" | "autonomy" | "plan_approval",
+    sourceId: string,
+    href: string,
+  ) {
     setShowNotifs(false);
     markRead.mutate(
       { sourceType, sourceId },
@@ -70,7 +81,6 @@ export function TopNav({ onMenu }: { onMenu?: () => void }) {
   }
 
   function handleMarkAllRead() {
-    if (items.length === 0) return;
     const unread = items.filter((i) => !i.isRead);
     if (unread.length === 0) return;
     markAllRead.mutate(
@@ -86,65 +96,65 @@ export function TopNav({ onMenu }: { onMenu?: () => void }) {
   }
 
   return (
-    <header className="flex h-14 items-center justify-end gap-3 border-b border-[oklch(0.8_0.01_260/0.1)] bg-[oklch(1_0_0/0.6)] backdrop-blur-[16px] backdrop-saturate-[1.2] px-6 sticky top-0 z-40">
+    <header className="sticky top-0 z-40 flex h-[52px] items-center gap-3 border-b border-hairline bg-bg/95 px-5 backdrop-blur-[6px]">
       <button
         onClick={onMenu}
         aria-label="Open menu"
-        className="mr-auto flex h-9 w-9 items-center justify-center rounded-lg text-text-secondary transition-colors hover:bg-[oklch(0.97_0.005_260/0.5)] hover:text-text md:hidden"
+        className="flex h-8 w-8 items-center justify-center rounded-[2px] text-ink-secondary transition-colors hover:bg-panel hover:text-ink md:hidden"
       >
-        <Menu size={20} />
+        <Menu size={18} strokeWidth={1.5} />
       </button>
-      <div className="relative" ref={notifRef}>
-        <button
-          onClick={() => setShowNotifs((s) => !s)}
-          className="relative flex h-9 w-9 items-center justify-center rounded-lg text-text-secondary transition-colors hover:bg-[oklch(0.97_0.005_260/0.5)] hover:text-text"
-          aria-label="Notifications"
-        >
-          <Bell size={18} />
-          {unreadCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-error text-[10px] font-medium text-white px-1">
-              {unreadCount}
-            </span>
-          )}
-        </button>
 
-        {showNotifs && (
-          <div className="absolute right-0 top-full mt-2 w-96 rounded-xl border border-[oklch(0.8_0.01_260/0.15)] bg-white shadow-lg max-h-[480px] flex flex-col">
-            <div className="flex items-center justify-between border-b border-[oklch(0.8_0.01_260/0.1)] px-4 py-3">
-              <p className="text-sm font-semibold">Notifications</p>
-              {unreadCount > 0 && (
-                <button
-                  onClick={handleMarkAllRead}
-                  disabled={markAllRead.isPending}
-                  className="text-xs text-text-secondary hover:text-text disabled:opacity-50"
-                >
-                  Mark all read
-                </button>
-              )}
-            </div>
+      <span className="spec-label hidden md:block">{today}</span>
 
-            <div className="overflow-y-auto">
-              {list.isLoading && (
-                <div className="px-4 py-6 text-center text-sm text-text-muted">
-                  Loading...
-                </div>
-              )}
+      <div className="ml-auto flex items-center gap-2">
+        <div className="relative" ref={notifRef}>
+          <button
+            onClick={() => setShowNotifs((s) => !s)}
+            className="relative flex h-8 w-8 items-center justify-center rounded-[2px] text-ink-secondary transition-colors hover:bg-panel hover:text-ink"
+            aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}
+          >
+            <Bell size={16} strokeWidth={1.5} />
+            {unreadCount > 0 && (
+              <span className="spec absolute -top-0.5 -right-0.5 flex h-3.5 min-w-3.5 items-center justify-center bg-identity px-0.5 text-[9px] text-white">
+                {unreadCount}
+              </span>
+            )}
+          </button>
 
-              {!list.isLoading && items.length === 0 && (
-                <div className="px-4 py-8 text-center">
-                  <p className="text-sm text-text-muted">No notifications.</p>
-                  <p className="text-xs text-text-muted mt-1">
-                    Updates appear here when employees complete tasks or need your input.
-                  </p>
-                </div>
-              )}
+          {showNotifs && (
+            <div className="panel absolute right-0 top-full mt-2 flex max-h-[480px] w-96 flex-col overflow-hidden">
+              <div className="rule-b flex items-center justify-between px-4 py-2.5">
+                <p className="text-sm font-semibold">Notifications</p>
+                {unreadCount > 0 && (
+                  <button
+                    onClick={handleMarkAllRead}
+                    disabled={markAllRead.isPending}
+                    className="spec-label transition-colors hover:text-ink disabled:opacity-50"
+                  >
+                    Mark all read
+                  </button>
+                )}
+              </div>
 
-              {items.map((item) => {
-                const dotColor =
-                  (item.employeeRoleType ? ROLE_COLORS[item.employeeRoleType] : undefined) ??
-                  statusMeta(item.sourceType).dot;
-                const opacity = item.isRead ? "opacity-60" : "";
-                return (
+              <div className="overflow-y-auto">
+                {list.isLoading && (
+                  <div className="space-y-2 p-4">
+                    <div className="h-4 w-3/4 bg-panel" />
+                    <div className="h-4 w-1/2 bg-panel" />
+                  </div>
+                )}
+
+                {!list.isLoading && items.length === 0 && (
+                  <div className="px-4 py-8 text-center">
+                    <p className="text-sm text-ink-muted">Nothing waiting on you.</p>
+                    <p className="mt-1 text-xs text-ink-muted">
+                      Filed deliverables and check-ins land here.
+                    </p>
+                  </div>
+                )}
+
+                {items.map((item) => (
                   <Link
                     key={`${item.sourceType}:${item.sourceId}`}
                     href={item.href}
@@ -152,37 +162,46 @@ export function TopNav({ onMenu }: { onMenu?: () => void }) {
                       e.preventDefault();
                       handleItemClick(item.sourceType, item.sourceId, item.href);
                     }}
-                    className={`flex items-start gap-3 border-b border-[oklch(0.8_0.01_260/0.05)] px-4 py-3 hover:bg-[oklch(0.97_0.005_260/0.5)] last:border-b-0 ${opacity}`}
+                    className={cn(
+                      "hairline-b flex items-start gap-3 px-4 py-3 last:border-b-0 hover:bg-panel",
+                      item.isRead && "opacity-60",
+                    )}
                   >
                     <span
-                      className="mt-1.5 inline-block h-2 w-2 rounded-full shrink-0"
-                      style={{ backgroundColor: dotColor }}
+                      className="mt-1.5 inline-block h-2 w-2 shrink-0"
+                      style={{
+                        backgroundColor: item.employeeRoleType
+                          ? roleColor(item.employeeRoleType)
+                          : statusMeta(item.sourceType).dot,
+                      }}
                     />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{item.title}</p>
-                      <p className="text-xs text-text-secondary truncate">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{item.title}</p>
+                      <p className="truncate text-xs text-ink-secondary">
                         {item.body}
                         {item.employeeName ? ` · ${item.employeeName}` : ""}
                       </p>
-                      <p className="text-[11px] text-text-muted mt-0.5">
+                      <p className="spec mt-0.5 text-[10px] text-ink-muted">
                         {relativeTime(new Date(item.occurredAt))}
                       </p>
                     </div>
                   </Link>
-                );
-              })}
+                ))}
+              </div>
             </div>
-          </div>
+          )}
+        </div>
+
+        {!demoMode && (
+          <button
+            onClick={handleSignOut}
+            className="flex h-8 w-8 items-center justify-center rounded-[2px] text-ink-secondary transition-colors hover:bg-panel hover:text-ink"
+            aria-label="Sign out"
+          >
+            <LogOut size={16} strokeWidth={1.5} />
+          </button>
         )}
       </div>
-
-      <button
-        onClick={handleSignOut}
-        className="flex h-9 w-9 items-center justify-center rounded-lg text-text-secondary transition-colors hover:bg-[oklch(0.97_0.005_260/0.5)] hover:text-text"
-        aria-label="Sign out"
-      >
-        <LogOut size={18} />
-      </button>
     </header>
   );
 }

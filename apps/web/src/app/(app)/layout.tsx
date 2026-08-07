@@ -45,7 +45,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     id: e.id,
     name: e.name,
     roleType: e.roleType as "marketing" | "sales" | "support",
-    status: (e.status ?? "idle") as "idle" | "working" | "review" | "active",
+    status: e.status ?? "idle",
   }));
 
   return (
