@@ -3,6 +3,7 @@ import { db, tasks, companies, agentRunEvents } from "@beast/db";
 import { subscribeToRun, isRunActiveInProcess } from "@beast/ai";
 import type { AgentRunEvent, RunStreamEvent, RunStreamKind } from "@beast/shared";
 import { createClient } from "@/lib/supabase/server";
+import { DEMO_MODE, demoSessionIdFromHeaders } from "@/lib/demo";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -36,9 +37,19 @@ export async function GET(
 
   const task = await db.query.tasks.findFirst({
     where: and(eq(tasks.id, taskId), eq(tasks.companyId, company.id)),
-    columns: { id: true, status: true },
+    columns: { id: true, status: true, demoSessionId: true },
   });
   if (!task) return new Response("Not found", { status: 404 });
+
+  // In demo the stub auth already pinned company to the seeded org; a visitor
+  // may stream seed runs and their own session's, never another visitor's.
+  if (
+    DEMO_MODE &&
+    task.demoSessionId !== null &&
+    task.demoSessionId !== demoSessionIdFromHeaders(req.headers)
+  ) {
+    return new Response("Not found", { status: 404 });
+  }
 
   const encoder = new TextEncoder();
   let closed = false;
