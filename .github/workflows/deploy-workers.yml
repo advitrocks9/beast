@@ -1,14 +1,10 @@
 name: Deploy Workers (Trigger.dev)
 
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
-    paths:
-      - "apps/workers/**"
-      - "packages/ai/**"
-      - "packages/db/**"
-      - "packages/shared/**"
-      - "pnpm-lock.yaml"
   workflow_dispatch:
 
 concurrency:
@@ -24,6 +20,7 @@ env:
 
 jobs:
   deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     name: Deploy harness + workers to Trigger.dev (PROD)
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -31,38 +28,31 @@ jobs:
       TRIGGER_ACCESS_TOKEN: ${{ secrets.TRIGGER_ACCESS_TOKEN }}
 
     steps:
-      - name: Guard on TRIGGER_ACCESS_TOKEN
-        id: guard
+      - name: Require TRIGGER_ACCESS_TOKEN
         run: |
           if [ -z "${TRIGGER_ACCESS_TOKEN}" ]; then
-            echo "::warning::TRIGGER_ACCESS_TOKEN secret not set. Skipping deploy."
-            echo "Push a Personal Access Token from https://cloud.trigger.dev/account/personal-access-tokens"
-            echo "to repo secrets as TRIGGER_ACCESS_TOKEN to enable this workflow."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "::error::TRIGGER_ACCESS_TOKEN secret not set. Create a PAT at"
+            echo "https://cloud.trigger.dev/account/personal-access-tokens and add"
+            echo "it to repo secrets, or disable this workflow."
+            exit 1
           fi
 
       - uses: actions/checkout@v4
-        if: steps.guard.outputs.skip == 'false'
         with:
           persist-credentials: false
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - uses: pnpm/action-setup@v4
-        if: steps.guard.outputs.skip == 'false'
 
       - uses: actions/setup-node@v4
-        if: steps.guard.outputs.skip == 'false'
         with:
           node-version: 22
           cache: pnpm
 
       - name: Install dependencies
-        if: steps.guard.outputs.skip == 'false'
         run: pnpm install --frozen-lockfile
 
       - name: Deploy to Trigger.dev (PROD)
-        if: steps.guard.outputs.skip == 'false'
         working-directory: apps/workers
         run: |
           npx -y trigger.dev@${{ env.TRIGGER_CLI_VERSION }} deploy \

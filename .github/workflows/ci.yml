@@ -15,14 +15,9 @@ permissions:
 
 jobs:
   checks:
-    name: ${{ matrix.task }}
+    name: typecheck, lint, unit
     runs-on: ubuntu-latest
-    timeout-minutes: 12
-    strategy:
-      fail-fast: false
-      matrix:
-        task: [typecheck-web, typecheck-workers]
-
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
@@ -38,10 +33,59 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Typecheck web (pnpm --filter @beast/web typecheck)
-        if: matrix.task == 'typecheck-web'
-        run: pnpm --filter @beast/web typecheck
+      - name: Typecheck (all packages)
+        run: pnpm typecheck
 
-      - name: Typecheck workers (pnpm --filter @beast/workers typecheck)
-        if: matrix.task == 'typecheck-workers'
-        run: pnpm --filter @beast/workers typecheck
+      - name: Lint
+        run: pnpm lint
+
+      - name: Unit tests
+        run: pnpm test
+
+  e2e-smoke:
+    name: e2e smoke (commission -> in_review)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_PASSWORD: beast
+          POSTGRES_DB: beast
+        ports:
+          - 5544:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:beast@localhost:5544/beast
+      NEXT_PUBLIC_DEMO_MODE: "1"
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      CRON_SECRET: ci-smoke
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Migrate and seed
+        run: |
+          pnpm --filter @beast/db db:migrate
+          pnpm --filter @beast/db db:seed
+
+      - name: Install Playwright
+        run: pnpm --filter @beast/web exec playwright install --with-deps chromium
+
+      - name: E2E smoke
+        run: pnpm test:e2e

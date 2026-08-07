@@ -1,22 +1,6 @@
 /**
- * CI/CD migration wrapper. Three exit paths:
- *
- * 1. DB unreachable from this runner. Supabase publishes only AAAA records
- *    for the direct DB hostname; GitHub-hosted runners often have no IPv6
- *    outbound, so connection attempts fail with ENETUNREACH. Log a loud
- *    warning naming the founder action (swap DATABASE_URL to the pooler
- *    host on `aws-0-<region>.pooler.supabase.com`) and exit 0 so the
- *    deploy can ship.
- *
- * 2. DB reachable and drifted: the `companies` table exists but
- *    `drizzle.__drizzle_migrations` is empty (a schema applied via
- *    `drizzle-kit push` without recording migrations). Log a loud warning
- *    and exit 0.
- *
- * 3. DB reachable and either fresh or healthy: spawn `drizzle-kit migrate`
- *    and exit on its code. A failure here is a real migration bug.
- *
- * Without this wrapper, every prod deploy aborts on the migrate step.
+ * CI/CD migration wrapper. Fails loudly on every unhealthy path; a deploy must
+ * never ship code against a schema the migration never reached.
  */
 import postgres from "postgres";
 import { spawnSync } from "node:child_process";
@@ -30,33 +14,20 @@ if (!url) {
 
 const parsedUrl = new URL(url);
 
-// Pre-resolve to IPv4 if the host has an A record. Supabase's direct DB
-// hostname only has AAAA, so this lookup will fail with ENOTFOUND on
-// runners without IPv6.
+// Supabase's direct DB hostname publishes only AAAA records; GitHub-hosted
+// runners have no IPv6 outbound. Resolve first so the failure names the fix.
 let resolvedHost = parsedUrl.hostname;
-let ipv4Available = false;
 try {
   const { address } = await lookup(parsedUrl.hostname, { family: 4 });
   resolvedHost = address;
-  ipv4Available = true;
-} catch (err) {
-  console.warn(
-    `[migrate-or-skip] No IPv4 address for ${parsedUrl.hostname} (${err?.message ?? err}).`,
-  );
-}
-
-if (!ipv4Available) {
-  console.warn("==============================================================");
-  console.warn("[migrate-or-skip] DB unreachable: host has no IPv4 record.");
-  console.warn("GitHub-hosted runners cannot open IPv6 sockets to Supabase's");
-  console.warn("direct DB hostname. Skipping migrate so the prod deploy ships.");
-  console.warn("");
-  console.warn("Founder action required to enable CI migrations:");
-  console.warn("  Swap DATABASE_URL to the Supabase pooler host:");
-  console.warn("    aws-0-<region>.pooler.supabase.com");
-  console.warn("  Pooler hosts publish A records and accept IPv4 from CI.");
-  console.warn("==============================================================");
-  process.exit(0);
+} catch {
+  console.error("==============================================================");
+  console.error(`[migrate] ${parsedUrl.hostname} has no IPv4 record; this`);
+  console.error("runner cannot reach it. Swap DATABASE_URL to the Supabase");
+  console.error("pooler host (aws-0-<region>.pooler.supabase.com), which");
+  console.error("publishes A records and accepts IPv4 from CI.");
+  console.error("==============================================================");
+  process.exit(1);
 }
 
 const sql = postgres(url, { max: 1, prepare: false, host: resolvedHost });
@@ -86,18 +57,15 @@ let exitCode = 0;
 try {
   const hasCompanies = await tableExists("public", "companies");
   const journalRows = hasCompanies ? await journalRowCount() : 0;
-  const isDrifted = hasCompanies && journalRows === 0;
 
-  if (isDrifted) {
-    console.warn("==============================================================");
-    console.warn("[migrate-or-skip] Schema drift detected.");
-    console.warn("Tables exist but drizzle.__drizzle_migrations is empty.");
-    console.warn("Skipping `drizzle-kit migrate` to unblock the deploy.");
-    console.warn("");
-    console.warn("To reconcile: backfill the migration journal to match the");
-    console.warn("live schema, or reset the database and re-run db:migrate.");
-    console.warn("==============================================================");
-    process.exit(0);
+  if (hasCompanies && journalRows === 0) {
+    console.error("==============================================================");
+    console.error("[migrate] Schema drift: tables exist but the migration");
+    console.error("journal is empty (schema applied via drizzle-kit push?).");
+    console.error("Backfill drizzle.__drizzle_migrations to match the live");
+    console.error("schema, or reset the database and re-run db:migrate.");
+    console.error("==============================================================");
+    process.exit(1);
   }
 
   await sql.end();
@@ -108,7 +76,7 @@ try {
   });
   exitCode = result.status ?? 1;
 } catch (err) {
-  console.error("[migrate-or-skip] preflight failed:", err?.message ?? err);
+  console.error("[migrate] preflight failed:", err?.message ?? err);
   exitCode = 1;
 } finally {
   try {
