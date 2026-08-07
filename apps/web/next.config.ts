@@ -1,4 +1,12 @@
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import type { NextConfig } from "next";
+
+// Next only reads apps/web/.env.local; the canonical env file lives at the repo
+// root. Loading it here (never overriding already-set vars) makes a fresh clone
+// work without the apps/web/.env.local symlink.
+const rootEnvFile = resolve(process.cwd(), "../../.env.local");
+if (existsSync(rootEnvFile)) process.loadEnvFile(rootEnvFile);
 
 // Security headers applied to every response. The CSP is intentionally limited
 // to directives that do not affect Next's inline runtime scripts (frame-ancestors,

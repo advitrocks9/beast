@@ -1,20 +1,23 @@
 import { S3Client, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { requireEnv } from "@beast/shared/env";
 
-const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID!;
-const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID!;
-const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY!;
-const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME!;
+let _r2: S3Client | null = null;
 
-export const r2 = new S3Client({
-  region: "auto",
-  endpoint: `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-  credentials: {
-    accessKeyId: R2_ACCESS_KEY_ID,
-    secretAccessKey: R2_SECRET_ACCESS_KEY,
-  },
-});
+function r2(): S3Client {
+  if (!_r2) {
+    _r2 = new S3Client({
+      region: "auto",
+      endpoint: `https://${requireEnv("R2_ACCOUNT_ID")}.r2.cloudflarestorage.com`,
+      credentials: {
+        accessKeyId: requireEnv("R2_ACCESS_KEY_ID"),
+        secretAccessKey: requireEnv("R2_SECRET_ACCESS_KEY"),
+      },
+    });
+  }
+  return _r2;
+}
 
 /**
  * Generate a presigned URL for uploading a file to R2.
@@ -29,12 +32,12 @@ export async function getUploadUrl(opts: {
   const r2Key = `${opts.companyId}/${opts.fileId}/${opts.filename}`;
 
   const command = new PutObjectCommand({
-    Bucket: R2_BUCKET_NAME,
+    Bucket: requireEnv("R2_BUCKET_NAME"),
     Key: r2Key,
     ContentType: opts.contentType,
   });
 
-  const uploadUrl = await getSignedUrl(r2, command, { expiresIn: 3600 });
+  const uploadUrl = await getSignedUrl(r2(), command, { expiresIn: 3600 });
 
   return { uploadUrl, r2Key };
 }
@@ -44,11 +47,11 @@ export async function getUploadUrl(opts: {
  */
 export async function getDownloadUrl(r2Key: string): Promise<string> {
   const command = new GetObjectCommand({
-    Bucket: R2_BUCKET_NAME,
+    Bucket: requireEnv("R2_BUCKET_NAME"),
     Key: r2Key,
   });
 
-  return getSignedUrl(r2, command, { expiresIn: 3600 });
+  return getSignedUrl(r2(), command, { expiresIn: 3600 });
 }
 
 /**
@@ -56,9 +59,9 @@ export async function getDownloadUrl(r2Key: string): Promise<string> {
  */
 export async function deleteFile(r2Key: string): Promise<void> {
   const command = new DeleteObjectCommand({
-    Bucket: R2_BUCKET_NAME,
+    Bucket: requireEnv("R2_BUCKET_NAME"),
     Key: r2Key,
   });
 
-  await r2.send(command);
+  await r2().send(command);
 }

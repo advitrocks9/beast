@@ -1,5 +1,6 @@
 import type { ToolDefinition } from "../types";
 import type { Citation } from "@beast/shared";
+import { env } from "@beast/shared/env";
 
 interface SerperResult {
   title: string;
@@ -43,7 +44,7 @@ export function createWebSearchTool(): ToolDefinition {
       const query = input.query as string;
       const numResults = Math.min((input.numResults as number) ?? 5, 10);
 
-      const apiKey = process.env.SERPER_API_KEY;
+      const apiKey = env.SERPER_API_KEY;
       if (!apiKey) {
         return { text: "Web search is not configured. SERPER_API_KEY is missing.", citations: [] };
       }

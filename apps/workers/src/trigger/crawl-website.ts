@@ -1,6 +1,7 @@
 import { task } from "@trigger.dev/sdk";
 import { db, knowledgeItems, knowledgeEmbeddings } from "@beast/db";
 import { chunkText, embedBatch } from "@beast/ai";
+import { env } from "@beast/shared/env";
 
 interface CrawlPayload {
   url: string;
@@ -32,7 +33,7 @@ const MIN_TEXT_CHARS = 100;
 export const crawlWebsiteTask = task({
   id: "crawl-website",
   run: async (payload: CrawlPayload) => {
-    const apiKey = process.env.FIRECRAWL_API_KEY;
+    const apiKey = env.FIRECRAWL_API_KEY;
     if (!apiKey) {
       console.error("[crawl-website] FIRECRAWL_API_KEY missing; bailing");
       return { status: "failed" as const, reason: "firecrawl_not_configured", chunks: 0 };

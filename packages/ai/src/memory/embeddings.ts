@@ -1,44 +1,13 @@
-import { GoogleGenAI } from "@google/genai";
-
-const EMBEDDING_MODEL = "gemini-embedding-2-preview";
-const EMBEDDING_DIMENSIONS = 1536;
-
-let _client: GoogleGenAI | null = null;
-
-function getClient(): GoogleGenAI {
-  if (!_client) {
-    _client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
-  }
-  return _client;
-}
+import { embed as embedMany } from "../provider";
 
 export async function embed(text: string): Promise<number[]> {
-  const client = getClient();
-  const response = await client.models.embedContent({
-    model: EMBEDDING_MODEL,
-    contents: text,
-    config: {
-      outputDimensionality: EMBEDDING_DIMENSIONS,
-      taskType: "RETRIEVAL_QUERY",
-    },
-  });
-  return response.embeddings![0]!.values!;
+  const [vector] = await embedMany([text], "query");
+  // provider embed returns one vector per input text
+  return vector!;
 }
 
-export async function embedBatch(texts: string[]): Promise<number[][]> {
-  if (texts.length === 0) return [];
-
-  const client = getClient();
-  const response = await client.models.embedContent({
-    model: EMBEDDING_MODEL,
-    contents: texts,
-    config: {
-      outputDimensionality: EMBEDDING_DIMENSIONS,
-      taskType: "RETRIEVAL_DOCUMENT",
-    },
-  });
-
-  return response.embeddings!.map((e) => e.values!);
+export function embedBatch(texts: string[]): Promise<number[][]> {
+  return embedMany(texts, "document");
 }
 
 /**

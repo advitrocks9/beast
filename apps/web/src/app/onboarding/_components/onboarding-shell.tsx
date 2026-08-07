@@ -34,14 +34,13 @@ export function OnboardingShell({ companyName, initialProgress }: OnboardingShel
 
   async function handleContinue() {
     await completeInterview.mutateAsync();
-    // Reload to show function mapping step
     window.location.href = "/onboarding";
   }
 
   async function handleSkip() {
     if (
       !confirm(
-        "Skip the interview and go straight to setting up functions? You can fill in company knowledge later from /knowledge.",
+        "Skip the interview and go straight to hiring? You can fill in company knowledge later from /knowledge.",
       )
     ) {
       return;

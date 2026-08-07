@@ -1,8 +1,7 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { eq, and, inArray } from "drizzle-orm";
-import { deliverables, deliverableVersions, tasks, checkIns, referralCodes, aiEmployees, companies } from "@beast/db";
-import { generateShareSlug, generateReferralCode } from "@/lib/share/codes";
+import { deliverables, deliverableVersions, tasks, checkIns, companies } from "@beast/db";
 import {
   extractFromTaskCompletion,
   extractFromFeedback,
@@ -11,11 +10,13 @@ import {
   advanceChain,
   publishToPlatform,
   recalculateGoalProgress,
+  dispatchRun,
 } from "@beast/ai";
-import type { SpawnPayload } from "@beast/ai";
-import { tasks as triggerTasks } from "@trigger.dev/sdk";
+import type { SpawnPayload, CandidateResult, WordDiff } from "@beast/ai";
+import { DELIVERABLE_STATUSES } from "@beast/shared";
 import { connectors, activityLog } from "@beast/db";
 import { createTRPCRouter, protectedProcedure, assertNotDemo } from "../init";
+import { triggerTask } from "@/lib/trigger";
 
 interface WallClockParts {
   year: number;
@@ -104,12 +105,10 @@ function nextMonday9amInTz(tz: string, now: Date = new Date()): Date {
   return wallClockInTzToUtc(parts.year, parts.month, parts.day + daysAhead, 9, 0, 0, safeTz);
 }
 
-async function triggerExecuteTask(payload: SpawnPayload): Promise<{ id: string }> {
-  const handle = await triggerTasks.trigger("execute-task", payload);
-  return { id: handle.id };
-}
+const triggerExecuteTask = (payload: SpawnPayload) => triggerTask("execute-task", payload);
 
-const DELIVERABLE_STATUSES = ["draft", "review", "revision", "approved", "published"] as const;
+/** The one run-dispatch seam: Trigger.dev when configured, in-process otherwise. */
+const dispatch = (taskId: string) => dispatchRun(taskId, { trigger: triggerExecuteTask });
 
 export const deliverablesRouter = createTRPCRouter({
   list: protectedProcedure
@@ -201,14 +200,14 @@ export const deliverablesRouter = createTRPCRouter({
         .where(and(
           eq(deliverables.id, input.deliverableId),
           eq(deliverables.companyId, ctx.companyId),
-          eq(deliverables.status, "approved"),
+          eq(deliverables.status, "accepted"),
         ))
         .returning({ id: deliverables.id, publishAfter: deliverables.publishAfter });
 
       if (!updated) {
         throw new TRPCError({
           code: "PRECONDITION_FAILED",
-          message: "Deliverable must be in approved status before queueing",
+          message: "Deliverable must be accepted before queueing",
         });
       }
 
@@ -226,7 +225,7 @@ export const deliverablesRouter = createTRPCRouter({
     }),
 
   /**
-   * Cancel a scheduled auto-publish. Reverts to approved so the founder
+   * Cancel a scheduled auto-publish. Reverts to accepted so the founder
    * can publish manually or queue again with a different delay.
    */
   cancelAutoPublish: protectedProcedure
@@ -235,7 +234,7 @@ export const deliverablesRouter = createTRPCRouter({
       const [updated] = await ctx.db
         .update(deliverables)
         .set({
-          status: "approved",
+          status: "accepted",
           publishAfter: null,
           updatedAt: new Date(),
         })
@@ -321,11 +320,12 @@ export const deliverablesRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const approvedAt = new Date();
       const rationale = input.feedbackText?.trim() || null;
+      const reviewId = crypto.randomUUID();
 
       const [updated] = await ctx.db
         .update(deliverables)
         .set({
-          status: "approved",
+          status: "accepted",
           approvalRationale: rationale,
           approvedAt,
           updatedAt: approvedAt,
@@ -333,7 +333,7 @@ export const deliverablesRouter = createTRPCRouter({
         .where(and(
           eq(deliverables.id, input.deliverableId),
           eq(deliverables.companyId, ctx.companyId),
-          inArray(deliverables.status, ["draft", "pending_review", "review", "revision"]),
+          inArray(deliverables.status, ["in_review", "revised"]),
         ))
         .returning();
 
@@ -347,8 +347,8 @@ export const deliverablesRouter = createTRPCRouter({
 
       if (!task) return;
 
-      // Mark the task itself as approved
-      await ctx.db.update(tasks).set({ status: "approved" }).where(eq(tasks.id, task.id));
+      // Mark the task itself as accepted
+      await ctx.db.update(tasks).set({ status: "accepted" }).where(eq(tasks.id, task.id));
 
       await ctx.db.insert(activityLog).values({
         companyId: ctx.companyId,
@@ -362,12 +362,13 @@ export const deliverablesRouter = createTRPCRouter({
           approvalRationale: rationale,
           chips: input.chips,
           approvedWithoutEdits: input.approvedWithoutEdits,
+          reviewId,
         },
       });
 
       // Chain advancement: if this task has a parent, advance the chain
       if (task.parentTaskId) {
-        advanceChain(task.parentTaskId, triggerExecuteTask).catch((err) => {
+        advanceChain(task.parentTaskId, (payload) => dispatch(payload.task.taskId)).catch((err) => {
           console.error("Chain advancement failed on deliverable approve:", err);
         });
       }
@@ -379,8 +380,8 @@ export const deliverablesRouter = createTRPCRouter({
         });
       }
 
-      // Fire extraction async - don't block the user
-      const extractionPromise = extractFromTaskCompletion({
+      // Episodic extraction stays async - the review response doesn't need it
+      extractFromTaskCompletion({
         agentId: updated.aiEmployeeId,
         tenantId: ctx.companyId,
         taskId: task.id,
@@ -388,25 +389,32 @@ export const deliverablesRouter = createTRPCRouter({
         taskTitle: task.title,
         outputText: input.originalText ?? "",
         status: "approved",
+      }).catch((err) => {
+        console.error("Task completion extraction failed on approve:", err);
       });
 
-      // If approved without edits, store as canonical example for few-shot calibration
-      const calibrationPromise = input.approvedWithoutEdits && input.originalText
-        ? storeApprovedExample({
+      // Signal accumulation is awaited so the response carries the
+      // created/updated candidates - the "candidate rule appeared" moment.
+      const candidateById = new Map<string, CandidateResult>();
+      let diff: WordDiff | null = null;
+      try {
+        if (input.approvedWithoutEdits && input.originalText) {
+          const example = await storeApprovedExample({
             agentId: updated.aiEmployeeId,
             tenantId: ctx.companyId,
             taskType: task.taskType,
             taskTitle: task.title,
             outputText: input.originalText,
             taskId: task.id,
-          })
-        : Promise.resolve();
+            reviewId,
+          });
+          candidateById.set(example.id, example);
+        }
 
-      // If approved WITH feedback (chips or text or edits), extract signals.
-      // editedText carries the founder's revisions so extractFromFeedback can
-      // diff agent output -> final, the same shape used for RLHF chip flow.
-      const feedbackPromise = (input.chips.length > 0 || input.feedbackText || input.editedText)
-        ? extractFromFeedback({
+        // editedText carries the founder's revisions so extractFromFeedback can
+        // diff agent output -> final, the same shape used for RLHF chip flow.
+        if (input.chips.length > 0 || input.feedbackText || input.editedText) {
+          const feedback = await extractFromFeedback({
             agentId: updated.aiEmployeeId,
             tenantId: ctx.companyId,
             taskId: task.id,
@@ -415,25 +423,28 @@ export const deliverablesRouter = createTRPCRouter({
             editedText: input.editedText,
             chips: input.chips,
             annotationText: input.feedbackText,
-          })
-        : Promise.resolve();
+            reviewId,
+          });
+          diff = feedback.diff;
+          for (const c of feedback.candidates) candidateById.set(c.id, c);
+        }
 
-      // Founder rationale -> high-signal-weight rule candidate
-      const rationalePromise = rationale && input.originalText
-        ? extractRuleFromRationale({
+        if (rationale && input.originalText) {
+          const rationaleResult = await extractRuleFromRationale({
             agentId: updated.aiEmployeeId,
             tenantId: ctx.companyId,
             taskId: task.id,
             taskType: task.taskType,
             rationale,
             outputText: input.originalText,
-          })
-        : Promise.resolve();
-
-      // Await all extractions but don't let failures block the response
-      Promise.all([extractionPromise, calibrationPromise, feedbackPromise, rationalePromise]).catch((err) => {
-        console.error("Extraction failed on approve:", err);
-      });
+            reviewId,
+          });
+          if (rationaleResult) candidateById.set(rationaleResult.candidate.id, rationaleResult.candidate);
+        }
+      } catch (err) {
+        // Approval already committed; learning is skipped, not the review
+        console.error("Signal accumulation failed on approve:", err);
+      }
 
       // Insert post-approval check-in. The weekly worker
       // surfaces unacknowledged check_ins in section 3 of the Monday email.
@@ -472,6 +483,8 @@ export const deliverablesRouter = createTRPCRouter({
       return {
         checkInId: checkInRow?.id,
         scheduledFor: scheduledFor.toISOString(),
+        candidates: [...candidateById.values()],
+        diff,
       };
     }),
 
@@ -488,8 +501,8 @@ export const deliverablesRouter = createTRPCRouter({
       });
 
       if (!deliverable) throw new Error("Deliverable not found");
-      if (deliverable.status !== "approved") {
-        throw new Error("Only approved deliverables can be published");
+      if (deliverable.status !== "accepted") {
+        throw new Error("Only accepted deliverables can be published");
       }
 
       // Load the platform connector
@@ -554,13 +567,14 @@ export const deliverablesRouter = createTRPCRouter({
       originalText: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
+      const reviewId = crypto.randomUUID();
       const [updated] = await ctx.db
         .update(deliverables)
-        .set({ status: "revision", updatedAt: new Date() })
+        .set({ status: "revised", updatedAt: new Date() })
         .where(and(
           eq(deliverables.id, input.deliverableId),
           eq(deliverables.companyId, ctx.companyId),
-          inArray(deliverables.status, ["draft", "pending_review", "review", "revision"]),
+          inArray(deliverables.status, ["in_review", "revised"]),
         ))
         .returning();
 
@@ -574,22 +588,9 @@ export const deliverablesRouter = createTRPCRouter({
 
       if (!task) return;
 
-      // Extract feedback signals - this is where CIPHER-style learning happens
-      if (input.chips.length > 0 || input.feedbackText || input.originalText) {
-        extractFromFeedback({
-          agentId: updated.aiEmployeeId,
-          tenantId: ctx.companyId,
-          taskId: task.id,
-          taskType: task.taskType,
-          originalText: input.originalText ?? "",
-          chips: input.chips,
-          annotationText: input.feedbackText,
-        }).catch((err) => {
-          console.error("Extraction failed on requestRevision:", err);
-        });
-      }
+      // Mark the task as revising so the loop shows it back with the agent
+      await ctx.db.update(tasks).set({ status: "revising" }).where(eq(tasks.id, task.id));
 
-      // Also record this as a task completion with "revision" status
       extractFromTaskCompletion({
         agentId: updated.aiEmployeeId,
         tenantId: ctx.companyId,
@@ -601,6 +602,31 @@ export const deliverablesRouter = createTRPCRouter({
       }).catch((err) => {
         console.error("Task completion extraction failed:", err);
       });
+
+      // Signal accumulation is awaited so the response carries the candidates
+      let candidates: CandidateResult[] = [];
+      let diff: WordDiff | null = null;
+      if (input.chips.length > 0 || input.feedbackText || input.originalText) {
+        try {
+          const feedback = await extractFromFeedback({
+            agentId: updated.aiEmployeeId,
+            tenantId: ctx.companyId,
+            taskId: task.id,
+            taskType: task.taskType,
+            originalText: input.originalText ?? "",
+            chips: input.chips,
+            annotationText: input.feedbackText,
+            reviewId,
+          });
+          candidates = feedback.candidates;
+          diff = feedback.diff;
+        } catch (err) {
+          // Revision request already committed; learning is skipped, not the review
+          console.error("Signal accumulation failed on requestRevision:", err);
+        }
+      }
+
+      return { candidates, diff };
     }),
 
   reject: protectedProcedure
@@ -634,7 +660,7 @@ export const deliverablesRouter = createTRPCRouter({
         .where(and(
           eq(deliverables.id, input.deliverableId),
           eq(deliverables.companyId, ctx.companyId),
-          inArray(deliverables.status, ["draft", "pending_review", "review", "revision"]),
+          inArray(deliverables.status, ["in_review", "revised"]),
         ))
         .returning();
 
@@ -680,6 +706,7 @@ export const deliverablesRouter = createTRPCRouter({
             taskType: task.taskType,
             rationale: `REJECTED: ${input.reason}`,
             outputText: input.originalText,
+            reviewId: crypto.randomUUID(),
           })
         : Promise.resolve();
 
@@ -697,104 +724,5 @@ export const deliverablesRouter = createTRPCRouter({
     }))
     .mutation(async ({ ctx: _ctx, input: _input }) => {
       throw new Error("Not implemented");
-    }),
-
-  /**
-   * Generate (or return existing) share slug + referral code for a deliverable.
-   * Idempotent: re-sharing the same deliverable returns the original slug + the
-   * deliverable's most-recent referral code rather than minting new ones.
-   * spec.
-   */
-  share: protectedProcedure
-    .input(z.object({ deliverableId: z.string().uuid() }))
-    .mutation(async ({ ctx, input }) => {
-      const deliverable = await ctx.db.query.deliverables.findFirst({
-        where: and(
-          eq(deliverables.id, input.deliverableId),
-          eq(deliverables.companyId, ctx.companyId),
-        ),
-        columns: {
-          id: true,
-          aiEmployeeId: true,
-          shareSlug: true,
-          shareEnabledAt: true,
-          content: true,
-        },
-      });
-      if (!deliverable) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Deliverable not found" });
-      }
-
-      // Idempotent path: already shared, return existing slug + most-recent code.
-      if (deliverable.shareSlug && deliverable.shareEnabledAt) {
-        const existingCode = await ctx.db.query.referralCodes.findFirst({
-          where: and(
-            eq(referralCodes.companyId, ctx.companyId),
-            eq(referralCodes.sourceDeliverableId, deliverable.id),
-          ),
-          orderBy: (rc, { desc }) => [desc(rc.createdAt)],
-          columns: { code: true },
-        });
-        if (existingCode) {
-          return { shareSlug: deliverable.shareSlug, referralCode: existingCode.code };
-        }
-        // Fall through to mint a new code if none exists (e.g. deliverable was
-        // marked shared by a separate path with no referral_codes row).
-      }
-
-      const employee = await ctx.db.query.aiEmployees.findFirst({
-        where: eq(aiEmployees.id, deliverable.aiEmployeeId),
-        columns: { name: true },
-      });
-
-      // Mint slug + code. The slug column has a UNIQUE constraint; a collision
-      // here would surface as a Postgres error and bubble to the client.
-      // 12-char URL-safe slug at 62^12 entropy makes that vanishingly unlikely.
-      const shareSlug = deliverable.shareSlug ?? generateShareSlug();
-      const referralCode = generateReferralCode(employee?.name ?? "beast");
-
-      await ctx.db.transaction(async (tx) => {
-        if (!deliverable.shareSlug) {
-          // Snapshot content at share time: later edits or
-          // rejections must NOT change what the public URL serves.
-          await tx
-            .update(deliverables)
-            .set({
-              shareSlug,
-              shareEnabledAt: new Date(),
-              shareSnapshot: deliverable.content,
-            })
-            .where(eq(deliverables.id, deliverable.id));
-        }
-        await tx.insert(referralCodes).values({
-          code: referralCode,
-          companyId: ctx.companyId,
-          sourceDeliverableId: deliverable.id,
-        });
-      });
-
-      return { shareSlug, referralCode };
-    }),
-
-  /**
-   * Revoke a public share link. Clears shareEnabledAt so both the SSR page and
-   * the public share.get (which require shareEnabledAt IS NOT NULL) stop serving
-   * it. The slug + snapshot are kept so a later re-share is idempotent.
-   */
-  unshare: protectedProcedure
-    .input(z.object({ deliverableId: z.string().uuid() }))
-    .mutation(async ({ ctx, input }) => {
-      const result = await ctx.db
-        .update(deliverables)
-        .set({ shareEnabledAt: null })
-        .where(and(
-          eq(deliverables.id, input.deliverableId),
-          eq(deliverables.companyId, ctx.companyId),
-        ))
-        .returning({ id: deliverables.id });
-      if (result.length === 0) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Deliverable not found" });
-      }
-      return { ok: true };
     }),
 });

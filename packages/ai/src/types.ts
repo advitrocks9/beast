@@ -1,5 +1,5 @@
-import type Anthropic from "@anthropic-ai/sdk";
-import type { Citation } from "@beast/shared";
+import type { AgentRunEvent, Citation, RunScratchpadItem } from "@beast/shared";
+import type { ProviderMessage, RunToolDef, Tier } from "./provider";
 
 // Agent identity and configuration
 export interface AgentConfig {
@@ -8,7 +8,7 @@ export interface AgentConfig {
   name: string;
   roleType: "marketing" | "sales" | "support";
   persona: string;
-  model?: ModelTier;
+  tier?: Tier;
   maxIterations?: number;
   maxDurationMs?: number;
 }
@@ -23,7 +23,7 @@ export interface AgentTask {
   acceptanceCriteria?: string[];
 }
 
-// Model routing tiers
+// Legacy model names kept for the models.ts shim and skill step configs
 export type ModelTier = "haiku" | "sonnet" | "opus";
 
 /**
@@ -39,7 +39,7 @@ export type ToolExecuteResult = string | { text: string; citations?: Citation[] 
 export interface ToolDefinition {
   name: string;
   description: string;
-  inputSchema: Anthropic.Tool["input_schema"];
+  inputSchema: RunToolDef["inputSchema"];
   execute: (input: Record<string, unknown>) => Promise<ToolExecuteResult>;
 }
 
@@ -57,23 +57,12 @@ export interface RetrievedMemory {
   };
 }
 
-// Scratchpad item for working memory
-export interface ScratchpadItem {
-  id: string;
-  description: string;
-  status: "pending" | "in_progress" | "done" | "blocked";
-}
+// Scratchpad item for working memory; canonical shape lives in @beast/shared
+// so the web stream consumers never import @beast/ai.
+export type ScratchpadItem = RunScratchpadItem;
 
-// Events emitted during agent execution
-export type AgentEvent =
-  | { type: "run_start"; taskId: string; agentName: string }
-  | { type: "text_delta"; text: string }
-  | { type: "tool_call_start"; toolName: string; toolCallId: string }
-  | { type: "tool_call_end"; toolName: string; toolCallId: string; result: string }
-  | { type: "scratchpad_update"; items: ScratchpadItem[] }
-  | { type: "iteration"; number: number; totalTokens: number }
-  | { type: "error"; message: string; recoverable: boolean }
-  | { type: "run_end"; output: string; iterations: number; durationMs: number };
+// Events emitted during agent execution; same union the SSE stream serves.
+export type AgentEvent = AgentRunEvent;
 
 // Callback for streaming events
 export type AgentEventHandler = (event: AgentEvent) => void;
@@ -90,18 +79,22 @@ export interface ToolCallTrace {
   startedAt: string;         // ISO timestamp
 }
 
-// Procedural rule that influenced an agent run.
-// Persisted on deliverables.content.appliedRules so the review page can render
-// the "Alex remembered" panel on the second-and-later teardown.
-export interface AppliedRule {
+// Procedural rule injected into an agent run's context. "Active" means
+// loaded into the prompt, not proven applied; per-rule attribution from
+// output text is deferred. Persisted on deliverables.content.appliedRules
+// for the "Alex remembered" panel.
+export interface ActiveRule {
   ruleId: string;
   summary: string;                       // short human-readable rule headline
   evidence: string;                      // descriptive body or example used
   extractedFromDeliverableId: string;    // first source episode id, "" if none
   extractedFromTitle: string;            // resolved at extract time, "" if none
   extractedAt: string;                   // ISO timestamp of rule creation
-  confidence: number;                    // 0-1, mirrors signalWeight
+  confidence: number;                    // 0-1, candidate confidence at promotion
 }
+
+// agent.ts still consumes the old name; alias until the agent surface is next touched
+export type AppliedRule = ActiveRule;
 
 // Result of a completed agent run
 export interface RunResult {
@@ -116,11 +109,10 @@ export interface RunResult {
    */
   toolCalls: ToolCallTrace[];
   /**
-   * Procedural rules that were loaded into the agent's context for this run
-   * this run. The current build marks all loaded rules as applied; per-rule
-   * attribution from the output is deferred.
+   * Procedural rules that were loaded into the agent's context for this
+   * run. Injection, not proven application; attribution is deferred.
    */
-  appliedRules: AppliedRule[];
+  appliedRules: ActiveRule[];
   /**
    * Citations collected from retrieval tools (KB search, web search,
    * competitor scan). The agent emits `[^id]` markers in body text;
@@ -143,6 +135,6 @@ export interface TokenBudget {
 // Context assembled for a single agent invocation
 export interface AssembledContext {
   systemPrompt: string;
-  messages: Anthropic.MessageParam[];
+  messages: ProviderMessage[];
   tokenEstimate: number;
 }

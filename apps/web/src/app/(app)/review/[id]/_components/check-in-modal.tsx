@@ -37,20 +37,15 @@ export function CheckInModal({
   onDismiss,
 }: CheckInModalProps) {
   const [editReminderOpen, setEditReminderOpen] = useState(false);
-  const [shareUrl, setShareUrl] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
   const [currentScheduled, setCurrentScheduled] = useState<string | null>(scheduledFor);
   const [pickerValue, setPickerValue] = useState<string>("");
   const [pickerError, setPickerError] = useState<string | null>(null);
   const trpc = useTRPC();
-  const share = useMutation(trpc.deliverables.share.mutationOptions());
   const reschedule = useMutation(trpc.checkIns.reschedule.mutationOptions());
 
   useEffect(() => {
     if (open) {
       setEditReminderOpen(false);
-      setShareUrl(null);
-      setCopied(false);
       setCurrentScheduled(scheduledFor);
       setPickerValue(toLocalInputValue(scheduledFor));
       setPickerError(null);
@@ -74,24 +69,6 @@ export function CheckInModal({
       setEditReminderOpen(false);
     } catch (err) {
       setPickerError(err instanceof Error ? err.message : "Could not save the new time.");
-    }
-  }
-
-  async function handleShare() {
-    const result = await share.mutateAsync({ deliverableId });
-    const origin = typeof window !== "undefined" ? window.location.origin : "";
-    const url = `${origin}/share/${result.shareSlug}?ref=${encodeURIComponent(result.referralCode)}`;
-    setShareUrl(url);
-  }
-
-  async function handleCopy() {
-    if (!shareUrl) return;
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
-    } catch {
-      // clipboard refused; user can select+copy manually
     }
   }
 
@@ -171,28 +148,6 @@ export function CheckInModal({
           </div>
         )}
 
-        {shareUrl && (
-          <div className="mt-4 rounded-xl border border-gray-200 bg-[oklch(0.97_0.01_260)] px-4 py-3">
-            <p className="text-xs uppercase tracking-wider text-text-secondary">
-              Share link
-            </p>
-            <p className="mt-0.5 break-all font-mono text-xs text-text-secondary">
-              {shareUrl}
-            </p>
-            <p className="mt-2 text-xs text-text-muted">
-              Read-only. Friend gets a 14-day skip-paywall; if they upgrade, you
-              get one free month.
-            </p>
-            <button
-              type="button"
-              onClick={handleCopy}
-              className="mt-3 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-gray-50"
-            >
-              {copied ? "Copied" : "Copy link"}
-            </button>
-          </div>
-        )}
-
         <div className="mt-6 flex flex-wrap gap-2">
           <button
             type="button"
@@ -200,14 +155,6 @@ export function CheckInModal({
             className="rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-medium text-text-secondary hover:bg-gray-50"
           >
             Edit reminder
-          </button>
-          <button
-            type="button"
-            onClick={handleShare}
-            disabled={share.isPending}
-            className="rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-medium text-text-secondary hover:bg-gray-50 disabled:opacity-50"
-          >
-            {share.isPending ? "Generating..." : shareUrl ? "Regenerate link" : "Share with a friend"}
           </button>
           <button
             type="button"

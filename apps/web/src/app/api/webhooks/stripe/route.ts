@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { db, companies } from "@beast/db";
 import { eq } from "drizzle-orm";
+import { env } from "@beast/shared/env";
 import { getStripe } from "@/lib/stripe/client";
 import { DEMO_MODE } from "@/lib/demo";
 
@@ -23,7 +24,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Missing signature" }, { status: 400 });
   }
 
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  const webhookSecret = env.STRIPE_WEBHOOK_SECRET;
   if (!webhookSecret) {
     console.error("[Stripe Webhook] STRIPE_WEBHOOK_SECRET not configured");
     return NextResponse.json({ error: "Webhook not configured" }, { status: 500 });
@@ -116,10 +117,10 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
 }
 
 async function handlePaymentFailed(invoice: Stripe.Invoice) {
-  // Extract subscription ID from parent - Stripe v22 uses `parent.subscription_details`
-  const subId = (invoice as unknown as Record<string, unknown>).subscription as string
-    ?? (invoice.parent as Record<string, unknown> | null)?.subscription as string
-    ?? null;
+  // Stripe v22 moved the subscription ref off the invoice root; read both shapes untyped
+  const top: unknown = Reflect.get(invoice, "subscription");
+  const parent: unknown = invoice.parent ? Reflect.get(invoice.parent, "subscription") : null;
+  const subId = typeof top === "string" ? top : typeof parent === "string" ? parent : null;
 
   if (!subId) return;
 

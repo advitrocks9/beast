@@ -146,6 +146,7 @@ export const chatRouter = createTRPCRouter({
               taskType: t.taskType,
               rationale: input.content,
               outputText,
+              reviewId: crypto.randomUUID(),
             });
           } catch (err) {
             console.error("[chat.commentOnTask] rule extraction failed:", err);

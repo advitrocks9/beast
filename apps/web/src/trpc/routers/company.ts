@@ -2,8 +2,8 @@ import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { companies } from "@beast/db";
+import { ONBOARDING_STATUSES } from "@beast/shared";
 import { createTRPCRouter, protectedProcedure, baseProcedure } from "../init";
-import { trackEvent } from "@/lib/events/track";
 
 export const companyRouter = createTRPCRouter({
   get: protectedProcedure.query(async ({ ctx }) => {
@@ -49,23 +49,12 @@ export const companyRouter = createTRPCRouter({
       });
       if (!company) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to ensure company" });
 
-      // Only track onboarding_started for actual new inserts, not for the
-      // conflict-skipped branch where the row was created by a concurrent
-      // caller.
-      if (created) {
-        await trackEvent({
-          companyId: company.id,
-          userId: ctx.user.id,
-          eventName: "onboarding_started",
-        });
-      }
-
       return company;
     }),
 
   updateOnboardingStatus: protectedProcedure
     .input(z.object({
-      status: z.enum(["started", "interview", "functions", "hiring", "complete"]),
+      status: z.enum(ONBOARDING_STATUSES),
     }))
     .mutation(async ({ ctx, input }) => {
       await ctx.db

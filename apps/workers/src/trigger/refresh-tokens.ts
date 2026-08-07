@@ -2,6 +2,7 @@ import { schedules } from "@trigger.dev/sdk";
 import { db, connectors, activityLog } from "@beast/db";
 import { eq, and, lt, ne } from "drizzle-orm";
 import { encryptToken, decryptToken } from "@beast/shared";
+import { requireEnv } from "@beast/shared/env";
 import { refreshLinkedInToken } from "@beast/ai";
 
 /**
@@ -36,8 +37,8 @@ export const refreshTokensJob = schedules.task({
       try {
         if (connector.platform === "linkedin" && connector.refreshTokenEnc) {
           const refreshToken = decryptToken(connector.refreshTokenEnc);
-          const clientId = process.env.LINKEDIN_CLIENT_ID!;
-          const clientSecret = process.env.LINKEDIN_CLIENT_SECRET!;
+          const clientId = requireEnv("LINKEDIN_CLIENT_ID");
+          const clientSecret = requireEnv("LINKEDIN_CLIENT_SECRET");
 
           const result = await refreshLinkedInToken(refreshToken, clientId, clientSecret);
           const newExpiry = new Date(Date.now() + result.expiresIn * 1000);

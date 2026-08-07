@@ -169,8 +169,8 @@ async function getApprovalStreak(
   for (const d of recent) {
     if (!deliverableTypes.includes(d.deliverableType)) continue;
 
-    // Approved on first version = no edits
-    if (d.status === "approved" && d.version === 1) {
+    // Accepted on first version = no edits
+    if (d.status === "accepted" && d.version === 1) {
       streak++;
     } else if (d.status === "published" && d.version === 1) {
       streak++;

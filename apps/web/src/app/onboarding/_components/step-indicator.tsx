@@ -1,11 +1,10 @@
 interface StepIndicatorProps {
-  currentStep: 1 | 2 | 3;
+  currentStep: 1 | 2;
 }
 
-const STEPS: Array<{ n: 1 | 2 | 3; label: string }> = [
+const STEPS: Array<{ n: 1 | 2; label: string }> = [
   { n: 1, label: "Interview" },
-  { n: 2, label: "Functions" },
-  { n: 3, label: "Hire" },
+  { n: 2, label: "Hire" },
 ];
 
 export function OnboardingStepIndicator({ currentStep }: StepIndicatorProps) {

@@ -1,6 +1,6 @@
 import { db, aiEmployees, collaborationProposals, tasks, deliverables } from "@beast/db";
 import { eq, and } from "drizzle-orm";
-import { getClient, getModelId } from "../models";
+import { complete } from "../provider";
 
 interface CollaborationCheck {
   employeeId: string;
@@ -19,7 +19,7 @@ interface ProposalResult {
 
 /**
  * Check if a completed deliverable could benefit another employee.
- * Uses Haiku for fast classification, only creates a proposal if relevant.
+ * Uses the fast tier, only creates a proposal if relevant.
  */
 export async function checkForCollaboration(input: CollaborationCheck): Promise<ProposalResult> {
   // Load the completing employee
@@ -51,23 +51,15 @@ export async function checkForCollaboration(input: CollaborationCheck): Promise<
 
   if (!opportunity) return { created: false };
 
-  // Use Haiku to generate a specific proposal
-  const client = getClient();
-  const response = await client.messages.create({
-    model: getModelId("haiku"),
-    max_tokens: 200,
+  const proposalText = await complete({
+    tier: "fast",
+    purpose: "collaboration_proposal",
+    maxTokens: 200,
     system: "Generate a brief collaboration proposal between AI employees. Return only the proposal text, 1-2 sentences.",
-    messages: [{
-      role: "user",
-      content: `${fromEmployee.name} (${fromEmployee.roleType}) just completed: "${input.deliverableTitle}" (${input.deliverableType}).
+    prompt: `${fromEmployee.name} (${fromEmployee.roleType}) just completed: "${input.deliverableTitle}" (${input.deliverableType}).
 
 ${opportunity.targetName} (${opportunity.targetRole}) could use this. Write a proposal for what ${opportunity.targetName} could do with it.`,
-    }],
   });
-
-  const proposalText = response.content[0]?.type === "text"
-    ? response.content[0].text
-    : `${fromEmployee.name}'s "${input.deliverableTitle}" could be useful for ${opportunity.targetName}'s work.`;
 
   // Create the proposal
   const [proposal] = await db.insert(collaborationProposals).values({

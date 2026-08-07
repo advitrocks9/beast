@@ -1,11 +1,10 @@
 import { z } from "zod";
 import { and, count, eq } from "drizzle-orm";
 import type Anthropic from "@anthropic-ai/sdk";
-import { knowledgeItems, companies, departments, functions, goals } from "@beast/db";
+import { knowledgeItems, companies, goals } from "@beast/db";
 import { getClient, getModelId } from "@beast/ai";
 import { schedules } from "@trigger.dev/sdk";
 import { createTRPCRouter, protectedProcedure } from "../init";
-import { trackEvent } from "@/lib/events/track";
 
 const MAX_GOALS_PER_ONBOARDING = 3;
 const DEFAULT_GOAL_HORIZON_DAYS = 30;
@@ -465,91 +464,21 @@ export const onboardingRouter = createTRPCRouter({
     }
     await ctx.db
       .update(companies)
-      .set({ onboardingStatus: "functions", updatedAt: new Date() })
+      .set({ onboardingStatus: "hiring", updatedAt: new Date() })
       .where(eq(companies.id, ctx.companyId));
-    await trackEvent({
-      companyId: ctx.companyId,
-      userId: ctx.userId,
-      eventName: "onboarding_functions",
-    });
   }),
 
   /**
-   * Escape hatch: advance to the functions step without requiring an
-   * active goal or any knowledge entries. Founders who want defaults
-   * and intend to fill /knowledge later get unblocked. Tracked as a
-   * separate event so the funnel report can split assisted vs
-   * skipped onboarding.
+   * Escape hatch: advance to hiring without requiring an active goal or
+   * any knowledge entries. Founders who want defaults and intend to fill
+   * /knowledge later get unblocked.
    */
   skipInterview: protectedProcedure.mutation(async ({ ctx }) => {
     await ctx.db
       .update(companies)
-      .set({ onboardingStatus: "functions", updatedAt: new Date() })
+      .set({ onboardingStatus: "hiring", updatedAt: new Date() })
       .where(eq(companies.id, ctx.companyId));
-    await trackEvent({
-      companyId: ctx.companyId,
-      userId: ctx.userId,
-      eventName: "onboarding_interview_skipped",
-    });
   }),
-
-  saveFunctions: protectedProcedure
-    .input(z.object({
-      departments: z.array(z.object({
-        name: z.string().min(1),
-        functions: z.array(z.object({
-          name: z.string().min(1),
-          mode: z.enum(["ai", "ai_human", "human"]),
-        })),
-      })),
-    }))
-    .mutation(async ({ ctx, input }) => {
-      // Delete-then-recreate must be atomic. Without the tx, a connection
-      // drop after the delete but before the inserts wiped the tenant's
-      // entire department/function tree. /onboarding/functions is the
-      // only entry point so the founder couldn't recover without DB
-      // surgery, and the next saveFunctions retry would hit the empty
-      // state and proceed normally, masking the loss.
-      await ctx.db.transaction(async (tx) => {
-        await tx.delete(departments).where(eq(departments.companyId, ctx.companyId));
-
-        for (const dept of input.departments) {
-          const [created] = await tx.insert(departments).values({
-            companyId: ctx.companyId,
-            name: dept.name,
-          }).returning();
-
-          if (created && dept.functions.length > 0) {
-            await tx.insert(functions).values(
-              dept.functions.map((fn) => ({
-                departmentId: created.id,
-                companyId: ctx.companyId,
-                name: fn.name,
-                mode: fn.mode,
-              })),
-            );
-          }
-        }
-
-        await tx
-          .update(companies)
-          .set({ onboardingStatus: "hiring", updatedAt: new Date() })
-          .where(eq(companies.id, ctx.companyId));
-      });
-
-      await trackEvent({
-        companyId: ctx.companyId,
-        userId: ctx.userId,
-        eventName: "onboarding_hiring",
-        properties: {
-          departmentCount: input.departments.length,
-          functionCount: input.departments.reduce(
-            (acc, d) => acc + d.functions.length,
-            0,
-          ),
-        },
-      });
-    }),
 
   completeHiring: protectedProcedure.mutation(async ({ ctx }) => {
     // Fetch company timezone for schedule registration
@@ -562,11 +491,6 @@ export const onboardingRouter = createTRPCRouter({
       .update(companies)
       .set({ onboardingStatus: "complete", updatedAt: new Date() })
       .where(eq(companies.id, ctx.companyId));
-    await trackEvent({
-      companyId: ctx.companyId,
-      userId: ctx.userId,
-      eventName: "onboarding_complete",
-    });
 
     // Register orchestrator schedules for this company
     const tz = company?.timezone ?? "UTC";

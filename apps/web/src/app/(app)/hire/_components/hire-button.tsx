@@ -34,7 +34,6 @@ export function HireButton({
   function handleHire() {
     hire.mutate({
       roleType,
-      functionIds: [],
       initialFocus: focus.trim() ? focus.trim() : undefined,
     });
   }

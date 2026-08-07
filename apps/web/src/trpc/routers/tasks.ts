@@ -3,17 +3,15 @@ import { TRPCError } from "@trpc/server";
 import { eq, and, isNotNull, desc, inArray } from "drizzle-orm";
 import { tasks, aiEmployees, companies, goals, chatMessages, activityLog } from "@beast/db";
 import { TASK_STATUSES, ONBOARDING_STARTERS, starterById } from "@beast/shared";
-import { classifyTask, getSkillsForRole, advanceChain, computeFirstOccurrence, extractRuleFromRationale } from "@beast/ai";
+import { classifyTask, getSkillsForRole, advanceChain, computeFirstOccurrence, extractRuleFromRationale, dispatchRun } from "@beast/ai";
 import type { SpawnPayload, RecurrenceConfig } from "@beast/ai";
-import { auth as triggerAuth, tasks as triggerTasks } from "@trigger.dev/sdk";
 import { createTRPCRouter, protectedProcedure, assertNotDemo } from "../init";
-import { trackEvent } from "@/lib/events/track";
+import { triggerTask } from "@/lib/trigger";
 
-/** Wraps Trigger.dev task invocation for advanceChain. */
-async function triggerExecuteTask(payload: SpawnPayload): Promise<{ id: string }> {
-  const handle = await triggerTasks.trigger("execute-task", payload);
-  return { id: handle.id };
-}
+const triggerExecuteTask = (payload: SpawnPayload) => triggerTask("execute-task", payload);
+
+/** The one run-dispatch seam: Trigger.dev when configured, in-process otherwise. */
+const dispatch = (taskId: string) => dispatchRun(taskId, { trigger: triggerExecuteTask });
 
 export const tasksRouter = createTRPCRouter({
   list: protectedProcedure
@@ -131,7 +129,7 @@ export const tasksRouter = createTRPCRouter({
           }
         }
 
-        await triggerTasks.trigger("generate-plan", {
+        await triggerTask("generate-plan", {
           parentTaskId: task.id,
           objective,
           brief: briefForInsert,
@@ -140,31 +138,18 @@ export const tasksRouter = createTRPCRouter({
           employeesByRole,
         });
 
-        return { ...task, isMultiStep: true };
+        await ctx.db
+          .update(tasks)
+          .set({ status: "planning" })
+          .where(eq(tasks.id, task.id));
+
+        return { ...task, status: "planning", isMultiStep: true };
       }
 
-      // Single-step path: execute directly (existing flow)
-      const handle = await triggerTasks.trigger("execute-task", {
-        agentId: input.aiEmployeeId,
-        tenantId: ctx.companyId,
-        agentName: employee.name,
-        roleType: employee.roleType,
-        companyName: company.name,
-        task: {
-          taskId: task.id,
-          title: input.title,
-          objective,
-          taskType: input.taskType,
-          brief: briefForInsert,
-        },
-      });
+      // Single-step path: dispatch directly
+      await dispatch(task.id);
 
-      await ctx.db
-        .update(tasks)
-        .set({ triggerRunId: handle.id, status: "working", startedAt: new Date() })
-        .where(eq(tasks.id, task.id));
-
-      return { ...task, triggerRunId: handle.id, isMultiStep: false };
+      return { ...task, status: "running", isMultiStep: false };
     }),
 
   // Single-step starter task created from the dashboard empty state.
@@ -225,40 +210,7 @@ export const tasksRouter = createTRPCRouter({
 
       if (!task) throw new Error("Failed to create task");
 
-      const handle = await triggerTasks.trigger("execute-task", {
-        agentId: input.aiEmployeeId,
-        tenantId: ctx.companyId,
-        agentName: employee.name,
-        roleType: employee.roleType,
-        companyName: company.name,
-        task: {
-          taskId: task.id,
-          title: starter.title,
-          objective: starter.title,
-          taskType: starter.taskType,
-          brief,
-        },
-      });
-
-      await ctx.db
-        .update(tasks)
-        .set({ triggerRunId: handle.id, status: "working", startedAt: new Date() })
-        .where(eq(tasks.id, task.id));
-
-      await Promise.all([
-        trackEvent({
-          companyId: ctx.companyId,
-          userId: ctx.userId,
-          eventName: "dashboard_starter_picked",
-          properties: { starterId: starter.id, role: starter.role },
-        }),
-        trackEvent({
-          companyId: ctx.companyId,
-          userId: ctx.userId,
-          eventName: "first_task_started",
-          properties: { taskId: task.id, source: "starter" },
-        }),
-      ]);
+      await dispatch(task.id);
 
       return { taskId: task.id };
     }),
@@ -330,25 +282,7 @@ export const tasksRouter = createTRPCRouter({
         ? originalBrief.objective
         : original.title;
 
-      const handle = await triggerTasks.trigger("execute-task", {
-        agentId: original.aiEmployeeId,
-        tenantId: ctx.companyId,
-        agentName: employee.name,
-        roleType: employee.roleType,
-        companyName: company.name,
-        task: {
-          taskId: task.id,
-          title: newTitle,
-          objective,
-          taskType: original.taskType,
-          brief: newBrief,
-        },
-      });
-
-      await ctx.db
-        .update(tasks)
-        .set({ triggerRunId: handle.id, status: "working", startedAt: new Date() })
-        .where(eq(tasks.id, task.id));
+      await dispatch(task.id);
 
       return { taskId: task.id };
     }),
@@ -364,23 +298,23 @@ export const tasksRouter = createTRPCRouter({
       // Status guard: only flip if the parent task is still in the
       // pre-execution lifecycle. A founder cancellation, a chain
       // auto-advance, or a worker that already moved the task to
-      // review/approved must not be regressed by a stale Approve Plan
+      // in_review/accepted must not be regressed by a stale Approve Plan
       // click. Same shape as the generate-plan guard.
       await ctx.db
         .update(tasks)
         .set({
           planApproved: input.approved,
-          status: input.approved ? "working" : "pending",
+          status: input.approved ? "running" : "queued",
         })
         .where(and(
           eq(tasks.id, input.taskId),
           eq(tasks.companyId, ctx.companyId),
-          inArray(tasks.status, ["pending", "planned"]),
+          inArray(tasks.status, ["queued", "planning", "plan_review"]),
         ));
 
       if (input.approved) {
-        // Kick off the chain - spawn the first child task
-        const result = await advanceChain(input.taskId, triggerExecuteTask);
+        // Kick off the chain - spawn the first child task through the dispatch seam
+        const result = await advanceChain(input.taskId, (payload) => dispatch(payload.task.taskId));
         return { planApproved: true, chainResult: result };
       }
 
@@ -462,7 +396,7 @@ export const tasksRouter = createTRPCRouter({
         taskType: input.taskType,
         goalId: validGoalId,
         origin: "recurring",
-        recurrence: config as unknown as Record<string, unknown>,
+        recurrence: config,
       }).returning();
 
       return task;
@@ -514,7 +448,7 @@ export const tasksRouter = createTRPCRouter({
       };
 
       await ctx.db.update(tasks).set({
-        recurrence: config as unknown as Record<string, unknown>,
+        recurrence: config,
       }).where(and(eq(tasks.id, input.taskId), eq(tasks.companyId, ctx.companyId)));
     }),
 
@@ -545,21 +479,21 @@ export const tasksRouter = createTRPCRouter({
         columns: { id: true, title: true, taskType: true, aiEmployeeId: true },
       });
 
-      // Status guard: terminal states (approved/rejected/cancelled/
-      // completed) must not be regressed to cancelled. The /dashboard/tasks
+      // Status guard: terminal states (accepted/published/failed/timed_out/
+      // cancelled) must not be regressed to cancelled. The /dashboard/tasks
       // in-flight cancel button only renders for active states, but a
       // double-click + race with chain auto-advance could otherwise
-      // overwrite an approval.
+      // overwrite an acceptance.
       await ctx.db
         .update(tasks)
         .set({ status: "cancelled" })
         .where(and(
           eq(tasks.id, input.taskId),
           eq(tasks.companyId, ctx.companyId),
-          inArray(tasks.status, ["pending", "planned", "working", "in_progress", "review"]),
+          inArray(tasks.status, ["queued", "planning", "plan_review", "running", "in_review", "revising"]),
         ));
 
-      // Cascade: cancel any working children
+      // Cascade: cancel any in-flight children
       const children = await ctx.db.query.tasks.findMany({
         where: and(
           eq(tasks.parentTaskId, input.taskId),
@@ -569,7 +503,7 @@ export const tasksRouter = createTRPCRouter({
       });
 
       for (const child of children) {
-        if (child.status === "working" || child.status === "pending") {
+        if (child.status === "running" || child.status === "queued") {
           await ctx.db
             .update(tasks)
             .set({ status: "cancelled" })
@@ -598,6 +532,7 @@ export const tasksRouter = createTRPCRouter({
           taskType: cancelled.taskType,
           rationale: `CANCELLED: ${reason}`,
           outputText: cancelled.title,
+          reviewId: crypto.randomUUID(),
         }).catch((err) => {
           console.error("Extraction failed on task cancel:", err);
         });
@@ -612,30 +547,5 @@ export const tasksRouter = createTRPCRouter({
         columns: { id: true, status: true, triggerRunId: true, startedAt: true, completedAt: true, plan: true, planApproved: true, parentTaskId: true },
       });
       return task ?? null;
-    }),
-
-  getStreamToken: protectedProcedure
-    .input(z.object({ triggerRunId: z.string() }))
-    .query(async ({ ctx, input }) => {
-      // All tenants share one Trigger.dev project, so a read token for an
-      // arbitrary run id would cross tenants. Only mint for a run that belongs
-      // to a task in the caller's company. assertNotDemo because the demo guard
-      // only blocks mutations, and this hits live Trigger.dev infra.
-      assertNotDemo("Streaming a run");
-      const owned = await ctx.db.query.tasks.findFirst({
-        where: and(eq(tasks.triggerRunId, input.triggerRunId), eq(tasks.companyId, ctx.companyId)),
-        columns: { id: true },
-      });
-      if (!owned) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Run not found" });
-      }
-      const token = await triggerAuth.createPublicToken({
-        scopes: {
-          read: {
-            runs: [input.triggerRunId],
-          },
-        },
-      });
-      return { publicAccessToken: token };
     }),
 });

@@ -3,26 +3,26 @@ import { and, desc, eq, gte, inArray, isNotNull, sql } from "drizzle-orm";
 import { deliverables, aiEmployees, tasks } from "@beast/db";
 import { createTRPCRouter, protectedProcedure } from "../init";
 
-const FINAL_STATES = ["approved", "published", "rejected"] as const;
+const FINAL_STATES = ["accepted", "published", "rejected"] as const;
 
 export const reviewsRouter = createTRPCRouter({
   /**
    * Historical review actions. A row per deliverable that has reached a
-   * final state (approved, published, rejected). Joined with employee
+   * final state (accepted, published, rejected). Joined with employee
    * + task for the audit trail.
    */
   history: protectedProcedure
     .input(z.object({
       limit: z.number().int().min(1).max(100).default(30),
       offset: z.number().int().min(0).default(0),
-      statusFilter: z.enum(["all", "approved", "rejected"]).default("all"),
+      statusFilter: z.enum(["all", "accepted", "rejected"]).default("all"),
       employeeId: z.string().uuid().optional(),
       typeFilter: z.string().min(1).max(64).optional(),
     }))
     .query(async ({ ctx, input }) => {
       const statusList: readonly string[] =
-        input.statusFilter === "approved"
-          ? ["approved", "published"]
+        input.statusFilter === "accepted"
+          ? ["accepted", "published"]
           : input.statusFilter === "rejected"
             ? ["rejected"]
             : FINAL_STATES;
@@ -101,7 +101,7 @@ export const reviewsRouter = createTRPCRouter({
         .where(
           and(
             eq(deliverables.companyId, ctx.companyId),
-            eq(deliverables.status, "approved"),
+            eq(deliverables.status, "accepted"),
             isNotNull(deliverables.approvedAt),
             gte(deliverables.approvedAt, sinceDate),
           ),
@@ -133,7 +133,7 @@ export const reviewsRouter = createTRPCRouter({
         .where(
           and(
             eq(deliverables.companyId, ctx.companyId),
-            inArray(deliverables.status, ["draft", "pending_review", "review"]),
+            eq(deliverables.status, "in_review"),
           ),
         ),
     ]);

@@ -1,13 +1,34 @@
 export { run } from "./agent";
 export type { RunOptions } from "./agent";
+export {
+  executeTaskRun,
+  dispatchRun,
+  subscribeToRun,
+  isRunActiveInProcess,
+} from "./runner";
+export type {
+  TriggerExecuteTask,
+  ExecuteTaskRunOptions,
+  ExecuteTaskRunResult,
+  ReviewNotifyPayload,
+  DispatchResult,
+} from "./runner";
 export { ToolRegistry } from "./tools";
 export { Scratchpad } from "./scratchpad";
 export { AgentEventEmitter } from "./streaming";
 export { assembleContext, estimateTokens } from "./context";
-export { getClient, getModelId, getMaxTokens, selectModel } from "./models";
+export { resolveProvider, complete, ProviderQuotaError } from "./provider";
+export type {
+  Tier,
+  ProviderEvent,
+  ProviderBlock,
+  ProviderMessage,
+  RunToolDef,
+  RunProvider,
+} from "./provider";
+export { getClient, getModelId } from "./models";
 export * from "./types";
 export * from "./memory";
-export * from "./skills";
 export * from "./employees";
 export * from "./chains";
 export * from "./orchestrator";

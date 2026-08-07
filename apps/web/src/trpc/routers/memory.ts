@@ -1,10 +1,10 @@
 import { z } from "zod";
 import { eq, and, gte } from "drizzle-orm";
 import { aiEmployees, proceduralMemories } from "@beast/db";
-import { upsertProceduralRule } from "@beast/ai";
+import { seedFounderRule } from "@beast/ai";
 import { createTRPCRouter, protectedProcedure } from "../init";
 
-const CONFIDENCE_FLOOR = 0.7;
+const CONFIDENCE_FLOOR = 0.6;
 const MAX_RULES = 8;
 const FOUNDER_SEED_WEIGHT = 2.0;
 const RULE_TYPES = ["style_rule", "avoid_pattern", "approved_example"] as const;
@@ -53,6 +53,7 @@ export const memoryRouter = createTRPCRouter({
           description: true,
           sourceEpisodes: true,
           signalWeight: true,
+          confidence: true,
           createdAt: true,
           tasksAppliedTo: true,
         },
@@ -60,7 +61,7 @@ export const memoryRouter = createTRPCRouter({
       });
 
       return rows
-        .filter((r) => (r.signalWeight ?? 0) >= CONFIDENCE_FLOOR)
+        .filter((r) => r.confidence >= CONFIDENCE_FLOOR)
         .slice(0, MAX_RULES)
         .map((r) => ({
           ruleId: r.id,
@@ -69,7 +70,7 @@ export const memoryRouter = createTRPCRouter({
           extractedFromDeliverableId: r.sourceEpisodes?.[0] ?? "",
           extractedFromTitle: "",
           extractedAt: r.createdAt.toISOString(),
-          confidence: r.signalWeight ?? 1.0,
+          confidence: r.confidence,
           tasksAppliedTo: r.tasksAppliedTo ?? 0,
         }));
     }),
@@ -132,7 +133,7 @@ export const memoryRouter = createTRPCRouter({
       });
       if (!employee) throw new Error("Employee not found");
 
-      const ruleId = await upsertProceduralRule({
+      const { ruleId } = await seedFounderRule({
         agentId: input.employeeId,
         tenantId: ctx.companyId,
         ruleType: input.ruleType,
@@ -143,9 +144,7 @@ export const memoryRouter = createTRPCRouter({
           good: input.goodExamples.length > 0 ? input.goodExamples : undefined,
           bad: input.badExamples.length > 0 ? input.badExamples : undefined,
         },
-        sourceEpisodes: [],
-        signalCount: 1,
-        signalWeight: FOUNDER_SEED_WEIGHT,
+        weight: FOUNDER_SEED_WEIGHT,
       });
 
       return { ruleId };

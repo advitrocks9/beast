@@ -1,5 +1,5 @@
-import type Anthropic from "@anthropic-ai/sdk";
 import type { Citation } from "@beast/shared";
+import type { RunToolDef } from "./provider";
 import type { ToolDefinition, ToolExecuteResult } from "./types";
 
 interface DispatchOutcome {
@@ -26,11 +26,11 @@ export class ToolRegistry {
     }
   }
 
-  getAnthropicTools(): Anthropic.Tool[] {
+  getToolDefs(): RunToolDef[] {
     return Array.from(this.tools.values()).map((t) => ({
       name: t.name,
       description: t.description,
-      input_schema: t.inputSchema,
+      inputSchema: t.inputSchema,
     }));
   }
 

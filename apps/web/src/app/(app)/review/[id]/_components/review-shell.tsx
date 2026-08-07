@@ -474,12 +474,12 @@ function PublishBanner({
     );
   }
 
-  if (status === "approved" && PUBLISHABLE_TYPES.has(deliverableType)) {
+  if (status === "accepted" && PUBLISHABLE_TYPES.has(deliverableType)) {
     return (
       <div className="rounded-xl border border-[oklch(0.85_0.01_260/0.4)] bg-white px-4 py-3 flex items-center justify-between gap-3">
         <div>
           <p className="text-sm font-medium">
-            Approved. Publish to platform when ready.
+            Accepted. Publish to platform when ready.
           </p>
           <p className="text-xs text-text-secondary mt-0.5">
             Queue auto-publish with a 60-second cancel window, or publish manually from Settings.

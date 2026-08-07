@@ -10,6 +10,7 @@ import {
   exchangeSlackCode,
   ensureBeastChannel,
 } from "@beast/ai";
+import { env, requireEnv } from "@beast/shared/env";
 import { verifyState } from "@/trpc/routers/connectors";
 import { createClient } from "@/lib/supabase/server";
 import { DEMO_MODE } from "@/lib/demo";
@@ -74,7 +75,7 @@ async function replaceConnector(values: ConnectorInsert): Promise<void> {
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const { platform } = await params;
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const appUrl = env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
   // No connectors in the read-only demo; refuse before any token exchange.
   if (DEMO_MODE) {
@@ -117,8 +118,8 @@ async function handleTwitterCallback(params: URLSearchParams, appUrl: string) {
 
   const oauthToken = params.get("oauth_token") ?? "";
   const oauthVerifier = params.get("oauth_verifier") ?? "";
-  const consumerKey = process.env.TWITTER_API_KEY!;
-  const consumerSecret = process.env.TWITTER_API_SECRET!;
+  const consumerKey = requireEnv("TWITTER_API_KEY");
+  const consumerSecret = requireEnv("TWITTER_API_SECRET");
 
   const result = await exchangeTwitterToken(oauthToken, oauthVerifier, consumerKey, consumerSecret, "");
 
@@ -148,8 +149,8 @@ async function handleLinkedInCallback(params: URLSearchParams, platform: string,
     return NextResponse.redirect(`${appUrl}/settings/connectors?error=invalid_state`);
   }
 
-  const clientId = process.env.LINKEDIN_CLIENT_ID!;
-  const clientSecret = process.env.LINKEDIN_CLIENT_SECRET!;
+  const clientId = requireEnv("LINKEDIN_CLIENT_ID");
+  const clientSecret = requireEnv("LINKEDIN_CLIENT_SECRET");
   const redirectUri = `${appUrl}/api/oauth/callback/linkedin`;
 
   const tokenResult = await exchangeLinkedInCode(code, clientId, clientSecret, redirectUri);
@@ -179,8 +180,8 @@ async function handleWordPressCallback(params: URLSearchParams, platform: string
     return NextResponse.redirect(`${appUrl}/settings/connectors?error=invalid_state`);
   }
 
-  const clientId = process.env.WORDPRESS_CLIENT_ID!;
-  const clientSecret = process.env.WORDPRESS_CLIENT_SECRET!;
+  const clientId = requireEnv("WORDPRESS_CLIENT_ID");
+  const clientSecret = requireEnv("WORDPRESS_CLIENT_SECRET");
   const redirectUri = `${appUrl}/api/oauth/callback/wordpress`;
 
   const tokenResult = await exchangeWordPressCode(code, clientId, clientSecret, redirectUri);
@@ -205,8 +206,8 @@ async function handleSlackCallback(params: URLSearchParams, appUrl: string) {
     return NextResponse.redirect(`${appUrl}/settings/connectors?error=invalid_state`);
   }
 
-  const clientId = process.env.SLACK_CLIENT_ID!;
-  const clientSecret = process.env.SLACK_CLIENT_SECRET!;
+  const clientId = requireEnv("SLACK_CLIENT_ID");
+  const clientSecret = requireEnv("SLACK_CLIENT_SECRET");
   const redirectUri = `${appUrl}/api/oauth/callback/slack`;
 
   const tokenResult = await exchangeSlackCode(code, clientId, clientSecret, redirectUri);

@@ -39,7 +39,7 @@ function buildTrendBuckets(rows: Array<{ status: string; updatedAt: Date | null;
     const idx = Math.floor((dayMs.getTime() - start.getTime()) / (24 * 60 * 60 * 1000));
     if (idx < 0 || idx >= TREND_WINDOW_DAYS) continue;
     const bucket = buckets[idx]!;
-    if (row.status === "approved" || row.status === "published") bucket.shipped += 1;
+    if (row.status === "accepted" || row.status === "published") bucket.shipped += 1;
     else if (row.status === "rejected") bucket.rejected += 1;
   }
   return buckets;
@@ -140,8 +140,8 @@ export default async function EmployeeDeskPage({ params }: PageProps) {
 
   const role = roleMeta(employee.roleType);
   const st = statusMeta(employee.status ?? "idle");
-  const completedCount = employeeTasks.filter((t) => t.status === "completed").length;
-  const reviewCount = employeeDeliverables.filter((d) => d.status === "review").length;
+  const completedCount = employeeTasks.filter((t) => t.status === "accepted" || t.status === "published").length;
+  const reviewCount = employeeDeliverables.filter((d) => d.status === "in_review").length;
 
   return (
     <div className="space-y-6">
@@ -389,7 +389,7 @@ function TrendStrip({
   shipped: number;
   rejected: number;
 }) {
-  const shippedMeta = statusMeta("approved");
+  const shippedMeta = statusMeta("accepted");
   const rejectedMeta = statusMeta("rejected");
   const peak = Math.max(1, ...buckets.map((b) => b.shipped + b.rejected));
   const colWidth = 8;
@@ -453,7 +453,7 @@ function TrendStrip({
         })}
       </svg>
       <p className="mt-2 text-[10px] text-text-muted">
-        Each column is a day. Green = approved or published. Red = rejected. Empty = no activity.
+        Each column is a day. Green = accepted or published. Red = rejected. Empty = no activity.
       </p>
     </GlassCard>
   );

@@ -53,8 +53,8 @@ const PER_CATEGORY_CHIPS: Record<string, ChipDef[]> = {
 
 interface SuggestionChipsProps {
   category: string | null;
-  onPick: (body: string, label: string, index: number) => void;
-  onSkip: (category: string, label: string, index: number) => void;
+  onPick: (body: string) => void;
+  onSkip: (category: string) => void;
 }
 
 export function SuggestionChips({ category, onPick, onSkip }: SuggestionChipsProps) {
@@ -74,8 +74,8 @@ export function SuggestionChips({ category, onPick, onSkip }: SuggestionChipsPro
           type="button"
           aria-label={chip.label}
           onClick={() => {
-            if (chip.isSkip) onSkip(category, chip.label, i);
-            else onPick(chip.body, chip.label, i);
+            if (chip.isSkip) onSkip(category);
+            else onPick(chip.body);
           }}
           className="rounded-full border border-[oklch(0.85_0.01_260/0.4)] bg-white px-3.5 py-2 text-xs text-text-secondary transition-colors hover:border-[oklch(0.7_0.01_260/0.6)] hover:bg-[oklch(0.97_0.005_260)] hover:text-foreground"
         >

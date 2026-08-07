@@ -1,21 +1,20 @@
 import Stripe from "stripe";
+import { env, requireEnv } from "@beast/shared/env";
 
 let _stripe: Stripe | null = null;
 
 export function getStripe(): Stripe {
   if (!_stripe) {
-    const key = process.env.STRIPE_SECRET_KEY;
-    if (!key) throw new Error("STRIPE_SECRET_KEY is not set");
-    _stripe = new Stripe(key);
+    _stripe = new Stripe(requireEnv("STRIPE_SECRET_KEY"));
   }
   return _stripe;
 }
 
 /** Price IDs - set these in Stripe Dashboard and configure here. */
-export const PRICE_IDS: Record<string, string> = {
-  starter: process.env.STRIPE_PRICE_STARTER ?? "",
-  team: process.env.STRIPE_PRICE_TEAM ?? "",
-  business: process.env.STRIPE_PRICE_BUSINESS ?? "",
+export const PRICE_IDS: Record<string, string | undefined> = {
+  starter: env.STRIPE_PRICE_STARTER,
+  team: env.STRIPE_PRICE_TEAM,
+  business: env.STRIPE_PRICE_BUSINESS,
 };
 
 /** Tier metadata. */

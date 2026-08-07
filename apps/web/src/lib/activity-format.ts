@@ -183,7 +183,7 @@ export function formatActivityPhrase(actionType: string, detail: Record<string, 
       const failedStepName = pickString(detail, "failedStepName");
       const what = taskTitle ? `"${truncateReason(taskTitle, 60)}"` : "a multi-step task";
       const where = failedStepName ? ` at step "${truncateReason(failedStepName, 60)}"` : "";
-      return `had ${what} stop${where}. The chain was cancelled.`;
+      return `had ${what} stop${where}. The chain did not finish.`;
     }
     default:
       return actionType.replace(/_/g, " ") + ".";

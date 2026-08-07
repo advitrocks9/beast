@@ -2,6 +2,7 @@ import { z } from "zod";
 import { eq, and } from "drizzle-orm";
 import { connectors } from "@beast/db";
 import { encryptToken, decryptToken } from "@beast/shared";
+import { env } from "@beast/shared/env";
 import {
   buildTwitterOAuthUrl,
   buildLinkedInAuthUrl,
@@ -42,7 +43,7 @@ export function verifyState(
 }
 
 function getCallbackUrl(platform: string): string {
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const base = env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   return `${base}/api/oauth/callback/${platform}`;
 }
 
@@ -90,8 +91,8 @@ export const connectorsRouter = createTRPCRouter({
 
       switch (input.platform) {
         case "twitter": {
-          const consumerKey = process.env.TWITTER_API_KEY;
-          const consumerSecret = process.env.TWITTER_API_SECRET;
+          const consumerKey = env.TWITTER_API_KEY;
+          const consumerSecret = env.TWITTER_API_SECRET;
           if (!consumerKey || !consumerSecret) {
             throw new Error("Twitter API credentials not configured");
           }
@@ -104,7 +105,7 @@ export const connectorsRouter = createTRPCRouter({
         }
 
         case "linkedin": {
-          const clientId = process.env.LINKEDIN_CLIENT_ID;
+          const clientId = env.LINKEDIN_CLIENT_ID;
           if (!clientId) throw new Error("LinkedIn credentials not configured");
 
           const url = buildLinkedInAuthUrl(clientId, callbackUrl, state);
@@ -112,7 +113,7 @@ export const connectorsRouter = createTRPCRouter({
         }
 
         case "wordpress": {
-          const clientId = process.env.WORDPRESS_CLIENT_ID;
+          const clientId = env.WORDPRESS_CLIENT_ID;
           if (!clientId) throw new Error("WordPress credentials not configured");
 
           const url = buildWordPressAuthUrl(clientId, callbackUrl, state);
@@ -120,7 +121,7 @@ export const connectorsRouter = createTRPCRouter({
         }
 
         case "slack": {
-          const clientId = process.env.SLACK_CLIENT_ID;
+          const clientId = env.SLACK_CLIENT_ID;
           if (!clientId) throw new Error("Slack credentials not configured");
 
           const url = buildSlackAuthUrl(clientId, callbackUrl, state);

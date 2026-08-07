@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
+import { env } from "@beast/shared/env";
 import { TRPCReactProvider } from "@/trpc/client";
 import { cn } from "@/lib/utils";
 import "./globals.css";
@@ -25,7 +26,7 @@ const fragmentMono = localFont({
   preload: false,
 });
 
-const SITE_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://beast.team";
+const SITE_URL = env.NEXT_PUBLIC_APP_URL ?? "https://beast.team";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),

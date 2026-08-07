@@ -2,17 +2,22 @@ export const EMPLOYEE_ROLES = ["marketing", "sales", "support"] as const;
 export type EmployeeRole = (typeof EMPLOYEE_ROLES)[number];
 
 export const TASK_STATUSES = [
-  "pending",
-  "planned",
-  "working",
-  "review",
-  "revision",
-  "approved",
+  "queued",
+  "planning",
+  "plan_review",
+  "running",
+  "in_review",
+  "revising",
+  "accepted",
   "published",
-  "permission_requested",
+  "failed",
+  "timed_out",
   "cancelled",
 ] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
+
+export const DELIVERABLE_STATUSES = ["in_review", "accepted", "revised", "published"] as const;
+export type DeliverableStatus = (typeof DELIVERABLE_STATUSES)[number];
 
 export const DELIVERABLE_TYPES = [
   "blog",
@@ -59,7 +64,6 @@ export type KnowledgeCategory = (typeof KNOWLEDGE_CATEGORIES)[number];
 export const ONBOARDING_STATUSES = [
   "started",
   "interview",
-  "functions",
   "hiring",
   "complete",
 ] as const;

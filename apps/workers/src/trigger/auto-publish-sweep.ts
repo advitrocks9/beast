@@ -30,7 +30,7 @@ function isAuthFailure(message: string): boolean {
  *
  * Triggered queue/cancel mutations only flip the status; this worker
  * is the publisher. Cancellation is therefore "set status back to
- * approved before the sweep picks the row up."
+ * accepted before the sweep picks the row up."
  */
 export const autoPublishSweepJob = schedules.task({
   id: "auto-publish-sweep",
@@ -52,10 +52,10 @@ export const autoPublishSweepJob = schedules.task({
     for (const deliverable of ready) {
       const platform = pickPlatform(deliverable.deliverableType);
       if (!platform) {
-        // Unrecognised platform: revert to approved so a human picks it up
+        // Unrecognised platform: revert to accepted so a human picks it up
         await db
           .update(deliverables)
-          .set({ status: "approved", publishAfter: null, updatedAt: new Date() })
+          .set({ status: "accepted", publishAfter: null, updatedAt: new Date() })
           .where(eq(deliverables.id, deliverable.id));
         continue;
       }
@@ -72,7 +72,7 @@ export const autoPublishSweepJob = schedules.task({
         if (!connector) {
           await db
             .update(deliverables)
-            .set({ status: "approved", publishAfter: null, updatedAt: new Date() })
+            .set({ status: "accepted", publishAfter: null, updatedAt: new Date() })
             .where(eq(deliverables.id, deliverable.id));
           await db.insert(activityLog).values({
             companyId: deliverable.companyId,
@@ -152,7 +152,7 @@ export const autoPublishSweepJob = schedules.task({
         if (authFailed) {
           await db.transaction(async (tx) => {
             await tx.update(deliverables).set({
-              status: "approved",
+              status: "accepted",
               publishAfter: null,
               updatedAt: new Date(),
               content: { ...existingContent, _autoPublishFailures: nextFailures, _autoPublishLastError: message },
@@ -184,12 +184,12 @@ export const autoPublishSweepJob = schedules.task({
         }
 
         if (nextFailures >= 5) {
-          // Five consecutive failures: stop retrying and revert to approved
+          // Five consecutive failures: stop retrying and revert to accepted
           // so the founder can manually re-queue from /reviews. Transient
           // errors recover before this cap; persistent failures (revoked
           // tokens, rejected content) hit the cap and stop flooding.
           await db.update(deliverables).set({
-            status: "approved",
+            status: "accepted",
             publishAfter: null,
             updatedAt: new Date(),
             content: { ...existingContent, _autoPublishFailures: nextFailures, _autoPublishLastError: message },

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { eq, and, gte, sql } from "drizzle-orm";
 import { companies, tasks } from "@beast/db";
+import { env } from "@beast/shared/env";
 import { getStripe, PRICE_IDS, TIER_LIMITS } from "@/lib/stripe/client";
 import { createTRPCRouter, protectedProcedure, assertNotDemo } from "../init";
 
@@ -78,7 +79,7 @@ export const billingRouter = createTRPCRouter({
           .where(eq(companies.id, ctx.companyId));
       }
 
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+      const appUrl = env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
       const session = await stripe.checkout.sessions.create({
         mode: "subscription",
@@ -107,7 +108,7 @@ export const billingRouter = createTRPCRouter({
       throw new Error("No billing account. Subscribe to a plan first.");
     }
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+    const appUrl = env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
     const session = await stripe.billingPortal.sessions.create({
       customer: company.stripeCustomerId,

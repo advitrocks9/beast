@@ -1,6 +1,6 @@
 import { db, aiEmployees, tasks, deliverables, checkIns, activityLog } from "@beast/db";
 import { eq, and, desc, gte } from "drizzle-orm";
-import { getClient, getModelId } from "../models";
+import { complete } from "../provider";
 import type { TickContext, CheckInContent, PreExecutionCheckIn } from "./types";
 
 interface CheckInDispatch {
@@ -74,10 +74,7 @@ async function isCheckInDue(
   return hoursSince >= 144; // At least 6 days since last weekly
 }
 
-/**
- * Generate check-in content using LLM.
- * Called from the generate-checkin Trigger.dev task.
- */
+/** Generate check-in content using LLM and persist it. */
 export async function generateCheckIn(params: {
   employeeId: string;
   companyId: string;
@@ -118,11 +115,11 @@ export async function generateCheckIn(params: {
 
   // Build task summary for the prompt
   const completedTasks = recentTasks
-    .filter((t) => t.status === "approved" || t.status === "published")
+    .filter((t) => t.status === "accepted" || t.status === "published")
     .map((t) => ({ taskId: t.id, title: t.title, status: t.status }));
 
-  const pendingTasks = recentTasks
-    .filter((t) => t.status === "working" || t.status === "review" || t.status === "pending");
+  const IN_FLIGHT = ["queued", "planning", "plan_review", "running", "in_review", "revising"];
+  const pendingTasks = recentTasks.filter((t) => IN_FLIGHT.includes(t.status));
 
   const taskContext = [
     `Completed: ${completedTasks.length} tasks`,
@@ -134,15 +131,12 @@ export async function generateCheckIn(params: {
 
   const period = params.checkInType === "daily_summary" ? "today" : "this week";
 
-  // LLM generates the check-in narrative
-  const client = getClient();
-  const completion = await client.messages.create({
-    model: getModelId("haiku"),
-    max_tokens: 512,
+  const raw = await complete({
+    tier: "fast",
+    purpose: "checkin",
+    maxTokens: 512,
     system: `You are ${employee.name}, a ${employee.roleTitle}. Write a brief ${params.checkInType === "daily_summary" ? "daily" : "weekly"} check-in for the founder. Be concise, specific, and actionable. Return JSON only.`,
-    messages: [{
-      role: "user",
-      content: `Here's what happened ${period}:
+    prompt: `Here's what happened ${period}:
 
 ${taskContext}
 
@@ -153,10 +147,8 @@ Return:
   "highlights": ["notable wins or observations"],
   "suggestedActions": ["what the founder could do to help or prioritize"]
 }`,
-    }],
   });
 
-  const raw = completion.content[0]?.type === "text" ? completion.content[0].text : "{}";
   let parsed: Partial<CheckInContent>;
   try {
     parsed = JSON.parse(raw.replace(/^```json?\s*/i, "").replace(/\s*```$/, ""));
@@ -188,7 +180,7 @@ Return:
       aiEmployeeId: params.employeeId,
       companyId: params.companyId,
       checkInType: params.checkInType,
-      content: content as unknown as Record<string, unknown>,
+      content,
       scheduledFor: new Date(),
     });
 
@@ -222,14 +214,12 @@ export async function generatePreExecutionCheckIn(params: {
 
   if (!employee) throw new Error(`Employee ${params.employeeId} not found`);
 
-  const client = getClient();
-  const response = await client.messages.create({
-    model: getModelId("haiku"),
-    max_tokens: 512,
+  const raw = await complete({
+    tier: "fast",
+    purpose: "pre_execution_checkin",
+    maxTokens: 512,
     system: `You are ${employee.name}, a ${employee.roleTitle}. You're about to start a task and want to share your plan with the founder. Be concise. Return JSON only.`,
-    messages: [{
-      role: "user",
-      content: `Plan your approach for this task:
+    prompt: `Plan your approach for this task:
 
 Title: ${params.taskTitle}
 Objective: ${params.taskObjective}
@@ -243,10 +233,8 @@ Return:
   "questionsForFounder": ["any clarifying questions - empty array if none"],
   "estimatedComplexity": "simple" | "moderate" | "complex"
 }`,
-    }],
   });
 
-  const raw = response.content[0]?.type === "text" ? response.content[0].text : "{}";
   let parsed: Partial<PreExecutionCheckIn>;
   try {
     parsed = JSON.parse(raw.replace(/^```json?\s*/i, "").replace(/\s*```$/, ""));
@@ -272,7 +260,7 @@ Return:
       companyId: params.companyId,
       checkInType: "pre_execution",
       taskId: params.taskId,
-      content: content as unknown as Record<string, unknown>,
+      content,
       scheduledFor: new Date(),
     });
 

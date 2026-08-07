@@ -84,7 +84,6 @@ export function InterviewChat({
 
   const sendMessage = useMutation(trpc.onboarding.sendMessage.mutationOptions());
   const skipCategory = useMutation(trpc.onboarding.skipCategory.mutationOptions());
-  const trackChip = useMutation(trpc.events.track.mutationOptions());
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -97,11 +96,6 @@ export function InterviewChat({
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
-
-  // Fire onboarding_chip_shown once per category, when the chip group becomes
-  // visible. The ref tracks the last category we already reported, so a stale
-  // re-render does not double-count.
-  const lastShownCategoryRef = useRef<string | null>(null);
 
   // Founder taps a filled category in the sidebar -> push a synthetic user
   // message asking to revisit it. Keyed off revisitTrigger.nonce so the same
@@ -189,25 +183,17 @@ export function InterviewChat({
     }
   }
 
-  function handleChipPick(body: string, label: string, index: number) {
+  function handleChipPick(body: string) {
     setInput(body);
     inputRef.current?.focus();
-    trackChip.mutate({
-      eventName: "onboarding_chip_tapped",
-      properties: { category: nextCategory, label, index, contextScore },
-    });
   }
 
-  async function handleChipSkip(category: string, label: string, index: number) {
+  async function handleChipSkip(category: string) {
     try {
       await skipCategory.mutateAsync({ category });
     } catch {
       // Best-effort skip; silent failure does not block the UX.
     }
-    trackChip.mutate({
-      eventName: "onboarding_chip_skipped",
-      properties: { category, label, index, contextScore },
-    });
     setNextCategory((current) => (current === category ? null : current));
   }
 
@@ -219,16 +205,6 @@ export function InterviewChat({
     contextScore < CHIPS_HIDE_AT_SCORE &&
     lastMessage?.role === "assistant" &&
     nextCategory !== null;
-
-  useEffect(() => {
-    if (!showChips || !nextCategory) return;
-    if (lastShownCategoryRef.current === nextCategory) return;
-    lastShownCategoryRef.current = nextCategory;
-    trackChip.mutate({
-      eventName: "onboarding_chip_shown",
-      properties: { category: nextCategory, contextScore },
-    });
-  }, [showChips, nextCategory, contextScore, trackChip]);
 
   return (
     <div className="flex h-full flex-col">

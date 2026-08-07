@@ -4,8 +4,6 @@ import { db } from "@beast/db";
 import {
   companies,
   aiEmployees,
-  departments,
-  functions,
   goals,
   tasks,
   deliverables,
@@ -21,7 +19,6 @@ import {
   employeeMemories,
   ruleCandidates,
   knowledgeEmbeddings,
-  events,
   notificationReads,
 } from "@beast/db";
 
@@ -58,10 +55,7 @@ async function wipe() {
   await db.delete(goals).where(eq(goals.companyId, COMPANY_ID));
   await db.delete(knowledgeEmbeddings).where(eq(knowledgeEmbeddings.companyId, COMPANY_ID));
   await db.delete(knowledgeItems).where(eq(knowledgeItems.companyId, COMPANY_ID));
-  await db.delete(functions).where(eq(functions.companyId, COMPANY_ID));
-  await db.delete(departments).where(eq(departments.companyId, COMPANY_ID));
   await db.delete(aiEmployees).where(eq(aiEmployees.companyId, COMPANY_ID));
-  await db.delete(events).where(eq(events.companyId, COMPANY_ID));
   await db.delete(notificationReads).where(eq(notificationReads.companyId, COMPANY_ID));
   await db.delete(companies).where(eq(companies.userId, DEMO_USER_ID));
 }
@@ -169,22 +163,6 @@ async function seed() {
     },
   ]);
 
-  // Departments + functions: satisfies the org structure /settings/team reads
-  // and mirrors an onboarding-complete company.
-  const marketingDept = randomUUID();
-  const salesDept = randomUUID();
-  const supportDept = randomUUID();
-  await db.insert(departments).values([
-    { id: marketingDept, companyId: COMPANY_ID, name: "Marketing" },
-    { id: salesDept, companyId: COMPANY_ID, name: "Sales" },
-    { id: supportDept, companyId: COMPANY_ID, name: "Support" },
-  ]);
-  await db.insert(functions).values([
-    { departmentId: marketingDept, companyId: COMPANY_ID, name: "Content and Social", mode: "ai", aiEmployeeId: ALEX_ID },
-    { departmentId: salesDept, companyId: COMPANY_ID, name: "Outbound", mode: "ai", aiEmployeeId: JORDAN_ID },
-    { departmentId: supportDept, companyId: COMPANY_ID, name: "Customer Support", mode: "ai", aiEmployeeId: SAM_ID },
-  ]);
-
   const goalContentSeries = randomUUID();
   const goalLinkedIn = randomUUID();
   const goalDemos = randomUUID();
@@ -278,7 +256,7 @@ async function seed() {
   const taskSeeds: TaskSeed[] = [
     {
       id: t1, employee: ALEX_ID, goalId: goalContentSeries, title: "Draft 3 LinkedIn posts on single-origin sourcing",
-      taskType: "social_linkedin", origin: "user_created", status: "approved",
+      taskType: "social_linkedin", origin: "user_created", status: "accepted",
       brief: { objective: "Three LinkedIn posts that connect our Ethiopia and Colombia lots to the freshness story.", acceptanceCriteria: ["Each post under 150 words", "Name the farm and process", "Soft CTA to the subscription"], pinnedGoal: pinned(goalContentSeries, "Ship the single-origin sourcing content series") },
       createdAt: days(-7), startedAt: days(-7), completedAt: days(-6),
     },
@@ -290,43 +268,43 @@ async function seed() {
     },
     {
       id: t3, employee: ALEX_ID, goalId: goalLinkedIn, title: "Competitor teardown: Blue Bottle subscription",
-      taskType: "report", origin: "proactive", status: "review",
+      taskType: "report", origin: "proactive", status: "in_review",
       brief: { objective: "Tear down the Blue Bottle subscription onboarding and positioning.", acceptanceCriteria: ["3-line TL;DR", "Where we win", "One thing to steal"] },
       createdAt: days(-2), startedAt: days(-2),
     },
     {
       id: t4, employee: ALEX_ID, goalId: goalLinkedIn, title: "Draft the October subscriber newsletter",
-      taskType: "email", origin: "user_created", status: "review",
+      taskType: "email", origin: "user_created", status: "in_review",
       brief: { objective: "Monthly newsletter featuring the new Guji lot and a brewing tip.", acceptanceCriteria: ["Subject under 50 chars", "Scannable sections"] },
       createdAt: days(-2), startedAt: days(-1),
     },
     {
       id: t5, employee: ALEX_ID, goalId: goalContentSeries, title: "LinkedIn post: behind the roast schedule",
-      taskType: "social_linkedin", origin: "recurring", status: "working",
+      taskType: "social_linkedin", origin: "recurring", status: "running",
       brief: { objective: "Show how the weekly roast calendar keeps bags fresh.", acceptanceCriteria: ["Under 150 words"] },
       createdAt: hours(-6), startedAt: hours(-3),
     },
     {
       id: t6, employee: JORDAN_ID, goalId: goalDemos, title: "Cold email sequence to office managers",
-      taskType: "email", origin: "user_created", status: "approved",
+      taskType: "email", origin: "user_created", status: "accepted",
       brief: { objective: "Three-email sequence for office managers at 20 to 100 person NYC companies.", acceptanceCriteria: ["Each email under 90 words", "Different angle per email", "One low-friction CTA"], pinnedGoal: pinned(goalDemos, "Book 15 office-coffee demo calls") },
       createdAt: days(-5), startedAt: days(-5), completedAt: days(-4),
     },
     {
       id: t7, employee: JORDAN_ID, goalId: goalDemos, title: "Personalized outreach to a WeWork facilities lead",
-      taskType: "email", origin: "user_created", status: "review",
+      taskType: "email", origin: "user_created", status: "in_review",
       brief: { objective: "One personalized email to a named facilities lead.", acceptanceCriteria: ["Reference something specific about them", "Under 120 words"] },
       createdAt: days(-1), startedAt: days(-1),
     },
     {
       id: t8, employee: JORDAN_ID, goalId: goalDemos, title: "Build a prospect list of 50 NYC coworking spaces",
-      taskType: "report", origin: "proactive", status: "approved",
+      taskType: "report", origin: "proactive", status: "accepted",
       brief: { objective: "Research 50 coworking and startup offices with headcount and contact.", acceptanceCriteria: ["50 rows", "Decision-maker role per row"] },
       createdAt: days(-3), startedAt: days(-3), completedAt: days(-1),
     },
     {
       id: t9, employee: JORDAN_ID, goalId: goalDemos, title: "Follow-up email to last week's trial signups",
-      taskType: "email", origin: "user_created", status: "pending",
+      taskType: "email", origin: "user_created", status: "queued",
       brief: { objective: "Re-engage trial signups who have not placed a first order.", acceptanceCriteria: ["Under 100 words"] },
       createdAt: hours(-20), scheduledAt: hours(8),
     },
@@ -338,19 +316,19 @@ async function seed() {
     },
     {
       id: t11, employee: SAM_ID, goalId: goalResponse, title: "Write FAQ: how to adjust grind size",
-      taskType: "faq", origin: "collaboration", status: "approved",
+      taskType: "faq", origin: "collaboration", status: "accepted",
       brief: { objective: "Step-by-step FAQ for adjusting grind on the new burr setting.", acceptanceCriteria: ["Numbered steps", "Direct answer first"] },
       createdAt: days(-3), startedAt: days(-3), completedAt: days(-2),
     },
     {
       id: t12, employee: SAM_ID, goalId: goalResponse, title: "Draft response to shipping-delay complaints",
-      taskType: "faq", origin: "proactive", status: "review",
+      taskType: "faq", origin: "proactive", status: "in_review",
       brief: { objective: "A reusable reply for the carrier delay affecting the Northeast.", acceptanceCriteria: ["Own the delay", "Give a realistic window"] },
       createdAt: days(-1), startedAt: hours(-18),
     },
     {
       id: t13, employee: SAM_ID, goalId: goalResponse, title: "Reply to an escalated refund request",
-      taskType: "custom", origin: "user_created", status: "revision",
+      taskType: "custom", origin: "user_created", status: "revising",
       brief: { objective: "Reply to a customer asking for a full refund on a stale bag.", acceptanceCriteria: ["Empathetic", "Offer replacement or refund"] },
       createdAt: days(-2), startedAt: days(-2),
     },
@@ -368,7 +346,7 @@ async function seed() {
       taskType: t.taskType,
       origin: t.origin,
       status: t.status,
-      planApproved: t.status === "approved" || t.status === "published",
+      planApproved: t.status === "accepted" || t.status === "published",
       scheduledAt: t.scheduledAt ?? null,
       startedAt: t.startedAt ?? null,
       completedAt: t.completedAt ?? null,
@@ -438,7 +416,7 @@ async function seed() {
     {
       id: d1, taskId: t1, employee: ALEX_ID, type: "social_linkedin",
       title: "LinkedIn post: what is actually in your cup",
-      status: "approved", createdAt: days(-6), updatedAt: days(-6),
+      status: "accepted", createdAt: days(-6), updatedAt: days(-6),
       approvedAt: days(-6), approvalRationale: "Loved the named-lot detail. Approved with no edits.",
       content: {
         content: d1Body,
@@ -482,7 +460,7 @@ async function seed() {
     {
       id: d3, taskId: t3, employee: ALEX_ID, type: "report",
       title: "Teardown: Blue Bottle subscription",
-      status: "pending_review", createdAt: days(-2), updatedAt: days(-2),
+      status: "in_review", createdAt: days(-2), updatedAt: days(-2),
       content: {
         content: d3Body,
         citations: [
@@ -502,7 +480,7 @@ async function seed() {
     {
       id: d4, taskId: t4, employee: ALEX_ID, type: "email",
       title: "October subscriber newsletter",
-      status: "pending_review", createdAt: days(-1), updatedAt: days(-1),
+      status: "in_review", createdAt: days(-1), updatedAt: days(-1),
       content: {
         body:
           "Subject: a new Guji lot just landed\n\n" +
@@ -518,7 +496,7 @@ async function seed() {
     {
       id: d6, taskId: t6, employee: JORDAN_ID, type: "email",
       title: "Cold email: office coffee for Dana at Foundry Labs",
-      status: "approved", createdAt: days(-4), updatedAt: days(-4),
+      status: "accepted", createdAt: days(-4), updatedAt: days(-4),
       approvedAt: days(-4), approvalRationale: "Tight and specific. Good pain-led opener.",
       content: {
         body: d6Body,
@@ -535,7 +513,7 @@ async function seed() {
     {
       id: d7, taskId: t7, employee: JORDAN_ID, type: "email",
       title: "Outreach: WeWork facilities lead",
-      status: "pending_review", createdAt: days(-1), updatedAt: days(-1),
+      status: "in_review", createdAt: days(-1), updatedAt: days(-1),
       content: {
         body:
           "Subject: the coffee in your member lounges\n\n" +
@@ -550,7 +528,7 @@ async function seed() {
     {
       id: d8, taskId: t8, employee: JORDAN_ID, type: "report",
       title: "Prospect list: 50 NYC coworking and startup offices",
-      status: "approved", createdAt: days(-1), updatedAt: days(-1),
+      status: "accepted", createdAt: days(-1), updatedAt: days(-1),
       approvedAt: days(-1), approvalRationale: "Solid list. Headcounts and roles are what I needed.",
       content: {
         content:
@@ -585,7 +563,7 @@ async function seed() {
     {
       id: d11, taskId: t11, employee: SAM_ID, type: "faq",
       title: "FAQ: how to adjust your grind size",
-      status: "approved", createdAt: days(-2), updatedAt: days(-2),
+      status: "accepted", createdAt: days(-2), updatedAt: days(-2),
       approvedAt: days(-2), approvalRationale: "Clear steps. Ship it to the help center.",
       content: {
         content:
@@ -603,7 +581,7 @@ async function seed() {
     {
       id: d12, taskId: t12, employee: SAM_ID, type: "faq",
       title: "Reply template: shipping delay (Northeast carrier)",
-      status: "pending_review", createdAt: days(-1), updatedAt: days(-1),
+      status: "in_review", createdAt: days(-1), updatedAt: days(-1),
       content: {
         response:
           "Hi {{first_name}},\n\n" +
@@ -706,7 +684,7 @@ async function seed() {
     { aiEmployeeId: ALEX_ID, companyId: COMPANY_ID, checkInType: "post_approval_followup", taskId: t1, acknowledged: false, scheduledFor: hours(20), createdAt: days(-6), content: { deliverableId: d1, deliverableTitle: "LinkedIn post: what is actually in your cup", deliverableType: "social_linkedin", goalId: goalContentSeries, approvedAt: iso(-6), scheduledFor: hours(20).toISOString(), summary: "This post was approved with no edits. Want me to schedule it for Tuesday at 9am when your audience is most active?" } },
     { aiEmployeeId: JORDAN_ID, companyId: COMPANY_ID, checkInType: "post_approval_followup", taskId: t6, acknowledged: false, scheduledFor: hours(-2), createdAt: days(-4), content: { deliverableId: d6, deliverableTitle: "Cold email: office coffee for Dana at Foundry Labs", deliverableType: "email", goalId: goalDemos, approvedAt: iso(-4), scheduledFor: hours(-2).toISOString(), summary: "The Foundry Labs email is approved. Should I send it now, or hold for the rest of the 50-prospect batch to go together?" } },
     { aiEmployeeId: SAM_ID, companyId: COMPANY_ID, checkInType: "post_approval_followup", taskId: t11, acknowledged: false, scheduledFor: hours(40), createdAt: days(-2), content: { deliverableId: d11, deliverableTitle: "FAQ: how to adjust your grind size", deliverableType: "faq", goalId: null, approvedAt: iso(-2), scheduledFor: hours(40).toISOString(), summary: "The grind-size FAQ is approved. Want it published to the help center and linked from the grind macro?" } },
-    { aiEmployeeId: ALEX_ID, companyId: COMPANY_ID, checkInType: "daily_summary", taskId: null, acknowledged: true, response: "used", scheduledFor: days(-1), createdAt: days(-1), content: { headline: "Two posts approved, one teardown in review", summary: "Shipped the freshness blog and got the sourcing post approved. The Blue Bottle teardown is waiting on your review.", deliverableTitle: "Daily wrap-up", deliverableType: "summary", completedTasks: [{ taskId: t1, title: "Draft 3 LinkedIn posts on single-origin sourcing", status: "approved" }, { taskId: t2, title: "Write blog: the truth about coffee freshness dates", status: "published" }], highlights: ["Named-lot posts keep getting approved with no edits"], suggestedActions: ["Review the Blue Bottle teardown"] } },
+    { aiEmployeeId: ALEX_ID, companyId: COMPANY_ID, checkInType: "daily_summary", taskId: null, acknowledged: true, response: "used", scheduledFor: days(-1), createdAt: days(-1), content: { headline: "Two posts approved, one teardown in review", summary: "Shipped the freshness blog and got the sourcing post approved. The Blue Bottle teardown is waiting on your review.", deliverableTitle: "Daily wrap-up", deliverableType: "summary", completedTasks: [{ taskId: t1, title: "Draft 3 LinkedIn posts on single-origin sourcing", status: "accepted" }, { taskId: t2, title: "Write blog: the truth about coffee freshness dates", status: "published" }], highlights: ["Named-lot posts keep getting approved with no edits"], suggestedActions: ["Review the Blue Bottle teardown"] } },
   ]);
 
   await db.insert(chatMessages).values([
@@ -754,8 +732,6 @@ async function counts() {
   const tableMap: Record<string, { col: "companyId" | "tenantId"; table: any }> = {
     companies: { col: "companyId", table: companies },
     ai_employees: { col: "companyId", table: aiEmployees },
-    departments: { col: "companyId", table: departments },
-    functions: { col: "companyId", table: functions },
     goals: { col: "companyId", table: goals },
     tasks: { col: "companyId", table: tasks },
     deliverables: { col: "companyId", table: deliverables },

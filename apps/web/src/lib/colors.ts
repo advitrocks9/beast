@@ -54,28 +54,33 @@ const STATUS_META: Record<string, StatusMeta> = {
   in_progress: { label: "In progress", ...TEAL },
   active: { label: "Active", ...TEAL },
   running: { label: "Running", ...TEAL },
+  planning: { label: "Planning", ...TEAL },
+  revising: { label: "Revising", ...TEAL },
   // needs a human = amber ("your turn")
   pending: { label: "Pending", ...AMBER },
   waiting_review: { label: "Needs review", ...AMBER },
   needs_review: { label: "Needs review", ...AMBER },
-  review: { label: "In review", ...AMBER },
-  revision: { label: "Revision", ...AMBER },
+  plan_review: { label: "Plan review", ...AMBER },
+  in_review: { label: "In review", ...AMBER },
+  revised: { label: "Revised", ...AMBER },
   blocked: { label: "Blocked", ...AMBER },
   // success / terminal-good = green; published stays on-brand teal-deep (live)
   approved: { label: "Approved", ...GREEN },
+  accepted: { label: "Accepted", ...GREEN },
   completed: { label: "Completed", ...GREEN },
   done: { label: "Done", ...GREEN },
   published: { label: "Published", dot: BRAND_DEEP, bg: BRAND_LIGHT, fg: BRAND_DEEP },
   // failure = red
   rejected: { label: "Rejected", ...RED },
   failed: { label: "Failed", ...RED },
+  timed_out: { label: "Timed out", ...RED },
   error: { label: "Error", ...RED },
   // dormant = gray
   idle: { label: "Idle", ...GRAY },
   paused: { label: "Paused", ...GRAY },
   scheduled: { label: "Scheduled", ...GRAY },
   queued: { label: "Queued", ...GRAY },
-  draft: { label: "Draft", ...GRAY },
+  cancelled: { label: "Cancelled", ...GRAY },
 };
 
 const STATUS_FALLBACK: StatusMeta = { label: "Unknown", ...GRAY };

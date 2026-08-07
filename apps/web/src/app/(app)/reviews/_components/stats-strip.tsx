@@ -14,8 +14,8 @@ export function StatsStrip() {
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-      <Stat label="Pending" value={pendingCount} status="pending" />
-      <Stat label="Approved (7d)" value={approvedThisWeek} status="approved" />
+      <Stat label="In review" value={pendingCount} status="in_review" />
+      <Stat label="Accepted (7d)" value={approvedThisWeek} status="accepted" />
       <Stat label="Published (7d)" value={publishedThisWeek} status="published" />
       <Stat label="Rejected (7d)" value={rejectedThisWeek} status="rejected" />
     </div>

@@ -63,7 +63,7 @@ export default async function EmployeesIndexPage() {
           and(
             eq(deliverables.companyId, company!.id),
             inArray(deliverables.aiEmployeeId, ids),
-            inArray(deliverables.status, ["draft", "pending_review"]),
+            eq(deliverables.status, "in_review"),
           ),
         )
         .groupBy(deliverables.aiEmployeeId),
@@ -93,7 +93,7 @@ export default async function EmployeesIndexPage() {
             eq(deliverables.companyId, company!.id),
             inArray(deliverables.aiEmployeeId, ids),
             gte(deliverables.createdAt, windowStart),
-            inArray(deliverables.status, ["approved", "published", "revision", "rejected"]),
+            inArray(deliverables.status, ["accepted", "published", "revised", "rejected"]),
           ),
         )
         .groupBy(deliverables.aiEmployeeId, deliverables.status),
@@ -114,7 +114,7 @@ export default async function EmployeesIndexPage() {
         rejected: 0,
         approvalRate: null,
       };
-      const shipped = row.status === "approved" || row.status === "published"
+      const shipped = row.status === "accepted" || row.status === "published"
         ? existing.shipped + row.value
         : existing.shipped;
       const rejected = row.status === "rejected"
@@ -123,16 +123,16 @@ export default async function EmployeesIndexPage() {
       performanceByEmployee.set(row.id, { ...existing, shipped, rejected });
     }
 
-    // Approval rate: approved+published vs (approved+published+revision+rejected)
+    // Approval rate: accepted+published vs (accepted+published+revised+rejected)
     // over the same 30-day window. Rejections dilute the rate so a hire that
     // produces avoid-patterns is not flattered by the metric.
     const totalsByEmployee = new Map<string, { good: number; bad: number }>();
     for (const row of perfRows) {
       if (!row.id) continue;
       const totals = totalsByEmployee.get(row.id) ?? { good: 0, bad: 0 };
-      if (row.status === "approved" || row.status === "published") {
+      if (row.status === "accepted" || row.status === "published") {
         totals.good += row.value;
-      } else if (row.status === "revision" || row.status === "rejected") {
+      } else if (row.status === "revised" || row.status === "rejected") {
         totals.bad += row.value;
       }
       totalsByEmployee.set(row.id, totals);
@@ -319,9 +319,9 @@ function PerformanceRow({
     ratePct === null
       ? MUTED
       : ratePct >= 80
-        ? statusMeta("approved").fg
+        ? statusMeta("accepted").fg
         : ratePct >= 50
-          ? statusMeta("review").fg
+          ? statusMeta("in_review").fg
           : statusMeta("rejected").fg;
 
   return (

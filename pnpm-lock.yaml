@@ -50,9 +50,6 @@ importers:
       '@tanstack/react-query':
         specifier: ^5.0.0
         version: 5.96.2(react@19.2.4)
-      '@trigger.dev/react-hooks':
-        specifier: ^4.0.0
-        version: 4.4.3(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       '@trigger.dev/sdk':
         specifier: ^4.0.0
         version: 4.4.3(zod@3.25.76)
@@ -182,6 +179,9 @@ importers:
 
   packages/db:
     dependencies:
+      '@beast/shared':
+        specifier: workspace:*
+        version: link:../shared
       drizzle-orm:
         specifier: ^0.36.0
         version: 0.36.4(@opentelemetry/api@1.9.0)(@types/react@19.2.14)(postgres@3.4.8)(react@19.2.4)
@@ -1896,13 +1896,6 @@ packages:
     resolution: {integrity: sha512-4srm2UGoDEcHO29Lqp4Isioq+b6au0EjW9/pjYmzOSxXqGPFDjPquK0BnKYGHyAbKYxuBx8wr2T/ru+zbY0/Jg==}
     engines: {node: '>=18.20.0'}
 
-  '@trigger.dev/react-hooks@4.4.3':
-    resolution: {integrity: sha512-I7FsZUsBfC+mF26hYXpxA8szHv39/HJWC4t9WiFHRNx462/QezsIo1AHi8G1i4MjneKamQ+sh24ktfwTzcrr+Q==}
-    engines: {node: '>=18.20.0'}
-    peerDependencies:
-      react: ^18.0 || ^19.0 || ^19.0.0-rc
-      react-dom: ^18.0 || ^19.0 || ^19.0.0-rc
-
   '@trigger.dev/sdk@4.4.3':
     resolution: {integrity: sha512-ghJkak+PTBJJ9HiHMcnahJmzjsgCzYiIHu5Qj5R7I9q5LS6i7mkx169rB/tOE9HLadd4HSu3yYA5DrH4wXhZuw==}
     engines: {node: '>=18.20.0'}
@@ -3549,11 +3542,6 @@ packages:
 
   svix@1.88.0:
     resolution: {integrity: sha512-vm/JrrUd3bVyBE+3L33TIyVSs8gS5fYx7lrISvKlDJXTYX1ACH4REX8P1tHxsSKoZi/rvifM1t0XRc5Vc45THw==}
-
-  swr@2.3.4:
-    resolution: {integrity: sha512-bYd2lrhc+VarcpkgWclcUi92wYCpOgMws9Sd1hG1ntAu0NEy+14CbotuFjshBU2kt9rYj9TSmDcybpxpeTU1fg==}
-    peerDependencies:
-      react: ^16.11.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
   systeminformation@5.23.8:
     resolution: {integrity: sha512-Osd24mNKe6jr/YoXLLK3k8TMdzaxDffhpCxgkfgBHcapykIkd50HXThM3TCEuHO2pPuCsSx2ms/SunqhU5MmsQ==}
@@ -5671,17 +5659,6 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@trigger.dev/react-hooks@4.4.3(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
-    dependencies:
-      '@trigger.dev/core': 4.4.3
-      react: 19.2.4
-      react-dom: 19.2.4(react@19.2.4)
-      swr: 2.3.4(react@19.2.4)
-    transitivePeerDependencies:
-      - bufferutil
-      - supports-color
-      - utf-8-validate
-
   '@trigger.dev/sdk@4.4.3(zod@3.25.76)':
     dependencies:
       '@opentelemetry/api': 1.9.0
@@ -7298,12 +7275,6 @@ snapshots:
     dependencies:
       standardwebhooks: 1.0.0
       uuid: 10.0.0
-
-  swr@2.3.4(react@19.2.4):
-    dependencies:
-      dequal: 2.0.3
-      react: 19.2.4
-      use-sync-external-store: 1.6.0(react@19.2.4)
 
   systeminformation@5.23.8: {}
 

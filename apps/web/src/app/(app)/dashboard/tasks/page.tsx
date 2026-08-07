@@ -8,17 +8,16 @@ import { roleColor, statusMeta, BRAND, BRAND_LIGHT, BRAND_DEEP } from "@/lib/col
 import { TasksList, type TaskRow } from "./_components/tasks-list";
 
 const STATUS_GROUPS: Record<string, { label: string; statuses: string[]; status: string }> = {
-  in_flight: { label: "In flight", statuses: ["pending", "in_progress", "working"], status: "working" },
-  ready: { label: "Ready to review", statuses: ["review"], status: "review" },
-  done: { label: "Done", statuses: ["approved", "completed"], status: "approved" },
+  in_flight: { label: "In flight", statuses: ["queued", "planning", "plan_review", "running", "revising"], status: "running" },
+  ready: { label: "Ready to review", statuses: ["in_review"], status: "in_review" },
+  done: { label: "Done", statuses: ["accepted", "published"], status: "accepted" },
   rejected: { label: "Rejected", statuses: ["rejected"], status: "rejected" },
 };
 
 // Pill copy that intentionally diverges from the statusMeta default label; the
 // color always comes from statusMeta().
 const STATUS_LABELS: Record<string, string> = {
-  in_progress: "Working",
-  review: "Ready",
+  in_review: "Ready",
 };
 
 const VALID_FILTERS = ["all", "in_flight", "ready", "done", "rejected"] as const;
@@ -172,7 +171,7 @@ interface EmployeeRef {
   roleTitle?: string | null;
 }
 
-const IN_FLIGHT_STATUSES = new Set(["pending", "in_progress", "working", "planned"]);
+const IN_FLIGHT_STATUSES = new Set(["queued", "planning", "plan_review", "running", "revising"]);
 
 function serializeRows(
   taskRows: Array<{

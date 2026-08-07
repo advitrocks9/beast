@@ -1,28 +1,56 @@
-import { getClient, getModelId } from "../models";
+import { complete } from "../provider";
 import { storeEpisode } from "./episodic";
 import { db } from "@beast/db";
 import { ruleCandidates } from "@beast/db";
-import { eq, and, sql } from "drizzle-orm";
-import { embed } from "./embeddings";
+import { eq, and } from "drizzle-orm";
+import { diffWords, type WordDiff } from "./diff";
+import { upsertProceduralRule } from "./procedural";
 
-// ── Chip-to-signal mapping ──
+const PROMOTION_THRESHOLDS = {
+  tone: 3,
+  length: 3,
+  style: 3,
+  content: 3,
+  structure: 3,
+  pattern: 3,
+  positive: 2,
+  rationale: 2,
+  founder_directive: 0,
+} as const;
+
+export type SignalCategory = keyof typeof PROMOTION_THRESHOLDS;
+
+const CONFIDENCE_GATE = 0.6;
+
+function confidenceFrom(weightSum: number): number {
+  return 1 - Math.exp(-weightSum / 2);
+}
 
 interface Signal {
-  type: string;
+  category: SignalCategory;
   direction: string;
   weight: number;
 }
 
 const CHIP_TO_SIGNAL: Record<string, Signal> = {
-  too_formal: { type: "tone", direction: "make_casual", weight: 1.0 },
-  too_casual: { type: "tone", direction: "make_formal", weight: 1.0 },
-  too_long: { type: "length", direction: "shorten", weight: 1.0 },
-  make_punchier: { type: "style", direction: "punchier", weight: 0.8 },
-  add_data: { type: "content", direction: "add_evidence", weight: 0.8 },
-  stronger_cta: { type: "structure", direction: "stronger_cta", weight: 0.8 },
-  love_this: { type: "positive", direction: "repeat", weight: 1.5 },
-  different_angle: { type: "content", direction: "reframe", weight: 0.8 },
+  too_formal: { category: "tone", direction: "make_casual", weight: 1.0 },
+  too_casual: { category: "tone", direction: "make_formal", weight: 1.0 },
+  too_long: { category: "length", direction: "shorten", weight: 1.0 },
+  make_punchier: { category: "style", direction: "punchier", weight: 0.8 },
+  add_data: { category: "content", direction: "add_evidence", weight: 0.8 },
+  stronger_cta: { category: "structure", direction: "stronger_cta", weight: 0.8 },
+  love_this: { category: "positive", direction: "repeat", weight: 1.5 },
+  different_angle: { category: "content", direction: "reframe", weight: 0.8 },
 };
+
+export interface CandidateResult {
+  id: string;
+  title: string;
+  description: string;
+  confidence: number;
+  distinctReviewCount: number;
+  promotedRuleId: string | null;
+}
 
 // ── Task Completion Extraction ──
 
@@ -41,15 +69,11 @@ interface TaskCompletionInput {
  * Runs async after task completion - does not block the user.
  */
 export async function extractFromTaskCompletion(input: TaskCompletionInput): Promise<string> {
-  const client = getClient();
-  const completion = await client.messages.create({
-    model: getModelId("haiku"),
-    max_tokens: 512,
+  const raw = await complete({
+    tier: "fast",
+    purpose: "task_completion_extraction",
     system: "Extract structured learning from a completed AI task. Return JSON only.",
-    messages: [
-      {
-        role: "user",
-        content: `Task type: ${input.taskType}
+    prompt: `Task type: ${input.taskType}
 Task title: ${input.taskTitle}
 Approval status: ${input.status}
 Output (first 2000 chars): ${input.outputText.slice(0, 2000)}
@@ -63,11 +87,8 @@ Extract:
 }
 
 If status is rejected, focus on what NOT to do. Return empty arrays if nothing significant.`,
-      },
-    ],
   });
 
-  const raw = completion.content[0]?.type === "text" ? completion.content[0].text : "{}";
   let parsed: Record<string, unknown>;
   try {
     parsed = JSON.parse(raw.replace(/^```json?\s*/i, "").replace(/\s*```$/, ""));
@@ -107,67 +128,55 @@ interface FeedbackInput {
   editedText?: string;
   chips: string[];
   annotationText?: string;
+  reviewId: string;
 }
 
 /**
  * Three-step feedback extraction:
- * 1. Diff analysis (no LLM)
+ * 1. Word-level LCS diff (no LLM)
  * 2. Chip → signal mapping (no LLM)
  * 3. Implicit preference extraction via LLM (CIPHER-style)
  */
 export async function extractFromFeedback(input: FeedbackInput): Promise<{
   episodeId: string;
-  signals: Signal[];
+  diff: WordDiff | null;
+  candidates: CandidateResult[];
 }> {
   const signals: Signal[] = [];
 
-  // Step 1: Diff analysis
-  let diffSummary = "";
-  let editDistance = 0;
+  let diff: WordDiff | null = null;
   if (input.editedText && input.editedText !== input.originalText) {
-    editDistance = normalizedEditDistance(input.originalText, input.editedText);
+    diff = diffWords(input.originalText, input.editedText);
     const lengthDelta = input.editedText.length - input.originalText.length;
-    diffSummary = `Edit distance: ${(editDistance * 100).toFixed(0)}%. Length ${lengthDelta > 0 ? "increased" : "decreased"} by ${Math.abs(lengthDelta)} chars.`;
-
     if (lengthDelta < -50) {
-      signals.push({ type: "length", direction: "shorten", weight: 0.5 });
+      signals.push({ category: "length", direction: "shorten", weight: 0.5 });
     }
     if (lengthDelta > 100) {
-      signals.push({ type: "length", direction: "expand", weight: 0.5 });
+      signals.push({ category: "length", direction: "expand", weight: 0.5 });
     }
   }
 
-  // Step 2: Chip → signal
   for (const chip of input.chips) {
     const signal = CHIP_TO_SIGNAL[chip];
     if (signal) signals.push(signal);
   }
 
-  // Step 3: Implicit preference extraction (LLM)
   let inferredPreference = "";
-  if (input.editedText && editDistance > 0.05) {
-    const client = getClient();
-    const completion = await client.messages.create({
-      model: getModelId("haiku"),
-      max_tokens: 256,
+  if (input.editedText && diff && diff.magnitude > 0.05) {
+    inferredPreference = await complete({
+      tier: "fast",
+      purpose: "edit_preference_inference",
       system: "Analyze user edits to infer implicit preferences. Be specific. One sentence.",
-      messages: [
-        {
-          role: "user",
-          content: `Task type: ${input.taskType}
+      prompt: `Task type: ${input.taskType}
 Chips applied: ${input.chips.join(", ") || "none"}
 ${input.annotationText ? `Written feedback: ${input.annotationText}` : ""}
 Original (first 500): ${input.originalText.slice(0, 500)}
 Edited (first 500): ${input.editedText.slice(0, 500)}
 
 What implicit preference does this edit pattern reveal?`,
-        },
-      ],
     });
-    inferredPreference = completion.content[0]?.type === "text" ? completion.content[0].text : "";
   }
 
-  // Store as episodic memory
   const feedbackType = input.editedText ? "edit" : input.chips.length > 0 ? "chip_only" : "annotation";
   const summary = [
     `Feedback on ${input.taskType}: ${feedbackType}.`,
@@ -187,147 +196,173 @@ What implicit preference does this edit pattern reveal?`,
       taskType: input.taskType,
       chips: input.chips,
       annotationText: input.annotationText,
-      diffSummary,
-      editDistance,
+      editMagnitude: diff?.magnitude ?? 0,
       inferredPreference,
       signals,
+      reviewId: input.reviewId,
     },
     taskId: input.taskId,
     salienceScore: feedbackType === "edit" ? 0.8 : 0.6,
   });
 
+  const byId = new Map<string, CandidateResult>();
   for (const signal of signals) {
-    await accumulateSignal({
+    const result = await accumulateSignal({
       agentId: input.agentId,
       tenantId: input.tenantId,
-      signal,
-      taskType: input.taskType,
-      episodeId,
+      category: signal.category,
+      ruleType: signal.category === "positive" ? "approved_example" : "style_rule",
+      taskScope: [input.taskType],
+      title: `${signal.direction} for ${input.taskType}`,
+      description: `Signal: ${signal.direction} (${signal.category})`,
+      weight: signal.weight,
+      reviewId: input.reviewId,
+      episodeIds: [episodeId],
     });
+    byId.set(result.id, result);
   }
 
-  return { episodeId, signals };
+  return { episodeId, diff, candidates: [...byId.values()] };
 }
 
 // ── Signal Accumulation ──
 
-const PROMOTION_THRESHOLDS: Record<string, number> = {
-  tone: 3,
-  length: 3,
-  style: 3,
-  content: 3,
-  structure: 3,
-  brand: 1,
-  positive: 2,
-};
-
-interface AccumulateInput {
+export interface AccumulateSignalInput {
   agentId: string;
   tenantId: string;
-  signal: Signal;
-  taskType: string;
-  episodeId: string;
+  category: SignalCategory;
+  ruleType: string;
+  taskScope: string[];
+  title: string;
+  description: string;
+  weight: number;
+  reviewId: string;
+  episodeIds?: string[];
+  examples?: { good?: string[]; bad?: string[] };
 }
 
 /**
- * Accumulate a signal into rule_candidates.
- * When threshold is met, promotes to procedural memory.
+ * The single entry point into the learning loop. Every signal lands on a
+ * rule candidate; a candidate promotes to procedural memory only when
+ * distinctReviewCount >= threshold(category) AND confidence >= 0.6.
+ * Nothing else may write procedural_memories.
  */
-async function accumulateSignal(input: AccumulateInput): Promise<void> {
-  const candidateTitle = `${input.signal.direction} for ${input.taskType}`;
-
-  // Check if a matching candidate exists
+export async function accumulateSignal(input: AccumulateSignalInput): Promise<CandidateResult> {
   const existing = await db.query.ruleCandidates.findFirst({
     where: and(
       eq(ruleCandidates.agentId, input.agentId),
       eq(ruleCandidates.tenantId, input.tenantId),
-      eq(ruleCandidates.title, candidateTitle),
+      eq(ruleCandidates.title, input.title),
     ),
   });
 
-  if (existing && !existing.promotedToId) {
-    // Increment signal count
-    const newCount = (existing.signalCount ?? 0) + 1;
-    const newWeight = (existing.signalWeight ?? 0) + input.signal.weight;
-    const episodes = [...((existing.sourceEpisodes as string[]) ?? []), input.episodeId];
+  if (existing?.promotedToId) {
+    return {
+      id: existing.id,
+      title: existing.title,
+      description: existing.description,
+      confidence: existing.confidence,
+      distinctReviewCount: existing.distinctReviewCount,
+      promotedRuleId: existing.promotedToId,
+    };
+  }
 
-    await db
+  let candidate: NonNullable<typeof existing>;
+  if (existing) {
+    const seenReviews = existing.sourceReviewIds ?? [];
+    const isNewReview = !seenReviews.includes(input.reviewId);
+    const signalWeight = existing.signalWeight + input.weight;
+    const [updated] = await db
       .update(ruleCandidates)
       .set({
-        signalCount: newCount,
-        signalWeight: newWeight,
-        sourceEpisodes: episodes,
+        signalCount: existing.signalCount + 1,
+        signalWeight,
+        confidence: confidenceFrom(signalWeight),
+        distinctReviewCount: existing.distinctReviewCount + (isNewReview ? 1 : 0),
+        sourceReviewIds: isNewReview ? [...seenReviews, input.reviewId] : seenReviews,
+        sourceEpisodes: [...(existing.sourceEpisodes ?? []), ...(input.episodeIds ?? [])],
         updatedAt: new Date(),
       })
-      .where(eq(ruleCandidates.id, existing.id));
-
-    // Check if threshold is met for promotion
-    const threshold = PROMOTION_THRESHOLDS[input.signal.type] ?? 3;
-    if (newCount >= threshold) {
-      await promoteToProceduralMemory({
-        candidateId: existing.id,
+      .where(eq(ruleCandidates.id, existing.id))
+      .returning();
+    if (!updated) throw new Error(`rule candidate ${existing.id} vanished mid-update`);
+    candidate = updated;
+  } else {
+    const [inserted] = await db
+      .insert(ruleCandidates)
+      .values({
         agentId: input.agentId,
         tenantId: input.tenantId,
-        title: candidateTitle,
-        description: `Auto-promoted rule: ${input.signal.direction}. Accumulated ${newCount} signals from feedback.`,
-        ruleType: input.signal.type === "positive" ? "approved_example" : "style_rule",
-        taskScope: [input.taskType],
-        sourceEpisodes: episodes,
-        signalCount: newCount,
-        signalWeight: newWeight,
-      });
-    }
-  } else if (!existing) {
-    // Create new candidate
-    await db.insert(ruleCandidates).values({
-      agentId: input.agentId,
-      tenantId: input.tenantId,
-      ruleType: input.signal.type === "positive" ? "approved_example" : "style_rule",
-      taskScope: [input.taskType],
-      title: candidateTitle,
-      description: `Signal: ${input.signal.direction} (${input.signal.type})`,
-      signalCount: 1,
-      signalWeight: input.signal.weight,
-      sourceEpisodes: [input.episodeId],
-    });
+        ruleType: input.ruleType,
+        taskScope: input.taskScope,
+        title: input.title,
+        description: input.description,
+        signalCount: 1,
+        signalWeight: input.weight,
+        confidence: confidenceFrom(input.weight),
+        distinctReviewCount: 1,
+        sourceReviewIds: [input.reviewId],
+        sourceEpisodes: input.episodeIds ?? [],
+      })
+      .returning();
+    if (!inserted) throw new Error("rule candidate insert returned no row");
+    candidate = inserted;
   }
+
+  let promotedRuleId: string | null = null;
+  if (
+    candidate.distinctReviewCount >= PROMOTION_THRESHOLDS[input.category] &&
+    candidate.confidence >= CONFIDENCE_GATE
+  ) {
+    promotedRuleId = await promoteCandidate(candidate, input.examples);
+  }
+
+  return {
+    id: candidate.id,
+    title: candidate.title,
+    description: candidate.description,
+    confidence: candidate.confidence,
+    distinctReviewCount: candidate.distinctReviewCount,
+    promotedRuleId,
+  };
 }
 
-// ── Promotion to Procedural Memory ──
-
-interface PromoteInput {
-  candidateId: string;
-  agentId: string;
-  tenantId: string;
-  title: string;
-  description: string;
-  ruleType: string;
-  taskScope: string[];
-  sourceEpisodes: string[];
-  signalCount: number;
-  signalWeight: number;
-}
-
-async function promoteToProceduralMemory(input: PromoteInput): Promise<void> {
-  const { upsertProceduralRule } = await import("./procedural");
-
+async function promoteCandidate(
+  candidate: {
+    id: string;
+    agentId: string;
+    tenantId: string;
+    ruleType: string;
+    taskScope: string[] | null;
+    title: string;
+    description: string;
+    sourceEpisodes: string[] | null;
+    signalCount: number;
+    signalWeight: number;
+    confidence: number;
+  },
+  examples?: { good?: string[]; bad?: string[] },
+): Promise<string> {
   const ruleId = await upsertProceduralRule({
-    agentId: input.agentId,
-    tenantId: input.tenantId,
-    ruleType: input.ruleType,
-    title: input.title,
-    description: input.description,
-    taskScope: input.taskScope,
-    sourceEpisodes: input.sourceEpisodes,
-    signalCount: input.signalCount,
-    signalWeight: input.signalWeight,
+    agentId: candidate.agentId,
+    tenantId: candidate.tenantId,
+    ruleType: candidate.ruleType,
+    title: candidate.title,
+    description: candidate.description,
+    taskScope: candidate.taskScope ?? [],
+    examples,
+    sourceEpisodes: candidate.sourceEpisodes ?? [],
+    signalCount: candidate.signalCount,
+    signalWeight: candidate.signalWeight,
+    confidence: candidate.confidence,
   });
 
-  // Mark candidate as promoted
   await db
     .update(ruleCandidates)
     .set({ promotedToId: ruleId, updatedAt: new Date() })
-    .where(eq(ruleCandidates.id, input.candidateId));
+    .where(eq(ruleCandidates.id, candidate.id));
+
+  return ruleId;
 }
 
 // ── Approval Rationale Extraction ──
@@ -340,37 +375,30 @@ interface RationaleInput {
   rationale: string;
   outputText: string;
   episodeId?: string;
+  reviewId: string;
 }
 
 // Lowered from 20 to 10 chars so short founder verdicts ("wrong tone",
-// "too pushy", "off-brand voice") still produce a procedural rule. The
-// downstream Haiku call distils into a 20-word imperative regardless of
-// input length, so a short rationale yields a clean rule.
+// "too pushy") still produce a rule candidate.
 const MIN_RATIONALE_CHARS = 10;
 const RATIONALE_SIGNAL_WEIGHT = 1.5;
 
 /**
- * Founder writes a rationale explaining why they approved a deliverable.
- * Run that text through Haiku to extract a single "always do" or "never do"
- * preference, then upsert it as a rule candidate with high signal weight
- * (explicit founder intent ranks higher than diff-inferred preferences).
+ * Distil a founder's approval/rejection rationale into a single "always" or
+ * "never" preference and accumulate it as a high-weight rule candidate.
  */
 export async function extractRuleFromRationale(input: RationaleInput): Promise<{
-  candidateId: string | null;
+  candidate: CandidateResult;
   ruleType: "do" | "dont";
   ruleText: string;
 } | null> {
   if (input.rationale.trim().length < MIN_RATIONALE_CHARS) return null;
 
-  const client = getClient();
-  const completion = await client.messages.create({
-    model: getModelId("haiku"),
-    max_tokens: 256,
+  const raw = await complete({
+    tier: "fast",
+    purpose: "rationale_rule_extraction",
     system: "Distil a founder's approval rationale into a single procedural rule for an AI employee. Return JSON only.",
-    messages: [
-      {
-        role: "user",
-        content: `Task type: ${input.taskType}
+    prompt: `Task type: ${input.taskType}
 Approved output (first 500 chars): ${input.outputText.slice(0, 500)}
 Founder rationale: ${input.rationale.slice(0, 800)}
 
@@ -383,11 +411,8 @@ Extract one rule the AI employee should follow on similar tasks.
 }
 
 Return null fields if no concrete rule can be extracted.`,
-      },
-    ],
   });
 
-  const raw = completion.content[0]?.type === "text" ? completion.content[0].text : "{}";
   let parsed: { rule_type?: string; rule_text?: string; applies_to?: string };
   try {
     parsed = JSON.parse(raw.replace(/^```json?\s*/i, "").replace(/\s*```$/, ""));
@@ -398,76 +423,30 @@ Return null fields if no concrete rule can be extracted.`,
   if (!parsed.rule_text || !parsed.rule_type) return null;
   const ruleType = parsed.rule_type === "dont" ? "dont" : "do";
   const ruleText = parsed.rule_text.slice(0, 200);
-  const scope = parsed.applies_to === "all output for this employee"
-    ? ["all"]
-    : [input.taskType];
+  const scope = parsed.applies_to === "all output for this employee" ? ["all"] : [input.taskType];
 
-  const candidateTitle = `${ruleType === "do" ? "Always" : "Never"}: ${ruleText.slice(0, 80)}`;
-  const sourceEpisodes = input.episodeId ? [input.episodeId] : [];
-
-  const existing = await db.query.ruleCandidates.findFirst({
-    where: and(
-      eq(ruleCandidates.agentId, input.agentId),
-      eq(ruleCandidates.tenantId, input.tenantId),
-      eq(ruleCandidates.title, candidateTitle),
-    ),
+  const candidate = await accumulateSignal({
+    agentId: input.agentId,
+    tenantId: input.tenantId,
+    category: "rationale",
+    ruleType: ruleType === "do" ? "style_rule" : "avoid_pattern",
+    taskScope: scope,
+    title: `${ruleType === "do" ? "Always" : "Never"}: ${ruleText.slice(0, 80)}`,
+    description: `Founder rationale: ${ruleText}`,
+    weight: RATIONALE_SIGNAL_WEIGHT,
+    reviewId: input.reviewId,
+    episodeIds: input.episodeId ? [input.episodeId] : [],
   });
 
-  if (existing && !existing.promotedToId) {
-    const newCount = (existing.signalCount ?? 0) + 1;
-    const newWeight = (existing.signalWeight ?? 0) + RATIONALE_SIGNAL_WEIGHT;
-    const episodes = [...((existing.sourceEpisodes as string[]) ?? []), ...sourceEpisodes];
-    await db
-      .update(ruleCandidates)
-      .set({ signalCount: newCount, signalWeight: newWeight, sourceEpisodes: episodes, updatedAt: new Date() })
-      .where(eq(ruleCandidates.id, existing.id));
-
-    if (newCount >= 2) {
-      const { upsertProceduralRule } = await import("./procedural");
-      const ruleId = await upsertProceduralRule({
-        agentId: input.agentId,
-        tenantId: input.tenantId,
-        ruleType: ruleType === "do" ? "style_rule" : "avoid_pattern",
-        title: candidateTitle,
-        description: `Founder rationale: ${ruleText}`,
-        taskScope: scope,
-        sourceEpisodes: episodes,
-        signalCount: newCount,
-        signalWeight: newWeight,
-      });
-      await db
-        .update(ruleCandidates)
-        .set({ promotedToId: ruleId, updatedAt: new Date() })
-        .where(eq(ruleCandidates.id, existing.id));
-    }
-    return { candidateId: existing.id, ruleType, ruleText };
-  }
-
-  if (!existing) {
-    const inserted = await db
-      .insert(ruleCandidates)
-      .values({
-        agentId: input.agentId,
-        tenantId: input.tenantId,
-        ruleType: ruleType === "do" ? "style_rule" : "avoid_pattern",
-        taskScope: scope,
-        title: candidateTitle,
-        description: `Founder rationale: ${ruleText}`,
-        signalCount: 1,
-        signalWeight: RATIONALE_SIGNAL_WEIGHT,
-        sourceEpisodes,
-      })
-      .returning({ id: ruleCandidates.id });
-    return { candidateId: inserted[0]?.id ?? null, ruleType, ruleText };
-  }
-
-  return { candidateId: existing.id, ruleType, ruleText };
+  return { candidate, ruleType, ruleText };
 }
 
-// ── Few-shot Calibration ──
+// ── Approve-without-edits ──
 
 /**
- * Store an approved deliverable as a canonical example for its task type.
+ * A clean approve corroborates the "repeat this" candidate for the task
+ * type (same candidate the love_this chip feeds). One approve never
+ * promotes; the second distinct review clears the positive threshold.
  */
 export async function storeApprovedExample(input: {
   agentId: string;
@@ -476,51 +455,52 @@ export async function storeApprovedExample(input: {
   taskTitle: string;
   outputText: string;
   taskId: string;
-}): Promise<void> {
-  const { upsertProceduralRule } = await import("./procedural");
-
-  await upsertProceduralRule({
+  reviewId: string;
+}): Promise<CandidateResult> {
+  return accumulateSignal({
     agentId: input.agentId,
     tenantId: input.tenantId,
+    category: "positive",
     ruleType: "approved_example",
-    title: `Approved: ${input.taskTitle}`,
-    description: `This ${input.taskType} was approved without edits. Use as reference for quality and style.`,
     taskScope: [input.taskType],
-    examples: {
-      good: [input.outputText.slice(0, 2000)],
-    },
-    sourceEpisodes: [],
-    signalCount: 1,
-    signalWeight: 2.0,
+    title: `repeat for ${input.taskType}`,
+    description: `Approved without edits; use as reference for ${input.taskType} quality and style.`,
+    weight: 2.0,
+    reviewId: input.reviewId,
+    examples: { good: [input.outputText.slice(0, 2000)] },
   });
 }
 
-// ── Utility: Normalized edit distance ──
+// ── Founder-authored rules ──
 
-function normalizedEditDistance(a: string, b: string): number {
-  if (a === b) return 0;
-  const maxLen = Math.max(a.length, b.length);
-  if (maxLen === 0) return 0;
-
-  // Simple length-based approximation for performance
-  // Full Levenshtein is expensive for long texts
-  const lenDiff = Math.abs(a.length - b.length);
-  const charOverlap = countCharOverlap(a, b);
-  return 1 - charOverlap / maxLen + lenDiff / maxLen / 2;
-}
-
-function countCharOverlap(a: string, b: string): number {
-  const aChars = new Map<string, number>();
-  for (const c of a) {
-    aChars.set(c, (aChars.get(c) ?? 0) + 1);
-  }
-  let overlap = 0;
-  for (const c of b) {
-    const count = aChars.get(c);
-    if (count && count > 0) {
-      overlap++;
-      aChars.set(c, count - 1);
-    }
-  }
-  return overlap;
+/**
+ * Explicit founder intent (manual rule, hiring brief) needs no
+ * corroboration: category founder_directive has threshold 0, so the
+ * candidate promotes through the standard gate on creation.
+ */
+export async function seedFounderRule(input: {
+  agentId: string;
+  tenantId: string;
+  ruleType: string;
+  title: string;
+  description: string;
+  taskScope: string[];
+  weight?: number;
+  examples?: { good?: string[]; bad?: string[] };
+}): Promise<{ candidateId: string; ruleId: string }> {
+  const result = await accumulateSignal({
+    agentId: input.agentId,
+    tenantId: input.tenantId,
+    category: "founder_directive",
+    ruleType: input.ruleType,
+    taskScope: input.taskScope,
+    title: input.title,
+    description: input.description,
+    weight: input.weight ?? 2.0,
+    reviewId: crypto.randomUUID(),
+    examples: input.examples,
+  });
+  // weight >= 2.0 puts confidence at >= 0.63, past the 0.6 gate
+  if (!result.promotedRuleId) throw new Error(`founder rule did not promote: ${result.title}`);
+  return { candidateId: result.id, ruleId: result.promotedRuleId };
 }

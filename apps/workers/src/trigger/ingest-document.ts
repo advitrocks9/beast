@@ -2,6 +2,7 @@ import { task } from "@trigger.dev/sdk";
 import { eq } from "drizzle-orm";
 import { db, uploadedFiles, knowledgeItems, knowledgeEmbeddings } from "@beast/db";
 import { chunkText, embedBatch } from "@beast/ai";
+import { env } from "@beast/shared/env";
 
 interface IngestPayload {
   fileId: string;
@@ -178,7 +179,7 @@ export const ingestDocumentTask = task({
 async function extractViaUnstructured(
   payload: IngestPayload,
 ): Promise<{ text: string; pageCount: number | null } | { error: string }> {
-  const apiKey = process.env.UNSTRUCTURED_API_KEY;
+  const apiKey = env.UNSTRUCTURED_API_KEY;
   if (!apiKey) {
     return { error: "unstructured_not_configured" };
   }

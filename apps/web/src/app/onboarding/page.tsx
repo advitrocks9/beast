@@ -2,9 +2,8 @@ import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { createClient } from "@/lib/supabase/server";
 import { db } from "@beast/db";
-import { companies, knowledgeItems, departments, functions } from "@beast/db";
+import { companies, knowledgeItems } from "@beast/db";
 import { OnboardingShell } from "./_components/onboarding-shell";
-import { FunctionMapperShell } from "./_components/function-mapper-shell";
 import { HireEmployeesShell } from "./_components/hire-employees-shell";
 
 const CATEGORY_WEIGHTS: Record<string, number> = {
@@ -20,29 +19,26 @@ const CATEGORY_WEIGHTS: Record<string, number> = {
 
 const ALL_CATEGORIES = Object.keys(CATEGORY_WEIGHTS);
 
-const ROLE_DESCRIPTIONS: Record<string, string> = {
-  marketing: "Writes blog posts, social media content, newsletters. Energetic and data-driven.",
-  sales: "Drafts outreach emails, sequences, proposals. Direct, warm, and consultative.",
-  support: "Handles ticket responses, FAQ articles, KB updates. Calm, empathetic, thorough.",
-};
-
-const ROLE_NAMES: Record<string, string> = {
-  marketing: "Alex",
-  sales: "Jordan",
-  support: "Sam",
-};
-
-const ROLE_TITLES: Record<string, string> = {
-  marketing: "Marketing Manager",
-  sales: "SDR (Sales Development Rep)",
-  support: "Support Lead",
-};
-
-const DEPT_TO_ROLE: Record<string, string> = {
-  Marketing: "marketing",
-  Sales: "sales",
-  Support: "support",
-};
+const EMPLOYEE_OPTIONS = [
+  {
+    roleType: "marketing" as const,
+    name: "Alex",
+    roleTitle: "Marketing Manager",
+    description: "Writes blog posts, social media content, newsletters. Energetic and data-driven.",
+  },
+  {
+    roleType: "sales" as const,
+    name: "Jordan",
+    roleTitle: "SDR (Sales Development Rep)",
+    description: "Drafts outreach emails, sequences, proposals. Direct, warm, and consultative.",
+  },
+  {
+    roleType: "support" as const,
+    name: "Sam",
+    roleTitle: "Support Lead",
+    description: "Handles ticket responses, FAQ articles, KB updates. Calm, empathetic, thorough.",
+  },
+];
 
 export default async function OnboardingPage() {
   const supabase = await createClient();
@@ -70,63 +66,15 @@ export default async function OnboardingPage() {
     redirect("/dashboard");
   }
 
-  // Step 2: Function mapping
-  if (company.onboardingStatus === "functions") {
-    return <FunctionMapperShell companyName={company.name} />;
-  }
-
-  // Step 3: Hire employees
   if (company.onboardingStatus === "hiring") {
-    const depts = await db.query.departments.findMany({
-      where: eq(departments.companyId, company.id),
-    });
-
-    const allFunctions = await db.query.functions.findMany({
-      where: eq(functions.companyId, company.id),
-    });
-
-    // Build employee options based on departments and their AI functions
-    const employeeOptions = depts
-      .map((dept) => {
-        const roleType = DEPT_TO_ROLE[dept.name];
-        if (!roleType) return null;
-
-        const deptFunctions = allFunctions
-          .filter((f) => f.departmentId === dept.id)
-          .map((f) => ({
-            id: f.id,
-            name: f.name,
-            departmentName: dept.name,
-            mode: f.mode,
-          }));
-
-        return {
-          roleType: roleType as "marketing" | "sales" | "support",
-          name: ROLE_NAMES[roleType]!,
-          roleTitle: ROLE_TITLES[roleType]!,
-          description: ROLE_DESCRIPTIONS[roleType]!,
-          color: roleType,
-          functions: deptFunctions,
-        };
-      })
-      .filter(Boolean) as Array<{
-        roleType: "marketing" | "sales" | "support";
-        name: string;
-        roleTitle: string;
-        description: string;
-        color: string;
-        functions: Array<{ id: string; name: string; departmentName: string; mode: string }>;
-      }>;
-
     return (
       <HireEmployeesShell
         companyName={company.name}
-        employeeOptions={employeeOptions}
+        employeeOptions={EMPLOYEE_OPTIONS}
       />
     );
   }
 
-  // Step 1: Interview (default for 'started' and 'interview')
   const items = await db.query.knowledgeItems.findMany({
     where: eq(knowledgeItems.companyId, company.id),
     columns: { category: true },

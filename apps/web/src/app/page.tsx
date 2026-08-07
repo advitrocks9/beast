@@ -49,7 +49,6 @@ export default async function Home() {
         <TeamSection />
         <HowItWorks />
         <Differentiators />
-        <PricingTeaser />
         <FooterCta />
         <Footer />
       </main>
@@ -134,7 +133,6 @@ function TeamSection() {
         "Cold email drafts pinned to a goal",
       ],
       hookline: "Tell me a competitor and I will start a teardown.",
-      tier: "Starter ($99)",
     },
     {
       name: "Jordan",
@@ -145,7 +143,6 @@ function TeamSection() {
         "Pipeline updates against weekly targets",
       ],
       hookline: "Drop me a list of accounts and I will run the first touch.",
-      tier: "Team ($299)",
     },
     {
       name: "Sam",
@@ -156,7 +153,6 @@ function TeamSection() {
         "Escalates anything above the autonomy line",
       ],
       hookline: "Forward me your support inbox and I will start replying.",
-      tier: "Business ($499)",
     },
   ];
 
@@ -194,9 +190,6 @@ function TeamSection() {
                   </li>
                 ))}
               </ul>
-              <p className="mt-5 text-xs text-text-muted">
-                Available on {member.tier}
-              </p>
             </GlassCard>
           ))}
         </div>
@@ -283,31 +276,6 @@ function Differentiators() {
               <p className="mt-2 text-sm text-text-secondary">{d.body}</p>
             </GlassCard>
           ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function PricingTeaser() {
-  return (
-    <section className="border-t border-gray-100 bg-white px-6 py-20">
-      <div className="mx-auto max-w-3xl text-center">
-        <h2 className="font-(--font-display) text-3xl font-bold tracking-tight">
-          Three tiers. Flat monthly.
-        </h2>
-        <p className="mx-auto mt-4 max-w-xl text-base text-text-secondary">
-          $99 for Alex. $299 to add Jordan or Sam. $499 for the full team plus
-          per-function autonomy controls. No credits, no per-task fees, no
-          surprise bills.
-        </p>
-        <div className="mt-8">
-          <Link
-            href="/pricing"
-            className="inline-block rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-medium text-black hover:bg-gray-50"
-          >
-            See full pricing
-          </Link>
         </div>
       </div>
     </section>

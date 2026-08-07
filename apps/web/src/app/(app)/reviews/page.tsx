@@ -23,7 +23,7 @@ export default async function ReviewQueuePage() {
     db.query.deliverables.findMany({
       where: and(
         eq(deliverables.companyId, company!.id),
-        inArray(deliverables.status, ["draft", "pending_review", "review"]),
+        eq(deliverables.status, "in_review"),
       ),
       orderBy: (d, { desc }) => [desc(d.createdAt)],
     }),

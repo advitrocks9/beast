@@ -8,9 +8,10 @@ import { GlassCard } from "@beast/ui";
 import { PlanApprovalButtons } from "./_components/plan-approval-buttons";
 import { TaskComments } from "./_components/task-comments";
 import { CancelTaskButton } from "./_components/cancel-task-button";
+import { LiveRunFeed } from "./_components/live-run-feed";
 import { roleColor, roleMeta, statusMeta } from "@/lib/colors";
 
-const IN_FLIGHT_STATUSES = new Set(["pending", "in_progress", "working", "planned"]);
+const IN_FLIGHT_STATUSES = new Set(["queued", "planning", "plan_review", "running", "revising"]);
 
 interface ToolCallTrace {
   toolCallId: string;
@@ -207,7 +208,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
           <h2 className="text-sm font-semibold mb-2">
             Sub-tasks
             <span className="ml-2 text-xs font-normal text-text-muted">
-              ({childTasks.filter((c) => c.status === "approved" || c.status === "completed").length} of {childTasks.length} done)
+              ({childTasks.filter((c) => c.status === "accepted" || c.status === "published").length} of {childTasks.length} done)
             </span>
           </h2>
           <div className="space-y-2">
@@ -244,7 +245,11 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
         </section>
       )}
 
-      {!latestDeliverable && task.status !== "approved" && (
+      {IN_FLIGHT_STATUSES.has(task.status) && (
+        <LiveRunFeed taskId={task.id} employeeName={employee?.name ?? "Agent"} />
+      )}
+
+      {!latestDeliverable && task.status !== "accepted" && !IN_FLIGHT_STATUSES.has(task.status) && (
         <GlassCard hoverable={false} className="p-6">
           <div className="flex items-center gap-3">
             <span
@@ -252,17 +257,16 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
               style={{ backgroundColor: employeeMeta.tint }}
             >
               <span
-                className="inline-block h-2 w-2 animate-pulse rounded-full"
+                className="inline-block h-2 w-2 rounded-full"
                 style={{ backgroundColor: employeeMeta.solid }}
               />
             </span>
             <div>
               <p className="text-sm font-medium">
-                {employee?.name ?? "Working"} is on it.
+                No deliverable landed for this task.
               </p>
               <p className="text-xs text-text-secondary mt-0.5">
-                You will get a notification when the deliverable lands. Refresh this
-                page to see the latest run state.
+                The run timeline below shows what happened.
               </p>
             </div>
           </div>
@@ -413,7 +417,7 @@ function eventTypeColor(type: string): string {
     case "run_start": return statusMeta("running").dot;
     case "tool_call_start": return statusMeta("idle").dot;
     case "tool_call_end": return statusMeta("completed").dot;
-    case "scratchpad_update": return statusMeta("review").dot;
+    case "scratchpad_update": return statusMeta("in_review").dot;
     case "error": return statusMeta("error").dot;
     case "run_end": return statusMeta("completed").dot;
     default: return statusMeta("idle").dot;

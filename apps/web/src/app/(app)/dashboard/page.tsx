@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { eq, and, isNull, isNotNull, inArray, notInArray, count, asc, gte, or, desc } from "drizzle-orm";
+import { eq, and, isNull, isNotNull, notInArray, count, asc, gte, or, desc } from "drizzle-orm";
 import { createClient } from "@/lib/supabase/server";
 import { DEMO_MODE } from "@/lib/demo";
+import { env, type Env } from "@beast/shared/env";
 import { db } from "@beast/db";
 import { companies, aiEmployees, goals, deliverables, checkIns, proceduralMemories, tasks, activityLog, collaborationProposals } from "@beast/db";
 import { GlassCard } from "@beast/ui";
@@ -67,11 +68,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   // can render in the same render pass as the rest of the dashboard
   // without an extra tRPC hop. A missing core dep (Anthropic / Gemini)
   // breaks every agent run; missing tool deps degrade output quality.
-  const integrationPresent = (key: string): boolean => {
-    if (DEMO_MODE) return true;
-    const v = process.env[key];
-    return typeof v === "string" && v.length > 0;
-  };
+  const integrationPresent = (key: keyof Env): boolean => DEMO_MODE || env[key] !== undefined;
   const missingCoreIntegrations: Array<{ label: string; envKey: string }> = [];
   if (!integrationPresent("ANTHROPIC_API_KEY"))
     missingCoreIntegrations.push({ label: "Anthropic", envKey: "ANTHROPIC_API_KEY" });
@@ -115,7 +112,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       .where(
         and(
           eq(deliverables.companyId, company!.id),
-          inArray(deliverables.status, ["draft", "pending_review"]),
+          eq(deliverables.status, "in_review"),
         ),
       ),
     db.query.checkIns.findMany({
@@ -135,7 +132,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       .where(
         and(
           eq(deliverables.companyId, company!.id),
-          eq(deliverables.status, "approved"),
+          eq(deliverables.status, "accepted"),
         ),
       ),
     db
@@ -156,7 +153,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           eq(tasks.companyId, company!.id),
           isNotNull(tasks.plan),
           eq(tasks.planApproved, false),
-          inArray(tasks.status, ["pending", "in_progress", "planned"]),
+          eq(tasks.status, "plan_review"),
         ),
       ),
     db
@@ -172,7 +169,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         and(
           eq(deliverables.companyId, company!.id),
           or(
-            eq(deliverables.status, "approved"),
+            eq(deliverables.status, "accepted"),
             eq(deliverables.status, "published"),
           ),
           gte(deliverables.updatedAt, sevenDaysAgo),

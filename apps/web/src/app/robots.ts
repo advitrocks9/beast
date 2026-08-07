@@ -1,7 +1,8 @@
 import type { MetadataRoute } from "next";
+import { env } from "@beast/shared/env";
 
 function siteUrl(): string {
-  return process.env.NEXT_PUBLIC_APP_URL ?? "https://beast.team";
+  return env.NEXT_PUBLIC_APP_URL ?? "https://beast.team";
 }
 
 export default function robots(): MetadataRoute.Robots {
@@ -11,7 +12,7 @@ export default function robots(): MetadataRoute.Robots {
     rules: [
       {
         userAgent: "*",
-        allow: ["/", "/pricing", "/vs/", "/sign-in", "/sign-up"],
+        allow: ["/", "/pricing", "/sign-in", "/sign-up"],
         disallow: [
           "/api/",
           "/auth/",
@@ -23,7 +24,6 @@ export default function robots(): MetadataRoute.Robots {
           "/settings",
           "/reviews",
           "/review/",
-          "/share/",
         ],
       },
     ],

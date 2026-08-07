@@ -1,10 +1,9 @@
-import { db, tasks, aiEmployees, companies, activityLog } from "@beast/db";
-import { eq, and, isNotNull, ne, lte } from "drizzle-orm";
+import { db, tasks, activityLog } from "@beast/db";
+import { eq, and, isNotNull, ne } from "drizzle-orm";
 import type { TickContext, RecurrenceConfig } from "./types";
-import type { SpawnPayload } from "../chains/advance";
 
 interface RecurringResult {
-  spawned: Array<{ taskId: string; payload: SpawnPayload }>;
+  spawned: string[];
   errors: string[];
 }
 
@@ -26,38 +25,14 @@ export async function processRecurringTasks(ctx: TickContext): Promise<Recurring
 
   for (const template of templates) {
     try {
-      const config = template.recurrence as unknown as RecurrenceConfig;
+      const config = template.recurrence as RecurrenceConfig;
       if (!config?.nextOccurrenceAt) continue;
 
       if (!isRecurrenceDue(config, ctx.now)) continue;
 
-      // Resolve employee info for spawn payload
-      const employee = await db.query.aiEmployees.findFirst({
-        where: eq(aiEmployees.id, template.aiEmployeeId),
-        columns: { id: true, name: true, roleType: true },
-      });
-
-      const company = await db.query.companies.findFirst({
-        where: eq(companies.id, ctx.companyId),
-        columns: { name: true },
-      });
-
-      if (!employee || !company) {
-        result.errors.push(`Template ${template.id}: employee or company not found`);
-        continue;
-      }
-
-      const brief = template.brief as Record<string, unknown>;
-
-      // Advance the template's nextOccurrenceAt at the same time as the
-      // instance insert. Without this tx, a partial commit leaves an
-      // instance row created with the template still pointing at the
-      // old (already-due) nextOccurrenceAt; the next 5-min tick sees
-      // the template still due and spawns a SECOND instance for the
-      // same scheduled time. The orchestrator-tick wrapper's optimistic
-      // claim doesn't catch this because the duplicate is at
-      // the INSTANCE level, not the trigger level: two distinct rows
-      // get claimed and triggered.
+      // Instance insert and template nextOccurrenceAt advance are atomic:
+      // a partial commit would leave the template still due, so the next
+      // tick spawns a second instance for the same scheduled time.
       const nextConfig: RecurrenceConfig = {
         ...config,
         lastOccurrenceAt: config.nextOccurrenceAt,
@@ -70,7 +45,7 @@ export async function processRecurringTasks(ctx: TickContext): Promise<Recurring
           aiEmployeeId: template.aiEmployeeId,
           parentTaskId: template.id,
           title: template.title,
-          brief,
+          brief: template.brief,
           taskType: template.taskType,
           origin: "recurring",
           scheduledAt: new Date(config.nextOccurrenceAt),
@@ -79,7 +54,7 @@ export async function processRecurringTasks(ctx: TickContext): Promise<Recurring
         if (!created) return null;
 
         await tx.update(tasks).set({
-          recurrence: nextConfig as unknown as Record<string, unknown>,
+          recurrence: nextConfig,
         }).where(eq(tasks.id, template.id));
 
         await tx.insert(activityLog).values({
@@ -101,25 +76,7 @@ export async function processRecurringTasks(ctx: TickContext): Promise<Recurring
         continue;
       }
 
-      // Build spawn payload (Trigger.dev wrapper will dispatch)
-      const objective = (brief as Record<string, string>).objective ?? template.title;
-      result.spawned.push({
-        taskId: instance.id,
-        payload: {
-          agentId: employee.id,
-          tenantId: ctx.companyId,
-          agentName: employee.name,
-          roleType: employee.roleType,
-          companyName: company.name,
-          task: {
-            taskId: instance.id,
-            title: template.title,
-            objective,
-            taskType: template.taskType,
-            brief,
-          },
-        },
-      });
+      result.spawned.push(instance.id);
     } catch (err) {
       result.errors.push(`Template ${template.id}: ${err instanceof Error ? err.message : String(err)}`);
     }

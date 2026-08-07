@@ -4,6 +4,7 @@
     "outDir": "./dist",
     "paths": {
       "@beast/shared": ["../shared/src/index.ts"],
+      "@beast/shared/env": ["../shared/src/env.ts"],
       "@beast/db": ["../db/src/index.ts"]
     }
   },

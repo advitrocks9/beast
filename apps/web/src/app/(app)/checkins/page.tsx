@@ -7,9 +7,9 @@ import { GlassCard } from "@beast/ui";
 import { roleColor, statusMeta } from "@/lib/colors";
 
 const RESPONSE_LABEL: Record<string, { label: string; status: string }> = {
-  used: { label: "Used it", status: "approved" },
+  used: { label: "Used it", status: "accepted" },
   not_used: { label: "Did not use it", status: "rejected" },
-  edited: { label: "Edited it", status: "revision" },
+  edited: { label: "Edited it", status: "revised" },
 };
 
 export const metadata = {

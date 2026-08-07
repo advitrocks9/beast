@@ -9,41 +9,17 @@ import { OnboardingStepIndicator } from "./step-indicator";
 
 type RoleType = "marketing" | "sales" | "support";
 
-interface FunctionInfo {
-  id: string;
-  name: string;
-  departmentName: string;
-  mode: string;
-}
-
 interface EmployeeOption {
   roleType: RoleType;
   name: string;
   roleTitle: string;
   description: string;
-  color: string;
-  functions: FunctionInfo[];
 }
 
 interface HireEmployeesShellProps {
   companyName: string;
   employeeOptions: EmployeeOption[];
 }
-
-const ROLE_META: Record<RoleType, { icon: string; description: string }> = {
-  marketing: {
-    icon: "A",
-    description: "Writes blog posts, social media content, newsletters. Energetic and data-driven.",
-  },
-  sales: {
-    icon: "J",
-    description: "Drafts outreach emails, sequences, proposals. Direct, warm, and consultative.",
-  },
-  support: {
-    icon: "S",
-    description: "Handles ticket responses, FAQ articles, KB updates. Calm, empathetic, thorough.",
-  },
-};
 
 function EmployeeCard({
   option,
@@ -54,8 +30,6 @@ function EmployeeCard({
   selected: boolean;
   onToggle: () => void;
 }) {
-  const aiFunctions = option.functions.filter((f) => f.mode === "ai");
-
   return (
     <GlassCard
       hoverable
@@ -81,27 +55,8 @@ function EmployeeCard({
           <p className="mt-1 text-sm text-text-secondary">
             {option.description}
           </p>
-
-          {aiFunctions.length > 0 && (
-            <div className="mt-3">
-              <p className="text-xs font-medium text-text-muted mb-1.5">
-                Will handle:
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {aiFunctions.map((fn) => (
-                  <span
-                    key={fn.id}
-                    className="rounded-full bg-brand-light px-2.5 py-0.5 text-xs font-medium text-brand"
-                  >
-                    {fn.name}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
 
-        {/* Selection indicator */}
         <div
           className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
             selected
@@ -121,16 +76,9 @@ function EmployeeCard({
 }
 
 export function HireEmployeesShell({ companyName, employeeOptions }: HireEmployeesShellProps) {
-  // Pre-select employees that have AI functions assigned
-  const [selectedRoles, setSelectedRoles] = useState<Set<RoleType>>(() => {
-    const initial = new Set<RoleType>();
-    for (const opt of employeeOptions) {
-      if (opt.functions.some((f) => f.mode === "ai")) {
-        initial.add(opt.roleType);
-      }
-    }
-    return initial;
-  });
+  const [selectedRoles, setSelectedRoles] = useState<Set<RoleType>>(
+    () => new Set(employeeOptions.map((o) => o.roleType)),
+  );
 
   const trpc = useTRPC();
   const hireEmployee = useMutation(trpc.employees.hire.mutationOptions());
@@ -154,17 +102,7 @@ export function HireEmployeesShell({ companyName, employeeOptions }: HireEmploye
     setHiring(true);
     try {
       for (const role of selectedRoles) {
-        const option = employeeOptions.find((o) => o.roleType === role);
-        if (!option) continue;
-
-        const functionIds = option.functions
-          .filter((f) => f.mode === "ai")
-          .map((f) => f.id);
-
-        await hireEmployee.mutateAsync({
-          roleType: role,
-          functionIds,
-        });
+        await hireEmployee.mutateAsync({ roleType: role });
         setHired((prev) => new Set([...prev, role]));
       }
 
@@ -177,7 +115,6 @@ export function HireEmployeesShell({ companyName, employeeOptions }: HireEmploye
 
   return (
     <div className="flex min-h-screen flex-col bg-bg-warm">
-      {/* Header */}
       <header className="flex items-center justify-between border-b border-[oklch(0.8_0.01_260/0.15)] px-8 py-4">
         <div>
           <h1 className="font-(--font-display) text-xl font-bold tracking-tight">
@@ -185,10 +122,9 @@ export function HireEmployeesShell({ companyName, employeeOptions }: HireEmploye
           </h1>
           <p className="mt-0.5 text-sm text-text-secondary">
             Choose which AI employees to bring on at {companyName}.
-            Based on the functions you set to AI, we recommend hiring these roles.
           </p>
           <div className="mt-2">
-            <OnboardingStepIndicator currentStep={3} />
+            <OnboardingStepIndicator currentStep={2} />
           </div>
         </div>
         <button
@@ -202,7 +138,6 @@ export function HireEmployeesShell({ companyName, employeeOptions }: HireEmploye
         </button>
       </header>
 
-      {/* Employee cards */}
       <div className="flex-1 overflow-y-auto px-8 py-6">
         <div className="mx-auto max-w-3xl space-y-4">
           {employeeOptions.map((option) => (

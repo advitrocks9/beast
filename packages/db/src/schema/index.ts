@@ -1,6 +1,5 @@
 export * from "./companies";
 export * from "./knowledge";
-export * from "./departments";
 export * from "./employees";
 export * from "./goals";
 export * from "./tasks";
@@ -11,8 +10,6 @@ export * from "./connectors";
 export * from "./activity";
 export * from "./memory";
 export * from "./signals";
-export * from "./share";
-export * from "./events";
 export * from "./autonomy";
 export * from "./notifications";
 export * from "./chat";

@@ -1,8 +1,14 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import { AuthError, type User } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
+import { env, requireEnv } from "@beast/shared/env";
 import { DEMO_MODE, DEMO_USER_ID, DEMO_USER_EMAIL } from "@/lib/demo";
 
 type ServerClient = ReturnType<typeof createServerClient>;
+type StubbedAuth = Pick<
+  ServerClient["auth"],
+  "getUser" | "getSession" | "exchangeCodeForSession" | "signOut"
+>;
 
 /**
  * In demo mode (or on a bare clone with no Supabase env) we never talk to
@@ -11,22 +17,36 @@ type ServerClient = ReturnType<typeof createServerClient>;
  * demo company; with no env it returns a null user so marketing pages render.
  */
 function stubClient(user: { id: string; email: string } | null): ServerClient {
-  return {
-    auth: {
-      async getUser() {
-        return { data: { user }, error: null };
-      },
-      async getSession() {
-        return { data: { session: null }, error: null };
-      },
-      async exchangeCodeForSession() {
-        return { data: { session: null }, error: null };
-      },
-      async signOut() {
-        return { error: null };
-      },
+  const stubUser: User | null = user && {
+    id: user.id,
+    email: user.email,
+    app_metadata: {},
+    user_metadata: {},
+    aud: "authenticated",
+    created_at: new Date(0).toISOString(),
+  };
+  const auth: StubbedAuth = {
+    async getUser() {
+      if (!stubUser) {
+        return { data: { user: null }, error: new AuthError("Supabase is not configured") };
+      }
+      return { data: { user: stubUser }, error: null };
     },
-  } as unknown as ServerClient;
+    async getSession() {
+      return { data: { session: null }, error: null };
+    },
+    async exchangeCodeForSession() {
+      return {
+        data: { user: null, session: null },
+        error: new AuthError("Supabase is not configured"),
+      };
+    },
+    async signOut() {
+      return { error: null };
+    },
+  };
+  // structural subset of ServerClient: only the auth methods the app calls exist
+  return { auth } as ServerClient;
 }
 
 export async function createClient() {
@@ -38,7 +58,8 @@ export async function createClient() {
     await cookies();
     return stubClient({ id: DEMO_USER_ID, email: DEMO_USER_EMAIL });
   }
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+  const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!supabaseUrl) {
     await cookies();
     return stubClient(null);
   }
@@ -46,8 +67,8 @@ export async function createClient() {
   const cookieStore = await cookies();
 
   return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl,
+    requireEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
     {
       cookies: {
         getAll() {
@@ -59,7 +80,7 @@ export async function createClient() {
               cookieStore.set(name, value, options),
             );
           } catch {
-            // Called from a Server Component; safe to ignore, the proxy refreshes sessions.
+            // server components cannot write cookies; the proxy refreshes sessions
           }
         },
       },

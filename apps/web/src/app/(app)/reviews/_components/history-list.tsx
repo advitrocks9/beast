@@ -9,16 +9,16 @@ import { GlassCard } from "@beast/ui";
 import { Check, Send, X } from "lucide-react";
 import { roleMeta, statusMeta } from "@/lib/colors";
 
-type StatusFilter = "all" | "approved" | "rejected";
+type StatusFilter = "all" | "accepted" | "rejected";
 
 const STATUS_FILTERS: Array<{ value: StatusFilter; label: string }> = [
   { value: "all", label: "All" },
-  { value: "approved", label: "Approved" },
+  { value: "accepted", label: "Accepted" },
   { value: "rejected", label: "Rejected" },
 ];
 
 function parseStatusFilter(raw: string | null): StatusFilter {
-  if (raw === "approved" || raw === "rejected") return raw;
+  if (raw === "accepted" || raw === "rejected") return raw;
   return "all";
 }
 
@@ -284,9 +284,9 @@ export function HistoryList() {
           <p className="text-sm text-text-muted text-center">
             {statusFilter === "rejected"
               ? `No rejected deliverables yet${scopeSuffix}. Reject from /review/[id] to start an avoid-pattern history.`
-              : statusFilter === "approved"
-                ? `No approved deliverables yet${scopeSuffix}.`
-                : `No completed reviews yet${scopeSuffix}. Approved or rejected deliverables show up here.`}
+              : statusFilter === "accepted"
+                ? `No accepted deliverables yet${scopeSuffix}.`
+                : `No completed reviews yet${scopeSuffix}. Accepted or rejected deliverables show up here.`}
           </p>
         </GlassCard>
       </div>

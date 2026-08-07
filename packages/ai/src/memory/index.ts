@@ -1,20 +1,30 @@
-import type { AppliedRule, RetrievedMemory } from "../types";
+import type { ActiveRule, RetrievedMemory } from "../types";
 import { retrieveSemanticMemories } from "./semantic";
 import { retrieveEpisodicMemories } from "./episodic";
-import { retrieveProceduralMemories, retrieveAppliedRules } from "./procedural";
+import { retrieveProceduralMemories, retrieveActiveRules } from "./procedural";
 
 export { indexKnowledgeItem, retrieveSemanticMemories, deleteKnowledgeEmbeddings } from "./semantic";
 export { storeEpisode, retrieveEpisodicMemories } from "./episodic";
-export { retrieveProceduralMemories, retrieveAppliedRules, upsertProceduralRule, rollbackRule } from "./procedural";
+export { retrieveProceduralMemories, retrieveActiveRules, rollbackRule } from "./procedural";
 export { embed, embedBatch, chunkText } from "./embeddings";
-export { extractFromTaskCompletion, extractFromFeedback, extractRuleFromRationale, storeApprovedExample } from "./extraction";
+export { diffWords } from "./diff";
+export type { DiffSpan, WordDiff } from "./diff";
+export {
+  extractFromTaskCompletion,
+  extractFromFeedback,
+  extractRuleFromRationale,
+  storeApprovedExample,
+  accumulateSignal,
+  seedFounderRule,
+} from "./extraction";
+export type { CandidateResult, SignalCategory, AccumulateSignalInput } from "./extraction";
 export { consolidateMemories, detectDrift } from "./consolidation";
 
 interface MemoryLoadResult {
   episodic: RetrievedMemory[];
   semantic: RetrievedMemory[];
   procedural: RetrievedMemory[];
-  appliedRules: AppliedRule[];
+  activeRules: ActiveRule[];
 }
 
 /**
@@ -30,12 +40,12 @@ export async function loadMemories(opts: {
   topKEpisodic?: number;
   topKProcedural?: number;
 }): Promise<MemoryLoadResult> {
-  const [episodic, semantic, procedural, appliedRules] = await Promise.all([
+  const [episodic, semantic, procedural, activeRules] = await Promise.all([
     retrieveEpisodicMemories(opts.agentId, opts.tenantId, opts.query, opts.topKEpisodic ?? 5),
     retrieveSemanticMemories(opts.tenantId, opts.query, opts.topKSemantic ?? 8),
     retrieveProceduralMemories(opts.agentId, opts.tenantId, opts.taskType, opts.topKProcedural ?? 30),
-    retrieveAppliedRules(opts.agentId, opts.tenantId, opts.taskType, opts.topKProcedural ?? 30),
+    retrieveActiveRules(opts.agentId, opts.tenantId, opts.taskType, opts.topKProcedural ?? 30),
   ]);
 
-  return { episodic, semantic, procedural, appliedRules };
+  return { episodic, semantic, procedural, activeRules };
 }

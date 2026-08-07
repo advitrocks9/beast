@@ -42,12 +42,6 @@ export const createCallerFactory = t.createCallerFactory;
 export const baseProcedure = t.procedure;
 
 /**
- * Public procedure: no auth required, no company scoping.
- * For routes like /share/[slug] that are deliberately unauthenticated.
- */
-export const publicProcedure = t.procedure;
-
-/**
  * Protected procedure: requires auth.
  * Resolves Supabase user -> Beast companyId and injects into context.
  */

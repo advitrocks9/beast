@@ -139,7 +139,7 @@ function Tile({
     tone === "reject" && value > 0
       ? statusMeta("rejected").fg
       : tone === "warn" && value > 0
-        ? statusMeta("review").fg
+        ? statusMeta("in_review").fg
         : "#111827";
   return (
     <Link href={href} className="block">

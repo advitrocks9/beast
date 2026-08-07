@@ -170,7 +170,7 @@ export function assembleContext(opts: {
 
   return {
     systemPrompt,
-    messages: [{ role: "user" as const, content: taskMessage }],
+    messages: [{ role: "user" as const, content: [{ type: "text" as const, text: taskMessage }] }],
     tokenEstimate: estimateTokens(systemPrompt) + estimateTokens(taskMessage),
   };
 }
