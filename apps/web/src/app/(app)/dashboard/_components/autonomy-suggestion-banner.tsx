@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { GlassCard } from "@beast/ui";
 import { useTRPC } from "@/trpc/client";
+import { DEMO_MODE } from "@/lib/demo";
 import { roleMeta } from "@/lib/colors";
 
 function formatAction(action: string): string {
@@ -57,8 +58,8 @@ export function AutonomySuggestionBanner() {
   const active = total > 0 ? items[Math.min(activeIdx, total - 1)] : null;
 
   useEffect(() => {
-    if (active && active.state === "queued") {
-      void markShown.mutateAsync({ suggestionId: active.id });
+    if (!DEMO_MODE && active && active.state === "queued") {
+      markShown.mutate({ suggestionId: active.id });
     }
     // We only want to fire once per active id; deliberate dep choice.
     // eslint-disable-next-line react-hooks/exhaustive-deps
