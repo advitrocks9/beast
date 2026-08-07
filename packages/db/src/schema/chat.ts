@@ -2,6 +2,7 @@ import { pgTable, uuid, text, timestamp, index } from "drizzle-orm/pg-core";
 import { companies } from "./companies";
 import { aiEmployees } from "./employees";
 import { tasks } from "./tasks";
+import { demoSessions } from "./demo";
 
 /**
  * Persistent founder<->AI employee chat history. Each row is a single
@@ -17,6 +18,7 @@ export const chatMessages = pgTable(
     role: text().notNull(),
     content: text().notNull(),
     taskId: uuid("task_id").references(() => tasks.id, { onDelete: "set null" }),
+    demoSessionId: uuid("demo_session_id").references(() => demoSessions.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
@@ -25,5 +27,6 @@ export const chatMessages = pgTable(
       table.aiEmployeeId,
       table.createdAt,
     ),
+    index("chat_messages_demo_session_idx").on(table.demoSessionId),
   ],
 );

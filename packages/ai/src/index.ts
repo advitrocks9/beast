@@ -26,7 +26,6 @@ export type {
   RunToolDef,
   RunProvider,
 } from "./provider";
-export { getClient, getModelId } from "./models";
 export * from "./types";
 export * from "./memory";
 export * from "./employees";

@@ -43,6 +43,13 @@
       "when": 1786850000000,
       "tag": "0005_drop_dead_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786900000000,
+      "tag": "0006_demo_visitor_overlay",
+      "breakpoints": true
     }
   ]
 }

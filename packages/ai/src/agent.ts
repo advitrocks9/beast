@@ -12,6 +12,7 @@ import {
   resolveProvider,
   type ProviderBlock,
   type ProviderMessage,
+  type RunProvider,
   type RunToolDef,
 } from "./provider";
 import { assembleContext, estimateTokens } from "./context";
@@ -48,6 +49,8 @@ export interface RunOptions {
   };
   planSteps?: string[];
   onEvent?: AgentEventHandler;
+  /** Overrides env resolution; the runner passes the stub here on quota degrade. */
+  provider?: RunProvider;
 }
 
 export async function run(opts: RunOptions): Promise<RunResult> {
@@ -64,7 +67,7 @@ export async function run(opts: RunOptions): Promise<RunResult> {
   const maxIterations = config.maxIterations ?? DEFAULT_MAX_ITERATIONS;
   const maxDurationMs = config.maxDurationMs ?? DEFAULT_MAX_DURATION_MS;
   const tier = config.tier ?? "standard";
-  const provider = resolveProvider();
+  const provider = opts.provider ?? resolveProvider();
   const emitter = new AgentEventEmitter();
   if (onEvent) emitter.on(onEvent);
 

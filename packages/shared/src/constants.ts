@@ -68,3 +68,17 @@ export const ONBOARDING_STATUSES = [
   "complete",
 ] as const;
 export type OnboardingStatus = (typeof ONBOARDING_STATUSES)[number];
+
+export const BILLING_TIERS = ["trial", "starter", "team", "business"] as const;
+export type BillingTier = (typeof BILLING_TIERS)[number];
+
+export const PAID_TIERS = ["starter", "team", "business"] as const;
+export type PaidTier = (typeof PAID_TIERS)[number];
+
+// trial mirrors team so the full loop is evaluable before checkout.
+export const TIER_LIMITS: Record<BillingTier, { tasksPerMonth: number; employees: number }> = {
+  trial: { tasksPerMonth: 200, employees: 3 },
+  starter: { tasksPerMonth: 50, employees: 1 },
+  team: { tasksPerMonth: 200, employees: 3 },
+  business: { tasksPerMonth: 500, employees: 6 },
+};

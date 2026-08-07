@@ -2,6 +2,7 @@ import { pgTable, uuid, text, jsonb, boolean, integer, real, timestamp, index, v
 import { aiEmployees } from "./employees";
 import { companies } from "./companies";
 import { tasks } from "./tasks";
+import { demoSessions } from "./demo";
 
 // Episodic memory - immutable event records
 export const episodicMemories = pgTable(
@@ -94,21 +95,26 @@ export const proceduralMemories = pgTable(
 );
 
 // Signal accumulation - pending rule candidates before promotion
-export const ruleCandidates = pgTable("rule_candidates", {
-  id: uuid().defaultRandom().primaryKey(),
-  agentId: uuid("agent_id").references(() => aiEmployees.id, { onDelete: "cascade" }).notNull(),
-  tenantId: uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
-  ruleType: text("rule_type").notNull(),
-  taskScope: text("task_scope").array(),
-  title: text().notNull(),
-  description: text().notNull(),
-  signalCount: integer("signal_count").default(1).notNull(),
-  signalWeight: real("signal_weight").default(0).notNull(),
-  confidence: real().default(0).notNull(),
-  distinctReviewCount: integer("distinct_review_count").default(0).notNull(),
-  sourceReviewIds: uuid("source_review_ids").array(),
-  sourceEpisodes: uuid("source_episodes").array(),
-  promotedToId: uuid("promoted_to_id"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-});
+export const ruleCandidates = pgTable(
+  "rule_candidates",
+  {
+    id: uuid().defaultRandom().primaryKey(),
+    agentId: uuid("agent_id").references(() => aiEmployees.id, { onDelete: "cascade" }).notNull(),
+    tenantId: uuid("tenant_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+    ruleType: text("rule_type").notNull(),
+    taskScope: text("task_scope").array(),
+    title: text().notNull(),
+    description: text().notNull(),
+    signalCount: integer("signal_count").default(1).notNull(),
+    signalWeight: real("signal_weight").default(0).notNull(),
+    confidence: real().default(0).notNull(),
+    distinctReviewCount: integer("distinct_review_count").default(0).notNull(),
+    sourceReviewIds: uuid("source_review_ids").array(),
+    sourceEpisodes: uuid("source_episodes").array(),
+    promotedToId: uuid("promoted_to_id"),
+    demoSessionId: uuid("demo_session_id").references(() => demoSessions.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index("rule_candidates_demo_session_idx").on(table.demoSessionId)],
+);

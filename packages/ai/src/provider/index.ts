@@ -15,6 +15,7 @@ export type {
   RunProvider,
 } from "./types";
 export { ProviderQuotaError } from "./types";
+export { createStubProvider } from "./stub";
 export { embed } from "./embeddings";
 
 const providers: Partial<Record<RunProvider["name"], RunProvider>> = {};

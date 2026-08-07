@@ -23,9 +23,6 @@ export interface AgentTask {
   acceptanceCriteria?: string[];
 }
 
-// Legacy model names kept for the models.ts shim and skill step configs
-export type ModelTier = "haiku" | "sonnet" | "opus";
-
 /**
  * What a tool returns. Either a plain string (legacy) or a structured object
  * carrying both the model-facing text and the citations the harness should

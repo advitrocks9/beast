@@ -2,6 +2,7 @@ import { z } from "zod";
 import { and, desc, eq, gte, inArray, isNotNull, sql } from "drizzle-orm";
 import { deliverables, aiEmployees, tasks } from "@beast/db";
 import { createTRPCRouter, protectedProcedure } from "../init";
+import { demoWhere, withDemoOverlay } from "@/lib/demo-overlay";
 
 const FINAL_STATES = ["accepted", "published", "rejected"] as const;
 
@@ -40,6 +41,8 @@ export const reviewsRouter = createTRPCRouter({
           updatedAt: deliverables.updatedAt,
           taskId: deliverables.taskId,
           aiEmployeeId: deliverables.aiEmployeeId,
+          demoSessionId: deliverables.demoSessionId,
+          supersedesDeliverableId: deliverables.supersedesDeliverableId,
           employeeName: aiEmployees.name,
           employeeRoleType: aiEmployees.roleType,
           taskTitle: tasks.title,
@@ -50,6 +53,7 @@ export const reviewsRouter = createTRPCRouter({
         .where(
           and(
             eq(deliverables.companyId, ctx.companyId),
+            demoWhere(ctx.demo.sessionId).seedOrMine(deliverables.demoSessionId),
             inArray(deliverables.status, [...statusList]),
             input.employeeId ? eq(deliverables.aiEmployeeId, input.employeeId) : undefined,
             input.typeFilter ? eq(deliverables.deliverableType, input.typeFilter) : undefined,
@@ -59,7 +63,7 @@ export const reviewsRouter = createTRPCRouter({
         .limit(input.limit)
         .offset(input.offset);
 
-      return rows;
+      return withDemoOverlay(rows, ctx.demo.sessionId);
     }),
 
   /**
@@ -78,6 +82,7 @@ export const reviewsRouter = createTRPCRouter({
       .where(
         and(
           eq(deliverables.companyId, ctx.companyId),
+          demoWhere(ctx.demo.sessionId).seedOrMine(deliverables.demoSessionId),
           inArray(deliverables.status, [...FINAL_STATES]),
         ),
       )
@@ -93,56 +98,82 @@ export const reviewsRouter = createTRPCRouter({
    */
   stats: protectedProcedure.query(async ({ ctx }) => {
     const sinceDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const overlayColumns = { id: deliverables.id };
+    const scope = and(
+      eq(deliverables.companyId, ctx.companyId),
+      demoWhere(ctx.demo.sessionId).seedOrMine(deliverables.demoSessionId),
+    );
 
     const [approvedRows, publishedRows, rejectedRows, pendingRows] = await Promise.all([
       ctx.db
-        .select({ id: deliverables.id })
+        .select(overlayColumns)
         .from(deliverables)
         .where(
           and(
-            eq(deliverables.companyId, ctx.companyId),
+            scope,
             eq(deliverables.status, "accepted"),
             isNotNull(deliverables.approvedAt),
             gte(deliverables.approvedAt, sinceDate),
           ),
         ),
       ctx.db
-        .select({ id: deliverables.id })
+        .select(overlayColumns)
         .from(deliverables)
         .where(
           and(
-            eq(deliverables.companyId, ctx.companyId),
+            scope,
             eq(deliverables.status, "published"),
             isNotNull(deliverables.publishedAt),
             gte(deliverables.publishedAt, sinceDate),
           ),
         ),
       ctx.db
-        .select({ id: deliverables.id })
+        .select(overlayColumns)
         .from(deliverables)
         .where(
           and(
-            eq(deliverables.companyId, ctx.companyId),
+            scope,
             eq(deliverables.status, "rejected"),
             gte(deliverables.updatedAt, sinceDate),
           ),
         ),
       ctx.db
-        .select({ id: deliverables.id })
+        .select(overlayColumns)
         .from(deliverables)
         .where(
           and(
-            eq(deliverables.companyId, ctx.companyId),
+            scope,
             eq(deliverables.status, "in_review"),
           ),
         ),
     ]);
 
+    // A session clone can sit in a status none of the four fetches cover
+    // (e.g. revised superseding an in_review seed), so the superseded set
+    // comes from the session's clones directly.
+    const sessionId = ctx.demo.sessionId;
+    const supersededRows = sessionId
+      ? await ctx.db
+          .select({ supersedesDeliverableId: deliverables.supersedesDeliverableId })
+          .from(deliverables)
+          .where(
+            and(
+              eq(deliverables.demoSessionId, sessionId),
+              isNotNull(deliverables.supersedesDeliverableId),
+            ),
+          )
+      : [];
+    const superseded = new Set(
+      supersededRows.flatMap((r) => (r.supersedesDeliverableId ? [r.supersedesDeliverableId] : [])),
+    );
+    const countVisible = (rows: Array<{ id: string }>) =>
+      rows.filter((r) => !superseded.has(r.id)).length;
+
     return {
-      pendingCount: pendingRows.length,
-      approvedThisWeek: approvedRows.length,
-      publishedThisWeek: publishedRows.length,
-      rejectedThisWeek: rejectedRows.length,
+      pendingCount: countVisible(pendingRows),
+      approvedThisWeek: countVisible(approvedRows),
+      publishedThisWeek: countVisible(publishedRows),
+      rejectedThisWeek: countVisible(rejectedRows),
     };
   }),
 });

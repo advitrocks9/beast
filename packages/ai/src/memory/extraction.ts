@@ -2,7 +2,7 @@ import { complete } from "../provider";
 import { storeEpisode } from "./episodic";
 import { db } from "@beast/db";
 import { ruleCandidates } from "@beast/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, or, isNull } from "drizzle-orm";
 import { diffWords, type WordDiff } from "./diff";
 import { upsertProceduralRule } from "./procedural";
 
@@ -50,6 +50,14 @@ export interface CandidateResult {
   confidence: number;
   distinctReviewCount: number;
   promotedRuleId: string | null;
+}
+
+/** Candidates don't persist their signal category, so displayed thresholds
+ * derive from ruleType; rationale-born style rules show 3 despite needing 2. */
+export function candidateThreshold(ruleType: string): number {
+  return ruleType === "approved_example"
+    ? PROMOTION_THRESHOLDS.positive
+    : PROMOTION_THRESHOLDS.style;
 }
 
 // ── Task Completion Extraction ──
@@ -129,6 +137,7 @@ interface FeedbackInput {
   chips: string[];
   annotationText?: string;
   reviewId: string;
+  demoSessionId?: string | null;
 }
 
 /**
@@ -218,6 +227,7 @@ What implicit preference does this edit pattern reveal?`,
       weight: signal.weight,
       reviewId: input.reviewId,
       episodeIds: [episodeId],
+      demoSessionId: input.demoSessionId,
     });
     byId.set(result.id, result);
   }
@@ -239,6 +249,9 @@ export interface AccumulateSignalInput {
   reviewId: string;
   episodeIds?: string[];
   examples?: { good?: string[]; bad?: string[] };
+  /** Demo visitor session: seed candidates are cloned into the session
+   * (copy-on-write) instead of mutated, and new candidates carry the stamp. */
+  demoSessionId?: string | null;
 }
 
 /**
@@ -248,13 +261,18 @@ export interface AccumulateSignalInput {
  * Nothing else may write procedural_memories.
  */
 export async function accumulateSignal(input: AccumulateSignalInput): Promise<CandidateResult> {
-  const existing = await db.query.ruleCandidates.findFirst({
+  const demoSessionId = input.demoSessionId ?? null;
+  const matches = await db.query.ruleCandidates.findMany({
     where: and(
       eq(ruleCandidates.agentId, input.agentId),
       eq(ruleCandidates.tenantId, input.tenantId),
       eq(ruleCandidates.title, input.title),
+      demoSessionId
+        ? or(isNull(ruleCandidates.demoSessionId), eq(ruleCandidates.demoSessionId, demoSessionId))
+        : isNull(ruleCandidates.demoSessionId),
     ),
   });
+  const existing = matches.find((m) => m.demoSessionId !== null) ?? matches[0];
 
   if (existing?.promotedToId) {
     return {
@@ -267,22 +285,41 @@ export async function accumulateSignal(input: AccumulateSignalInput): Promise<Ca
     };
   }
 
-  let candidate: NonNullable<typeof existing>;
-  if (existing) {
-    const seenReviews = existing.sourceReviewIds ?? [];
+  const fold = (base: NonNullable<typeof existing>) => {
+    const seenReviews = base.sourceReviewIds ?? [];
     const isNewReview = !seenReviews.includes(input.reviewId);
-    const signalWeight = existing.signalWeight + input.weight;
+    const signalWeight = base.signalWeight + input.weight;
+    return {
+      signalCount: base.signalCount + 1,
+      signalWeight,
+      confidence: confidenceFrom(signalWeight),
+      distinctReviewCount: base.distinctReviewCount + (isNewReview ? 1 : 0),
+      sourceReviewIds: isNewReview ? [...seenReviews, input.reviewId] : seenReviews,
+      sourceEpisodes: [...(base.sourceEpisodes ?? []), ...(input.episodeIds ?? [])],
+    };
+  };
+
+  let candidate: NonNullable<typeof existing>;
+  if (existing && existing.demoSessionId === null && demoSessionId) {
+    const [cloned] = await db
+      .insert(ruleCandidates)
+      .values({
+        agentId: existing.agentId,
+        tenantId: existing.tenantId,
+        ruleType: existing.ruleType,
+        taskScope: existing.taskScope,
+        title: existing.title,
+        description: existing.description,
+        demoSessionId,
+        ...fold(existing),
+      })
+      .returning();
+    if (!cloned) throw new Error("rule candidate clone returned no row");
+    candidate = cloned;
+  } else if (existing) {
     const [updated] = await db
       .update(ruleCandidates)
-      .set({
-        signalCount: existing.signalCount + 1,
-        signalWeight,
-        confidence: confidenceFrom(signalWeight),
-        distinctReviewCount: existing.distinctReviewCount + (isNewReview ? 1 : 0),
-        sourceReviewIds: isNewReview ? [...seenReviews, input.reviewId] : seenReviews,
-        sourceEpisodes: [...(existing.sourceEpisodes ?? []), ...(input.episodeIds ?? [])],
-        updatedAt: new Date(),
-      })
+      .set({ ...fold(existing), updatedAt: new Date() })
       .where(eq(ruleCandidates.id, existing.id))
       .returning();
     if (!updated) throw new Error(`rule candidate ${existing.id} vanished mid-update`);
@@ -303,6 +340,7 @@ export async function accumulateSignal(input: AccumulateSignalInput): Promise<Ca
         distinctReviewCount: 1,
         sourceReviewIds: [input.reviewId],
         sourceEpisodes: input.episodeIds ?? [],
+        demoSessionId,
       })
       .returning();
     if (!inserted) throw new Error("rule candidate insert returned no row");
@@ -376,6 +414,7 @@ interface RationaleInput {
   outputText: string;
   episodeId?: string;
   reviewId: string;
+  demoSessionId?: string | null;
 }
 
 // Lowered from 20 to 10 chars so short founder verdicts ("wrong tone",
@@ -436,6 +475,7 @@ Return null fields if no concrete rule can be extracted.`,
     weight: RATIONALE_SIGNAL_WEIGHT,
     reviewId: input.reviewId,
     episodeIds: input.episodeId ? [input.episodeId] : [],
+    demoSessionId: input.demoSessionId,
   });
 
   return { candidate, ruleType, ruleText };
@@ -456,6 +496,7 @@ export async function storeApprovedExample(input: {
   outputText: string;
   taskId: string;
   reviewId: string;
+  demoSessionId?: string | null;
 }): Promise<CandidateResult> {
   return accumulateSignal({
     agentId: input.agentId,
@@ -468,6 +509,7 @@ export async function storeApprovedExample(input: {
     weight: 2.0,
     reviewId: input.reviewId,
     examples: { good: [input.outputText.slice(0, 2000)] },
+    demoSessionId: input.demoSessionId,
   });
 }
 

@@ -39,6 +39,83 @@ function countToolResults(messages: ProviderMessage[]): number {
   return messages.flatMap((m) => m.content).filter((b) => b.type === "tool_result").length;
 }
 
+function lastUserText(messages: ProviderMessage[]): string {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m?.role !== "user") continue;
+    const text = m.content
+      .filter((b): b is Extract<typeof b, { type: "text" }> => b.type === "text")
+      .map((b) => b.text)
+      .join("\n")
+      .trim();
+    if (text) return text;
+  }
+  return "";
+}
+
+const spell = (category: string): string => category.replace(/_/g, " ");
+
+// Interview turns parse the router's system prompt for state ("Still needed",
+// "Goals captured so far") so keyless onboarding progresses deterministically.
+async function* onboardingInterview(opts: StreamOptions): AsyncGenerator<ProviderEvent> {
+  const unfilled = matchLine(opts.system, /^Still needed: (.+)$/m)
+    .split(",")
+    .map((c) => c.trim())
+    .filter((c) => c.length > 0 && c !== "all done!");
+  const goalsCaptured = Number(matchLine(opts.system, /^Goals captured so far: (\d+)/m));
+  const category = unfilled[0];
+
+  if (countToolResults(opts.messages) > 0) {
+    const next = unfilled[1] ?? unfilled[0];
+    const reply = next
+      ? `Noted that down. Next up: tell me about your ${spell(next)}.`
+      : "Noted that down. That covers everything I need, continue whenever you're ready.";
+    yield* paced(reply);
+    yield { type: "message_end", stopReason: "end_turn" };
+    return;
+  }
+
+  const shared = lastUserText(opts.messages) || "No details shared yet.";
+  let calledTool = false;
+  if (category) {
+    yield {
+      type: "tool_call",
+      id: `stub-onboarding-${category}`,
+      name: "save_knowledge",
+      input: {
+        items: [
+          {
+            category,
+            title: `${spell(category)} (interview)`,
+            content: shared,
+            ai_summary: `Founder shared ${spell(category)} context during onboarding.`,
+          },
+        ],
+      },
+    };
+    calledTool = true;
+  }
+  if (goalsCaptured === 0 && opts.tools.some((t) => t.name === "save_goal")) {
+    yield {
+      type: "tool_call",
+      id: "stub-onboarding-goal",
+      name: "save_goal",
+      input: {
+        title: "Get one reviewed deliverable shipped this month",
+        target_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+        target_metric: "1 accepted deliverable",
+      },
+    };
+    calledTool = true;
+  }
+  if (calledTool) {
+    yield { type: "message_end", stopReason: "tool_use" };
+    return;
+  }
+  yield* paced("Everything is captured. Continue to the next step whenever you're ready.");
+  yield { type: "message_end", stopReason: "end_turn" };
+}
+
 async function* paced(text: string): AsyncGenerator<ProviderEvent> {
   for (let i = 0; i < text.length; i += CHUNK_CHARS) {
     yield { type: "text_delta", text: text.slice(i, i + CHUNK_CHARS) };
@@ -96,6 +173,11 @@ export function createStubProvider(): RunProvider {
     name: "stub",
 
     async *stream(opts: StreamOptions): AsyncIterable<ProviderEvent> {
+      // save_knowledge only exists on the onboarding interview surface.
+      if (opts.tools.some((t) => t.name === "save_knowledge")) {
+        yield* onboardingInterview(opts);
+        return;
+      }
       const ctx = parseContext(opts.system, opts.messages);
       const fixture = fixtureFor(ctx.taskType);
       const available = new Set(opts.tools.map((t) => t.name));

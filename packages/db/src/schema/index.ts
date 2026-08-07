@@ -3,7 +3,7 @@ export * from "./knowledge";
 export * from "./employees";
 export * from "./goals";
 export * from "./tasks";
-export * from "./reviews";
+export * from "./demo";
 export * from "./check-ins";
 export * from "./collaboration";
 export * from "./connectors";

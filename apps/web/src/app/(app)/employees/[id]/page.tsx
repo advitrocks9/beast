@@ -1,7 +1,10 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { eq, and, desc, or, isNull, gte, notInArray } from "drizzle-orm";
 import { createClient } from "@/lib/supabase/server";
+import { DEMO_MODE, demoSessionIdFromHeaders } from "@/lib/demo";
+import { demoWhere, withDemoOverlay } from "@/lib/demo-overlay";
 import { db } from "@beast/db";
 import { companies, aiEmployees, tasks, deliverables, activityLog, goals } from "@beast/db";
 import { GlassCard } from "@beast/ui";
@@ -74,25 +77,39 @@ export default async function EmployeeDeskPage({ params }: PageProps) {
     notFound();
   }
 
+  const demoSid = DEMO_MODE ? demoSessionIdFromHeaders(await headers()) : null;
+
   // Fetch employee's tasks
   const employeeTasks = await db.query.tasks.findMany({
-    where: and(eq(tasks.aiEmployeeId, employee.id), eq(tasks.companyId, company!.id)),
+    where: and(
+      eq(tasks.aiEmployeeId, employee.id),
+      eq(tasks.companyId, company!.id),
+      demoWhere(demoSid).seedOrMine(tasks.demoSessionId),
+    ),
     orderBy: [desc(tasks.createdAt)],
     limit: 20,
   });
 
   // Fetch employee's deliverables
-  const employeeDeliverables = await db.query.deliverables.findMany({
-    where: and(eq(deliverables.aiEmployeeId, employee.id), eq(deliverables.companyId, company!.id)),
-    orderBy: [desc(deliverables.createdAt)],
-    limit: 20,
-  });
+  const employeeDeliverables = withDemoOverlay(
+    await db.query.deliverables.findMany({
+      where: and(
+        eq(deliverables.aiEmployeeId, employee.id),
+        eq(deliverables.companyId, company!.id),
+        demoWhere(demoSid).seedOrMine(deliverables.demoSessionId),
+      ),
+      orderBy: [desc(deliverables.createdAt)],
+      limit: 20,
+    }),
+    demoSid,
+  );
 
   // Fetch recent activity
   const recentActivity = await db.query.activityLog.findMany({
     where: and(
       eq(activityLog.aiEmployeeId, employee.id),
       eq(activityLog.companyId, company!.id),
+      demoWhere(demoSid).seedOrMine(activityLog.demoSessionId),
       notInArray(activityLog.actionType, [...LOW_SIGNAL_ACTIVITY_TYPES]),
     ),
     orderBy: [desc(activityLog.createdAt)],
@@ -129,6 +146,7 @@ export default async function EmployeeDeskPage({ params }: PageProps) {
       and(
         eq(deliverables.aiEmployeeId, employee.id),
         eq(deliverables.companyId, company!.id),
+        demoWhere(demoSid).seedOrMine(deliverables.demoSessionId),
         gte(deliverables.updatedAt, trendStart),
       ),
     );

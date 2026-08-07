@@ -24,7 +24,7 @@ const schema = z.object({
   UNSTRUCTURED_API_KEY: optionalKey,
   DEMO_RUNS_PER_SESSION: z.preprocess(unset, z.coerce.number().int().positive().default(2)),
   DEMO_RUNS_PER_IP_DAILY: z.preprocess(unset, z.coerce.number().int().positive().default(4)),
-  DEMO_DAILY_RUN_BUDGET: z.preprocess(unset, z.coerce.number().int().positive().default(50)),
+  DEMO_DAILY_TOKEN_BUDGET: z.preprocess(unset, z.coerce.number().int().positive().default(200_000)),
 
   NEXT_PUBLIC_SUPABASE_URL: optionalUrl,
   NEXT_PUBLIC_SUPABASE_ANON_KEY: optionalKey,

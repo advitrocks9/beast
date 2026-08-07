@@ -32,7 +32,7 @@ export const createTRPCContext = async (opts: { headers: Headers }) => {
   };
 };
 
-interface Meta {
+export interface Meta {
   demoAllowed?: boolean;
 }
 

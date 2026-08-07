@@ -1,6 +1,9 @@
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
 import { eq, and } from "drizzle-orm";
 import { createClient } from "@/lib/supabase/server";
+import { DEMO_MODE, demoSessionIdFromHeaders } from "@/lib/demo";
+import { demoWhere } from "@/lib/demo-overlay";
 import { db } from "@beast/db";
 import { companies, deliverables, aiEmployees, tasks } from "@beast/db";
 import { ReviewShell } from "./_components/review-shell";
@@ -20,8 +23,13 @@ export default async function ReviewPage({ params }: PageProps) {
     columns: { id: true },
   });
 
+  const demoSid = DEMO_MODE ? demoSessionIdFromHeaders(await headers()) : null;
   const deliverable = await db.query.deliverables.findFirst({
-    where: and(eq(deliverables.id, id), eq(deliverables.companyId, company!.id)),
+    where: and(
+      eq(deliverables.id, id),
+      eq(deliverables.companyId, company!.id),
+      demoWhere(demoSid).seedOrMine(deliverables.demoSessionId),
+    ),
   });
 
   if (!deliverable) {

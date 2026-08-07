@@ -2,6 +2,7 @@ import { z } from "zod";
 import { eq, and } from "drizzle-orm";
 import { aiEmployees, activityLog, companies } from "@beast/db";
 import { getPersona, getEmployeeName, getRoleTitle, seedFounderRule } from "@beast/ai";
+import { assertWithinEmployeeLimit } from "@/lib/entitlements";
 import { createTRPCRouter, protectedProcedure } from "../init";
 
 const DEFAULT_AUTONOMY = {
@@ -51,6 +52,8 @@ export const employeesRouter = createTRPCRouter({
       initialFocus: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
+      await assertWithinEmployeeLimit(ctx.db, ctx.companyId);
+
       const company = await ctx.db.query.companies.findFirst({
         where: eq(companies.id, ctx.companyId),
         columns: { name: true },

@@ -1,85 +1,91 @@
 import { z } from "zod";
-import { eq, and, gte } from "drizzle-orm";
-import { aiEmployees, proceduralMemories } from "@beast/db";
-import { seedFounderRule } from "@beast/ai";
+import { eq, and, gte, inArray, isNull, or } from "drizzle-orm";
+import { aiEmployees, proceduralMemories, ruleCandidates, episodicMemories, semanticMemories } from "@beast/db";
+import { seedFounderRule, candidateThreshold } from "@beast/ai";
 import { createTRPCRouter, protectedProcedure } from "../init";
+import { demoWhere } from "@/lib/demo-overlay";
 
-const CONFIDENCE_FLOOR = 0.6;
-const MAX_RULES = 8;
 const FOUNDER_SEED_WEIGHT = 2.0;
 const RULE_TYPES = ["style_rule", "avoid_pattern", "approved_example"] as const;
 
-export interface AppliedRuleSummary {
-  ruleId: string;
-  summary: string;
-  evidence: string;
-  extractedFromDeliverableId: string;
-  extractedFromTitle: string;
-  extractedAt: string;
-  confidence: number;
-  tasksAppliedTo: number;
-}
-
 export const memoryRouter = createTRPCRouter({
   /**
-   * Top high-confidence procedural rules for the dashboard memory pill.
-   * Defaults to the company's first AI employee when no employeeId is passed.
+   * Episodic tier: per-event records, newest first. The browse surface for
+   * "what happened", scoped to one employee when asked.
    */
-  listAppliedRules: protectedProcedure
-    .input(
-      z.object({ employeeId: z.string().uuid().optional() }).optional(),
-    )
-    .query(async ({ ctx, input }): Promise<AppliedRuleSummary[]> => {
-      let employeeId = input?.employeeId;
-      if (!employeeId) {
-        const first = await ctx.db.query.aiEmployees.findFirst({
-          where: eq(aiEmployees.companyId, ctx.companyId),
-          orderBy: (e, { asc }) => [asc(e.createdAt)],
-          columns: { id: true },
-        });
-        if (!first) return [];
-        employeeId = first.id;
+  listEpisodic: protectedProcedure
+    .input(z.object({
+      employeeId: z.string().uuid().optional(),
+      limit: z.number().int().min(1).max(100).default(50),
+    }).default({}))
+    .query(async ({ ctx, input }) => {
+      const conditions = [eq(episodicMemories.tenantId, ctx.companyId)];
+      if (input.employeeId) {
+        conditions.push(eq(episodicMemories.agentId, input.employeeId));
       }
-
-      const rows = await ctx.db.query.proceduralMemories.findMany({
-        where: and(
-          eq(proceduralMemories.agentId, employeeId),
-          eq(proceduralMemories.tenantId, ctx.companyId),
-          eq(proceduralMemories.isCurrent, true),
-        ),
+      return ctx.db.query.episodicMemories.findMany({
+        where: and(...conditions),
         columns: {
           id: true,
-          title: true,
-          description: true,
-          sourceEpisodes: true,
-          signalWeight: true,
-          confidence: true,
-          createdAt: true,
-          tasksAppliedTo: true,
+          agentId: true,
+          episodeType: true,
+          summary: true,
+          occurredAt: true,
+          salienceScore: true,
+          taskId: true,
+          isConsolidated: true,
         },
-        orderBy: (pm, { desc }) => [desc(pm.signalWeight), desc(pm.tasksAppliedTo)],
+        orderBy: (m, { desc }) => [desc(m.occurredAt)],
+        limit: input.limit,
       });
-
-      return rows
-        .filter((r) => r.confidence >= CONFIDENCE_FLOOR)
-        .slice(0, MAX_RULES)
-        .map((r) => ({
-          ruleId: r.id,
-          summary: r.title,
-          evidence: r.description,
-          extractedFromDeliverableId: r.sourceEpisodes?.[0] ?? "",
-          extractedFromTitle: "",
-          extractedAt: r.createdAt.toISOString(),
-          confidence: r.confidence,
-          tasksAppliedTo: r.tasksAppliedTo ?? 0,
-        }));
     }),
 
   /**
-   * All current rules for management. No confidence floor; founder needs to
-   * see and edit every rule, not just the high-confidence subset.
+   * Semantic tier: current company facts, newest first. An employee filter
+   * returns shared facts plus that employee's scoped ones.
    */
-  listAllRules: protectedProcedure
+  listSemantic: protectedProcedure
+    .input(z.object({
+      employeeId: z.string().uuid().optional(),
+      limit: z.number().int().min(1).max(100).default(50),
+    }).default({}))
+    .query(async ({ ctx, input }) => {
+      const conditions = [
+        eq(semanticMemories.tenantId, ctx.companyId),
+        isNull(semanticMemories.supersededBy),
+      ];
+      if (input.employeeId) {
+        // or() is undefined only when called with zero conditions
+        conditions.push(
+          or(isNull(semanticMemories.agentId), eq(semanticMemories.agentId, input.employeeId))!,
+        );
+      }
+      return ctx.db.query.semanticMemories.findMany({
+        where: and(...conditions),
+        columns: {
+          id: true,
+          scope: true,
+          agentId: true,
+          fact: true,
+          context: true,
+          category: true,
+          entityName: true,
+          entityType: true,
+          confidence: true,
+          source: true,
+          updatedAt: true,
+        },
+        orderBy: (m, { desc }) => [desc(m.updatedAt)],
+        limit: input.limit,
+      });
+    }),
+
+  /**
+   * Procedural tier: every current promoted rule with its confidence,
+   * corroboration count, and origin. No confidence floor; the founder needs
+   * to see and edit every rule, not just the high-confidence subset.
+   */
+  listProcedural: protectedProcedure
     .input(z.object({ employeeId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
       const rows = await ctx.db.query.proceduralMemories.findMany({
@@ -97,6 +103,7 @@ export const memoryRouter = createTRPCRouter({
           examples: true,
           signalWeight: true,
           signalCount: true,
+          confidence: true,
           tasksAppliedTo: true,
           approvalRateDelta: true,
           version: true,
@@ -105,7 +112,72 @@ export const memoryRouter = createTRPCRouter({
         },
         orderBy: (pm, { desc }) => [desc(pm.signalWeight), desc(pm.createdAt)],
       });
-      return rows;
+
+      const promotingCandidates = rows.length > 0
+        ? await ctx.db.query.ruleCandidates.findMany({
+            where: inArray(ruleCandidates.promotedToId, rows.map((r) => r.id)),
+            columns: { promotedToId: true, distinctReviewCount: true },
+          })
+        : [];
+      const candidateByRule = new Map(
+        promotingCandidates.map((c) => [c.promotedToId, c]),
+      );
+
+      // A founder-authored rule promotes off one synthetic review; anything
+      // corroborated across reviews (or seeded that way) reads as learned.
+      return rows.map((r) => {
+        const candidate = candidateByRule.get(r.id);
+        return {
+          ...r,
+          corroborationCount: candidate?.distinctReviewCount ?? r.signalCount,
+          origin: (candidate && candidate.distinctReviewCount <= 1 ? "founder" : "learned") as
+            | "founder"
+            | "learned",
+        };
+      });
+    }),
+
+  /**
+   * Rule candidates still accumulating confidence, seed plus the demo
+   * visitor's session overlay. A session clone shadows the seed candidate it
+   * was copied from (same agent + title; candidates have no supersedes
+   * column).
+   */
+  listCandidates: protectedProcedure
+    .input(z.object({ employeeId: z.string().uuid().optional() }).default({}))
+    .query(async ({ ctx, input }) => {
+      const conditions = [
+        eq(ruleCandidates.tenantId, ctx.companyId),
+        demoWhere(ctx.demo.sessionId).seedOrMine(ruleCandidates.demoSessionId),
+      ];
+      if (input.employeeId) {
+        conditions.push(eq(ruleCandidates.agentId, input.employeeId));
+      }
+      const rows = await ctx.db.query.ruleCandidates.findMany({
+        where: and(...conditions),
+        orderBy: (c, { desc }) => [desc(c.updatedAt)],
+      });
+
+      const sessionKeys = new Set(
+        rows
+          .filter((r) => r.demoSessionId !== null)
+          .map((r) => `${r.agentId}:${r.title}`),
+      );
+      return rows
+        .filter((r) => r.demoSessionId !== null || !sessionKeys.has(`${r.agentId}:${r.title}`))
+        .map((r) => ({
+          id: r.id,
+          agentId: r.agentId,
+          ruleType: r.ruleType,
+          taskScope: r.taskScope,
+          title: r.title,
+          description: r.description,
+          confidence: r.confidence,
+          distinctReviewCount: r.distinctReviewCount,
+          threshold: candidateThreshold(r.ruleType),
+          promotedRuleId: r.promotedToId,
+          lastSignalAt: r.updatedAt,
+        }));
     }),
 
   /**

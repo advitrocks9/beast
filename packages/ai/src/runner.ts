@@ -7,6 +7,7 @@ import {
   agentRunEvents,
   aiEmployees,
   companies,
+  activityLog,
 } from "@beast/db";
 import { EMPLOYEE_ROLES, type EmployeeRole } from "@beast/shared";
 import { env } from "@beast/shared/env";
@@ -18,7 +19,8 @@ import { getPersona } from "./employees";
 import { advanceChain } from "./chains";
 import type { SpawnPayload, TaskPlan } from "./chains";
 import { checkForCollaboration } from "./collaboration";
-import { resolveProvider } from "./provider";
+import { createStubProvider, resolveProvider, ProviderQuotaError } from "./provider";
+import type { RunProvider } from "./provider";
 
 export type TriggerExecuteTask = (payload: SpawnPayload) => Promise<{ id: string }>;
 
@@ -93,6 +95,10 @@ const TASK_TO_DELIVERABLE_TYPE: Record<string, string> = {
   "create-email-sequence": "email",
   "draft-ticket-response": "custom",
   "write-faq-article": "faq",
+  "report": "report",
+  "email": "email",
+  "blog": "blog",
+  "faq": "faq",
   "custom": "custom",
 };
 
@@ -218,7 +224,10 @@ export async function executeTaskRun(
       inArray(tasks.status, ["queued", "failed", "timed_out"]),
     ));
 
-  const providerName = resolveProvider().name;
+  // Mutable: flips to "stub" when a quota error degrades the run, so the
+  // rerun's run_start is stamped "stub" and the stream labels it SIMULATED.
+  let providerName = resolveProvider().name;
+  let degraded = false;
   const wallMs = env.RUN_MAX_WALL_MS;
 
   const persistEvent = (event: AgentEvent): Promise<void> =>
@@ -269,28 +278,45 @@ export async function executeTaskRun(
       timer = setTimeout(() => resolve("timeout"), wallMs + 10_000);
     });
 
+    const attempt = (provider?: RunProvider) =>
+      run({
+        config,
+        task: {
+          taskId,
+          title: ctx.task.title,
+          objective: ctx.objective,
+          taskType: ctx.task.taskType,
+          brief: ctx.brief,
+        },
+        tools: createToolsForRole(ctx.employee.roleType, ctx.task.companyId),
+        memories: {
+          episodic: memories.episodic,
+          semantic: memories.semantic,
+          procedural: memories.procedural,
+          appliedRules: memories.activeRules,
+        },
+        onEvent: handleEvent,
+        provider,
+      });
+
     try {
-      const raced = await Promise.race([
-        run({
-          config,
-          task: {
-            taskId,
-            title: ctx.task.title,
-            objective: ctx.objective,
-            taskType: ctx.task.taskType,
-            brief: ctx.brief,
-          },
-          tools: createToolsForRole(ctx.employee.roleType, ctx.task.companyId),
-          memories: {
-            episodic: memories.episodic,
-            semantic: memories.semantic,
-            procedural: memories.procedural,
-            appliedRules: memories.activeRules,
-          },
-          onEvent: handleEvent,
-        }),
-        hardStop,
-      ]);
+      let raced: Awaited<ReturnType<typeof attempt>> | "timeout";
+      try {
+        raced = await Promise.race([attempt(), hardStop]);
+      } catch (err) {
+        if (!(err instanceof ProviderQuotaError)) throw err;
+        degraded = true;
+        providerName = "stub";
+        await db.insert(activityLog).values({
+          companyId: ctx.task.companyId,
+          aiEmployeeId: ctx.employee.id,
+          actionType: "run_degraded_to_simulated",
+          actionDetail: { taskId, provider: err.provider, status: err.status },
+        }).catch((logErr) => {
+          console.error("[runner] degrade activity_log insert failed:", logErr);
+        });
+        raced = await Promise.race([attempt(createStubProvider()), hardStop]);
+      }
 
       if (raced === "timeout" || raced.durationMs > wallMs) {
         const durationMs = Date.now() - startTime;
@@ -340,6 +366,7 @@ export async function executeTaskRun(
   // the "remembered" panel on the review page.
   const content = {
     ...baseContent,
+    ...(degraded ? { provenance: "simulated" } : {}),
     trail: result.toolCalls,
     appliedRules: result.appliedRules,
     citations: result.citations,
@@ -376,6 +403,8 @@ export async function executeTaskRun(
       renderedPreview: result.output.slice(0, 5000),
       version: 1,
       status: "in_review",
+      // A demo visitor's run stays inside their session overlay.
+      demoSessionId: ctx.task.demoSessionId,
     }).returning({ id: deliverables.id });
     deliverable = inserted[0];
   }

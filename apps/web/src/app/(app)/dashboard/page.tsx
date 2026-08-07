@@ -1,7 +1,9 @@
 import Link from "next/link";
-import { eq, and, isNull, isNotNull, notInArray, count, asc, gte, or, desc } from "drizzle-orm";
+import { headers } from "next/headers";
+import { eq, and, isNull, isNotNull, notInArray, count, gte, desc } from "drizzle-orm";
 import { createClient } from "@/lib/supabase/server";
-import { DEMO_MODE } from "@/lib/demo";
+import { DEMO_MODE, demoSessionIdFromHeaders } from "@/lib/demo";
+import { demoWhere, withDemoOverlay } from "@/lib/demo-overlay";
 import { env, type Env } from "@beast/shared/env";
 import { db } from "@beast/db";
 import { companies, aiEmployees, goals, deliverables, checkIns, proceduralMemories, tasks, activityLog, collaborationProposals } from "@beast/db";
@@ -83,18 +85,15 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     missingToolIntegrations.push({ label: "Unstructured", envKey: "UNSTRUCTURED_API_KEY" });
 
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const demoSid = DEMO_MODE ? demoSessionIdFromHeaders(await headers()) : null;
 
   const [
     employees,
     companyGoals,
-    reviewCountResult,
+    deliverableRowsRaw,
     pendingCheckIns,
-    approvedCountRes,
-    autoPublishingRows,
     planApprovalRowsRes,
-    weeklyShippedRows,
     weeklyRuleRows,
-    weeklyRejectedRes,
     recentActivityRows,
     pendingProposalRows,
   ] = await Promise.all([
@@ -106,15 +105,15 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       orderBy: (g, { desc }) => [desc(g.createdAt)],
       limit: 5,
     }),
-    db
-      .select({ value: count() })
-      .from(deliverables)
-      .where(
-        and(
-          eq(deliverables.companyId, company!.id),
-          eq(deliverables.status, "in_review"),
-        ),
+    // One overlaid fetch feeds every deliverable-derived count and list so a
+    // demo visitor's clones replace the seed rows they superseded everywhere.
+    db.query.deliverables.findMany({
+      where: and(
+        eq(deliverables.companyId, company!.id),
+        demoWhere(demoSid).seedOrMine(deliverables.demoSessionId),
       ),
+      orderBy: (d, { desc }) => [desc(d.createdAt)],
+    }),
     db.query.checkIns.findMany({
       where: and(
         eq(checkIns.companyId, company!.id),
@@ -128,55 +127,16 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     }),
     db
       .select({ value: count() })
-      .from(deliverables)
-      .where(
-        and(
-          eq(deliverables.companyId, company!.id),
-          eq(deliverables.status, "accepted"),
-        ),
-      ),
-    db
-      .select({ id: deliverables.id, publishAfter: deliverables.publishAfter })
-      .from(deliverables)
-      .where(
-        and(
-          eq(deliverables.companyId, company!.id),
-          eq(deliverables.status, "auto_publishing"),
-        ),
-      )
-      .orderBy(asc(deliverables.publishAfter)),
-    db
-      .select({ value: count() })
       .from(tasks)
       .where(
         and(
           eq(tasks.companyId, company!.id),
+          demoWhere(demoSid).seedOrMine(tasks.demoSessionId),
           isNotNull(tasks.plan),
           eq(tasks.planApproved, false),
           eq(tasks.status, "plan_review"),
         ),
       ),
-    db
-      .select({
-        id: deliverables.id,
-        title: deliverables.title,
-        deliverableType: deliverables.deliverableType,
-        aiEmployeeId: deliverables.aiEmployeeId,
-        updatedAt: deliverables.updatedAt,
-      })
-      .from(deliverables)
-      .where(
-        and(
-          eq(deliverables.companyId, company!.id),
-          or(
-            eq(deliverables.status, "accepted"),
-            eq(deliverables.status, "published"),
-          ),
-          gte(deliverables.updatedAt, sevenDaysAgo),
-        ),
-      )
-      .orderBy(desc(deliverables.updatedAt))
-      .limit(10),
     db.query.proceduralMemories.findMany({
       where: and(
         eq(proceduralMemories.tenantId, company!.id),
@@ -186,19 +146,10 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       columns: { id: true, title: true, ruleType: true, createdAt: true },
       orderBy: (pm, { desc }) => [desc(pm.createdAt)],
     }),
-    db
-      .select({ value: count() })
-      .from(deliverables)
-      .where(
-        and(
-          eq(deliverables.companyId, company!.id),
-          eq(deliverables.status, "rejected"),
-          gte(deliverables.updatedAt, sevenDaysAgo),
-        ),
-      ),
     db.query.activityLog.findMany({
       where: and(
         eq(activityLog.companyId, company!.id),
+        demoWhere(demoSid).seedOrMine(activityLog.demoSessionId),
         notInArray(activityLog.actionType, [...LOW_SIGNAL_ACTIVITY_TYPES]),
         activityEmployeeId ? eq(activityLog.aiEmployeeId, activityEmployeeId) : undefined,
       ),
@@ -215,11 +166,23 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     }),
   ]);
 
+  const deliverableRows = withDemoOverlay(deliverableRowsRaw, demoSid);
+  const autoPublishingRows = deliverableRows
+    .filter((d) => d.status === "auto_publishing")
+    .sort((a, b) => (a.publishAfter?.getTime() ?? 0) - (b.publishAfter?.getTime() ?? 0));
+  const weeklyShippedRows = deliverableRows
+    .filter((d) => (d.status === "accepted" || d.status === "published") && d.updatedAt >= sevenDaysAgo)
+    .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
+    .slice(0, 10);
+  const weeklyRejectedCount = deliverableRows
+    .filter((d) => d.status === "rejected" && d.updatedAt >= sevenDaysAgo)
+    .length;
+
   const primaryEmployeeId = employees
     .slice()
     .sort((a, b) => (a.createdAt?.getTime?.() ?? 0) - (b.createdAt?.getTime?.() ?? 0))[0]?.id;
   const primaryEmployeeName = employees.find((e) => e.id === primaryEmployeeId)?.name ?? "Alex";
-  const approvedCount = approvedCountRes[0]?.value ?? 0;
+  const approvedCount = deliverableRows.filter((d) => d.status === "accepted").length;
 
   const memoryRules = primaryEmployeeId && approvedCount > 0
     ? await db.query.proceduralMemories.findMany({
@@ -258,7 +221,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     }));
 
   const workingCount = employees.filter((e) => e.status === "working").length;
-  const reviewCount = reviewCountResult[0]?.value ?? 0;
+  const reviewCount = deliverableRows.filter((d) => d.status === "in_review").length;
   const autoPublishCount = autoPublishingRows.length;
   const planApprovalCount = planApprovalRowsRes[0]?.value ?? 0;
   const nextAutoPublishAt = autoPublishingRows[0]?.publishAfter ?? null;
@@ -336,11 +299,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   // Showcase run for the "Watch Alex work" replay. Built from a real seeded
   // deliverable's reasoning trail, so it works on the read-only demo with no
   // extra data. Prefer a research-heavy report.
-  const showcaseRows = await db.query.deliverables.findMany({
-    where: eq(deliverables.companyId, company!.id),
-    orderBy: (d, { desc }) => [desc(d.createdAt)],
-    limit: 25,
-  });
+  const showcaseRows = deliverableRows.slice(0, 25);
   const showcase = showcaseRows
     .map((d) => ({ d, c: (d.content ?? {}) as DeliverableContent }))
     .filter((x) => (x.c.trail?.length ?? 0) >= 2)
@@ -478,7 +437,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         shippedItems={weeklyShippedItems}
         pendingReviewCount={reviewCount}
         newRulesCount={weeklyRuleRows.length}
-        rejectedCount={weeklyRejectedRes[0]?.value ?? 0}
+        rejectedCount={weeklyRejectedCount}
         latestRule={latestRule}
       />
 

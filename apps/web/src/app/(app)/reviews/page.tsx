@@ -1,5 +1,8 @@
-import { eq, and, inArray, count } from "drizzle-orm";
+import { eq, and, or, inArray, count } from "drizzle-orm";
+import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { DEMO_MODE, demoSessionIdFromHeaders } from "@/lib/demo";
+import { demoWhere, withDemoOverlay } from "@/lib/demo-overlay";
 import { db } from "@beast/db";
 import { companies, deliverables, aiEmployees, tasks } from "@beast/db";
 import { GlassCard } from "@beast/ui";
@@ -19,23 +22,37 @@ export default async function ReviewQueuePage() {
     columns: { id: true },
   });
 
-  const [pendingDeliverables, totalDeliverablesResult, allEmployees] = await Promise.all([
+  const demoSid = DEMO_MODE ? demoSessionIdFromHeaders(await headers()) : null;
+
+  const [pendingRaw, totalDeliverablesResult, allEmployees] = await Promise.all([
+    // In demo the fetch adds the session's clones regardless of status so a
+    // clone that left in_review still supersedes its seed original below.
     db.query.deliverables.findMany({
       where: and(
         eq(deliverables.companyId, company!.id),
-        eq(deliverables.status, "in_review"),
+        demoSid
+          ? and(
+              demoWhere(demoSid).seedOrMine(deliverables.demoSessionId),
+              or(eq(deliverables.status, "in_review"), eq(deliverables.demoSessionId, demoSid)),
+            )
+          : eq(deliverables.status, "in_review"),
       ),
       orderBy: (d, { desc }) => [desc(d.createdAt)],
     }),
     db
       .select({ value: count() })
       .from(deliverables)
-      .where(eq(deliverables.companyId, company!.id)),
+      .where(and(
+        eq(deliverables.companyId, company!.id),
+        demoWhere(demoSid).seedOrMine(deliverables.demoSessionId),
+      )),
     db.query.aiEmployees.findMany({
       where: eq(aiEmployees.companyId, company!.id),
       columns: { id: true, name: true, roleType: true },
     }),
   ]);
+  const pendingDeliverables = withDemoOverlay(pendingRaw, demoSid)
+    .filter((d) => d.status === "in_review");
 
   const totalDeliverables = totalDeliverablesResult[0]?.value ?? 0;
   const isFreshTenant = totalDeliverables === 0;

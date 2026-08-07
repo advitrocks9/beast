@@ -16,6 +16,7 @@ export {
   storeApprovedExample,
   accumulateSignal,
   seedFounderRule,
+  candidateThreshold,
 } from "./extraction";
 export type { CandidateResult, SignalCategory, AccumulateSignalInput } from "./extraction";
 export { consolidateMemories, detectDrift } from "./consolidation";

@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   try {
     const rows = await db.execute(sql`SELECT count(*)::int AS companies FROM companies`);
-    const companies = Number((rows as Array<{ companies: number }>)[0]?.companies ?? 0);
+    const companies = Number(rows[0]?.companies ?? 0);
     return NextResponse.json({ ok: true, companies });
   } catch (err) {
     return NextResponse.json(

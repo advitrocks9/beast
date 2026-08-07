@@ -1,17 +1,28 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { eq, and, isNotNull, desc, inArray } from "drizzle-orm";
-import { tasks, aiEmployees, companies, goals, chatMessages, activityLog } from "@beast/db";
-import { TASK_STATUSES, ONBOARDING_STARTERS, starterById } from "@beast/shared";
-import { classifyTask, getSkillsForRole, advanceChain, computeFirstOccurrence, extractRuleFromRationale, dispatchRun } from "@beast/ai";
+import { tasks, aiEmployees, companies, goals, chatMessages, activityLog, demoSessions } from "@beast/db";
+import { TASK_STATUSES, ONBOARDING_STARTERS, starterById, cannedJob } from "@beast/shared";
+import { classifyTask, getSkillsForRole, advanceChain, computeFirstOccurrence, extractRuleFromRationale, dispatchRun, executeTaskRun } from "@beast/ai";
 import type { SpawnPayload, RecurrenceConfig } from "@beast/ai";
-import { createTRPCRouter, protectedProcedure, assertNotDemo } from "../init";
+import { createTRPCRouter, protectedProcedure, demoAllowedProcedure, assertNotDemo } from "../init";
+import { assertWithinTaskLimit } from "@/lib/entitlements";
+import { checkRunAllowance, recordRunUsage } from "@/lib/demo-limits";
+import { demoWhere } from "@/lib/demo-overlay";
 import { triggerTask } from "@/lib/trigger";
 
 const triggerExecuteTask = (payload: SpawnPayload) => triggerTask("execute-task", payload);
 
 /** The one run-dispatch seam: Trigger.dev when configured, in-process otherwise. */
 const dispatch = (taskId: string) => dispatchRun(taskId, { trigger: triggerExecuteTask });
+
+const REPLAY_TERMINAL_STATUSES = ["accepted", "published"] as const;
+
+const REPLAY_REASON_COPY: Record<"session" | "ip" | "budget", string> = {
+  session: "You've used both live runs for this session, so here is a replay of the same job from earlier this week.",
+  ip: "This network has hit today's live-run limit, so here is a replay of the same job from earlier this week.",
+  budget: "The demo's daily model budget is spent, so here is a replay of the same job from earlier this week.",
+};
 
 export const tasksRouter = createTRPCRouter({
   list: protectedProcedure
@@ -20,7 +31,10 @@ export const tasksRouter = createTRPCRouter({
       status: z.enum(TASK_STATUSES).optional(),
     }))
     .query(async ({ ctx, input }) => {
-      const conditions = [eq(tasks.companyId, ctx.companyId)];
+      const conditions = [
+        eq(tasks.companyId, ctx.companyId),
+        demoWhere(ctx.demo.sessionId).seedOrMine(tasks.demoSessionId),
+      ];
       if (input.employeeId) {
         conditions.push(eq(tasks.aiEmployeeId, input.employeeId));
       }
@@ -33,6 +47,112 @@ export const tasksRouter = createTRPCRouter({
       });
     }),
 
+  /**
+   * Demo commission: run one curated job live inside the visitor's session
+   * overlay, or hand back a labelled replay of a matching seeded run once
+   * any demo limit is hit. In product mode the same mutation runs the job
+   * for the authed founder with no limits.
+   */
+  commission: demoAllowedProcedure
+    .input(z.object({
+      cannedJobId: z.string(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const job = cannedJob(input.cannedJobId);
+      if (!job) {
+        throw new TRPCError({ code: "NOT_FOUND", message: `Unknown canned job: ${input.cannedJobId}` });
+      }
+
+      const employee = await ctx.db.query.aiEmployees.findFirst({
+        where: and(eq(aiEmployees.companyId, ctx.companyId), eq(aiEmployees.roleType, job.role)),
+        orderBy: (e, { asc }) => [asc(e.createdAt)],
+        columns: { id: true },
+      });
+      if (!employee) {
+        throw new TRPCError({ code: "NOT_FOUND", message: `No ${job.role} employee to run this job` });
+      }
+
+      if (ctx.demoSessionId) {
+        const session = await ctx.db.query.demoSessions.findFirst({
+          where: eq(demoSessions.id, ctx.demoSessionId),
+          columns: { ipHash: true },
+        });
+        if (!session) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Demo session expired. Reload the page to start a new one." });
+        }
+
+        const allowance = await checkRunAllowance(ctx.demoSessionId, session.ipHash);
+        if (!allowance.allowed) {
+          const replay = await ctx.db.query.tasks.findFirst({
+            where: and(
+              eq(tasks.companyId, ctx.companyId),
+              eq(tasks.taskType, job.taskType),
+              eq(tasks.aiEmployeeId, employee.id),
+              inArray(tasks.status, [...REPLAY_TERMINAL_STATUSES]),
+              demoWhere(null).seedOnly(tasks.demoSessionId),
+            ),
+            orderBy: (t, { desc }) => [desc(t.completedAt)],
+            columns: { id: true },
+          });
+          if (!replay) {
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: `No seeded ${job.taskType} run to replay; the demo seed is incomplete`,
+            });
+          }
+          return {
+            mode: "replay" as const,
+            reason: allowance.reason,
+            message: REPLAY_REASON_COPY[allowance.reason],
+            taskId: replay.id,
+          };
+        }
+      }
+
+      // Demo sessions meter through their own run allowance above; product
+      // founders meter through the billing tier.
+      if (!ctx.demoSessionId) {
+        await assertWithinTaskLimit(ctx.db, ctx.companyId);
+      }
+
+      const [task] = await ctx.db.insert(tasks).values({
+        companyId: ctx.companyId,
+        aiEmployeeId: employee.id,
+        title: job.title,
+        brief: { objective: job.title, instructions: job.brief, cannedJobId: job.id },
+        taskType: job.taskType,
+        origin: "user_created",
+        planApproved: true,
+        demoSessionId: ctx.demoSessionId,
+      }).returning({ id: tasks.id });
+
+      if (!task) throw new Error("Failed to create task");
+
+      if (ctx.demoSessionId) {
+        const sessionId = ctx.demoSessionId;
+        // In-process run; a settled run consumes the visitor's allowance with
+        // the runner's real token count, or the canned estimate if it never
+        // reached completion.
+        void executeTaskRun(task.id)
+          .then((result) =>
+            recordRunUsage(
+              sessionId,
+              result.status === "completed"
+                ? result.tokensUsed.input + result.tokensUsed.output
+                : job.estTokens,
+            ),
+          )
+          .catch((err) => {
+            console.error(`[demo] commissioned run for task ${task.id} crashed:`, err);
+            return recordRunUsage(sessionId, job.estTokens);
+          });
+      } else {
+        await dispatch(task.id);
+      }
+
+      return { mode: "live" as const, taskId: task.id };
+    }),
+
   create: protectedProcedure
     .input(z.object({
       aiEmployeeId: z.string().uuid(),
@@ -43,6 +163,7 @@ export const tasksRouter = createTRPCRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       assertNotDemo("Running a live agent task");
+      await assertWithinTaskLimit(ctx.db, ctx.companyId);
 
       // Verify the target employee belongs to this company before writing a
       // task that references it (otherwise a caller could point a task at
@@ -164,6 +285,7 @@ export const tasksRouter = createTRPCRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       assertNotDemo("Running a live agent task");
+      await assertWithinTaskLimit(ctx.db, ctx.companyId);
       const starter = starterById(input.starterId);
       if (!starter) {
         throw new Error(`Unknown starter: ${input.starterId}`);
@@ -228,6 +350,7 @@ export const tasksRouter = createTRPCRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       assertNotDemo("Re-running a task");
+      await assertWithinTaskLimit(ctx.db, ctx.companyId);
       const original = await ctx.db.query.tasks.findFirst({
         where: and(eq(tasks.id, input.taskId), eq(tasks.companyId, ctx.companyId)),
       });
@@ -328,6 +451,7 @@ export const tasksRouter = createTRPCRouter({
         where: and(
           eq(tasks.parentTaskId, input.parentTaskId),
           eq(tasks.companyId, ctx.companyId),
+          demoWhere(ctx.demo.sessionId).seedOrMine(tasks.demoSessionId),
         ),
         orderBy: (t, { asc }) => [asc(t.createdAt)],
       });
@@ -408,6 +532,7 @@ export const tasksRouter = createTRPCRouter({
         where: and(
           eq(tasks.companyId, ctx.companyId),
           isNotNull(tasks.recurrence),
+          demoWhere(ctx.demo.sessionId).seedOrMine(tasks.demoSessionId),
         ),
         orderBy: (t, { desc }) => [desc(t.createdAt)],
       });
@@ -543,7 +668,11 @@ export const tasksRouter = createTRPCRouter({
     .input(z.object({ taskId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
       const task = await ctx.db.query.tasks.findFirst({
-        where: and(eq(tasks.id, input.taskId), eq(tasks.companyId, ctx.companyId)),
+        where: and(
+          eq(tasks.id, input.taskId),
+          eq(tasks.companyId, ctx.companyId),
+          demoWhere(ctx.demo.sessionId).seedOrMine(tasks.demoSessionId),
+        ),
         columns: { id: true, status: true, triggerRunId: true, startedAt: true, completedAt: true, plan: true, planApproved: true, parentTaskId: true },
       });
       return task ?? null;

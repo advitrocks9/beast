@@ -3,7 +3,7 @@ import Stripe from "stripe";
 import { db, companies } from "@beast/db";
 import { eq } from "drizzle-orm";
 import { env } from "@beast/shared/env";
-import { getStripe } from "@/lib/stripe/client";
+import { getStripe, tierForPrice } from "@/lib/stripe/client";
 import { DEMO_MODE } from "@/lib/demo";
 
 /**
@@ -99,8 +99,17 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
     unpaid: "past_due",
   };
 
+  // Tier follows the subscribed price, not metadata: a portal plan change
+  // swaps the price but keeps the metadata written at first checkout.
+  const priceId = subscription.items.data[0]?.price.id;
+  const tier = priceId ? tierForPrice(priceId) : null;
+  if (!tier) {
+    console.error(`[Stripe Webhook] No tier maps to price ${priceId}; billing_tier left unchanged`);
+  }
+
   await db.update(companies).set({
     billingStatus: statusMap[subscription.status] ?? subscription.status,
+    ...(tier ? { billingTier: tier } : {}),
     updatedAt: new Date(),
   }).where(eq(companies.id, companyId));
 }
@@ -111,6 +120,7 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
 
   await db.update(companies).set({
     billingStatus: "canceled",
+    billingTier: "trial",
     stripeSubscriptionId: null,
     updatedAt: new Date(),
   }).where(eq(companies.id, companyId));

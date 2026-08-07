@@ -1,6 +1,9 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { eq, and, desc, inArray } from "drizzle-orm";
 import { createClient } from "@/lib/supabase/server";
+import { DEMO_MODE, demoSessionIdFromHeaders } from "@/lib/demo";
+import { demoWhere } from "@/lib/demo-overlay";
 import { db } from "@beast/db";
 import { companies, tasks, aiEmployees } from "@beast/db";
 import { GlassCard } from "@beast/ui";
@@ -43,7 +46,11 @@ export default async function TasksIndexPage({ searchParams }: PageProps) {
     columns: { id: true },
   });
 
-  const conditions = [eq(tasks.companyId, company!.id)];
+  const demoSid = DEMO_MODE ? demoSessionIdFromHeaders(await headers()) : null;
+  const conditions = [
+    eq(tasks.companyId, company!.id),
+    demoWhere(demoSid).seedOrMine(tasks.demoSessionId),
+  ];
   if (filter !== "all") {
     const group = STATUS_GROUPS[filter];
     if (group) conditions.push(inArray(tasks.status, group.statuses));
@@ -77,9 +84,13 @@ export default async function TasksIndexPage({ searchParams }: PageProps) {
   // Group counts (computed once for the chips bar). Honor the parent
   // scope so the chip counts match what the founder is actually filtering
   // on, not the full company.
+  const countScope = and(
+    eq(tasks.companyId, company!.id),
+    demoWhere(demoSid).seedOrMine(tasks.demoSessionId),
+  );
   const countWhere = parentId
-    ? and(eq(tasks.companyId, company!.id), eq(tasks.parentTaskId, parentId))
-    : eq(tasks.companyId, company!.id);
+    ? and(countScope, eq(tasks.parentTaskId, parentId))
+    : countScope;
   const allTasks = await db.query.tasks.findMany({
     where: countWhere,
     columns: { status: true },

@@ -1,5 +1,6 @@
 import Stripe from "stripe";
 import { env, requireEnv } from "@beast/shared/env";
+import type { PaidTier } from "@beast/shared";
 
 let _stripe: Stripe | null = null;
 
@@ -10,17 +11,16 @@ export function getStripe(): Stripe {
   return _stripe;
 }
 
-/** Price IDs - set these in Stripe Dashboard and configure here. */
-export const PRICE_IDS: Record<string, string | undefined> = {
+export const PRICE_IDS: Record<PaidTier, string | undefined> = {
   starter: env.STRIPE_PRICE_STARTER,
   team: env.STRIPE_PRICE_TEAM,
   business: env.STRIPE_PRICE_BUSINESS,
 };
 
-/** Tier metadata. */
-export const TIER_LIMITS: Record<string, { tasksPerMonth: number; employees: number; storageMb: number }> = {
-  trial: { tasksPerMonth: 200, employees: 3, storageMb: 2048 }, // Same as Team tier during trial
-  starter: { tasksPerMonth: 50, employees: 1, storageMb: 512 },
-  team: { tasksPerMonth: 200, employees: 3, storageMb: 2048 },
-  business: { tasksPerMonth: 500, employees: 6, storageMb: 5120 },
-};
+/** Reverse lookup for webhook events, where only the price id is authoritative. */
+export function tierForPrice(priceId: string): PaidTier | null {
+  const entry = (Object.entries(PRICE_IDS) as [PaidTier, string | undefined][]).find(
+    ([, id]) => id === priceId,
+  );
+  return entry?.[0] ?? null;
+}

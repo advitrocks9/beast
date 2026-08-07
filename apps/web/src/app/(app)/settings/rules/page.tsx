@@ -35,7 +35,7 @@ export default function SettingsRulesPage() {
   const selected = employeeId ?? employees.data?.[0]?.id ?? null;
 
   const rules = useQuery({
-    ...trpc.memory.listAllRules.queryOptions({ employeeId: selected ?? "" }),
+    ...trpc.memory.listProcedural.queryOptions({ employeeId: selected ?? "" }),
     enabled: !!selected,
   });
 
@@ -47,7 +47,7 @@ export default function SettingsRulesPage() {
   const invalidateRulesAndDeprecated = () => {
     if (!selected) return;
     queryClient.invalidateQueries({
-      queryKey: trpc.memory.listAllRules.queryOptions({ employeeId: selected }).queryKey,
+      queryKey: trpc.memory.listProcedural.queryOptions({ employeeId: selected }).queryKey,
     });
     queryClient.invalidateQueries({
       queryKey: trpc.memory.listDeprecatedRules.queryOptions({ employeeId: selected }).queryKey,
@@ -403,7 +403,7 @@ function CreateRuleForm({ employeeId }: { employeeId: string }) {
     ...trpc.memory.createManualRule.mutationOptions(),
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: trpc.memory.listAllRules.queryOptions({ employeeId }).queryKey,
+        queryKey: trpc.memory.listProcedural.queryOptions({ employeeId }).queryKey,
       });
       setTitle("");
       setDescription("");
