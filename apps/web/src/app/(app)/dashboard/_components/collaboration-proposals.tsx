@@ -4,7 +4,6 @@ import { useState } from "react";
 import Link from "next/link";
 import { useMutation } from "@tanstack/react-query";
 import { useTRPC } from "@/trpc/client";
-import { GlassCard } from "@beast/ui";
 import { ROLE_COLORS, roleMeta, statusMeta } from "@/lib/colors";
 
 // Employee colors arrive as solid role hexes. Dots use the solid as-is, but a
@@ -41,16 +40,16 @@ export function CollaborationProposals({ items }: CollaborationProposalsProps) {
 
   return (
     <section>
-      <h2 className="heading-gradient text-lg font-semibold mb-3">Collaboration proposals</h2>
+      <h2 className="text-lg font-semibold mb-3">Collaboration proposals</h2>
 
       {visible.length === 0 ? (
-        <p className="px-1 text-[11px] text-text-muted">
+        <p className="px-1 text-[11px] text-ink-muted">
           {Object.keys(dismissed).length} answered just now. Refresh to update the list.
         </p>
       ) : (
         <div className="space-y-2">
           {visible.map((p) => (
-            <GlassCard key={p.id} hoverable={false} className="p-4">
+            <div key={p.id} className="panel p-4">
               <div className="flex items-start gap-3">
                 <span
                   className="mt-1 h-2 w-2 shrink-0 rounded-full"
@@ -58,7 +57,7 @@ export function CollaborationProposals({ items }: CollaborationProposalsProps) {
                   aria-hidden
                 />
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs text-text-secondary">
+                  <p className="text-xs text-ink-secondary">
                     <span className="font-medium" style={{ color: roleTextColor(p.fromEmployeeColor) }}>
                       {p.fromEmployeeName}
                     </span>
@@ -72,7 +71,7 @@ export function CollaborationProposals({ items }: CollaborationProposalsProps) {
                   {p.sourceDeliverableId && (
                     <Link
                       href={`/review/${p.sourceDeliverableId}`}
-                      className="mt-1 inline-block text-[11px] text-brand hover:underline"
+                      className="mt-1 inline-block text-[11px] text-identity hover:underline"
                     >
                       Source deliverable &rarr;
                     </Link>
@@ -95,14 +94,14 @@ export function CollaborationProposals({ items }: CollaborationProposalsProps) {
                         respond.mutate({ proposalId: p.id, approved: false });
                       }}
                       disabled={respond.isPending}
-                      className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-text-secondary hover:bg-gray-50"
+                      className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-ink-secondary hover:bg-gray-50"
                     >
                       Reject
                     </button>
                   </div>
                 </div>
               </div>
-            </GlassCard>
+            </div>
           ))}
         </div>
       )}

@@ -3,9 +3,16 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
+import { Pencil } from "lucide-react";
 import { useTRPC } from "@/trpc/client";
-import { GlassCard } from "@beast/ui";
-import { Pencil, X } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { GoalField, INPUT_CLASS } from "./goal-form-fields";
 
 interface GoalEditPayload {
   id: string;
@@ -36,13 +43,15 @@ export function EditGoalButton({ goal }: { goal: GoalEditPayload }) {
   const update = useMutation(trpc.goals.update.mutationOptions());
   const updateStatus = useMutation(trpc.goals.updateStatus.mutationOptions());
 
-  function close() {
-    setOpen(false);
-    setTitle(goal.title);
-    setDescription(goal.description ?? "");
-    setTargetMetric(goal.targetMetric ?? "");
-    setTargetDate(isoDate(goal.targetDate));
-    setStatus(goal.status);
+  function handleOpenChange(next: boolean) {
+    setOpen(next);
+    if (!next) {
+      setTitle(goal.title);
+      setDescription(goal.description ?? "");
+      setTargetMetric(goal.targetMetric ?? "");
+      setTargetDate(isoDate(goal.targetDate));
+      setStatus(goal.status);
+    }
   }
 
   async function handleSave() {
@@ -76,132 +85,95 @@ export function EditGoalButton({ goal }: { goal: GoalEditPayload }) {
   const isPending = update.isPending || updateStatus.isPending;
 
   return (
-    <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="flex h-7 w-7 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-[oklch(0.97_0.005_260/0.5)] hover:text-text"
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogTrigger
         aria-label={`Edit ${goal.title}`}
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[2px] text-ink-muted transition-colors hover:bg-panel hover:text-ink"
       >
-        <Pencil size={14} />
-      </button>
+        <Pencil size={14} strokeWidth={1.5} />
+      </DialogTrigger>
+      <DialogContent className="max-w-lg gap-0 p-0 sm:max-w-lg">
+        <DialogHeader className="rule-b px-5 py-4">
+          <DialogTitle className="text-lg font-bold">Edit target</DialogTitle>
+        </DialogHeader>
 
-      {open && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4"
-          onClick={close}
-        >
-          <div onClick={(e) => e.stopPropagation()} className="w-full max-w-lg">
-            <GlassCard hoverable={false} className="p-6 bg-white">
-              <div className="flex items-start justify-between mb-4">
-                <h3 className="font-(--font-display) text-lg font-bold tracking-tight">
-                  Edit goal
-                </h3>
-                <button
-                  onClick={close}
-                  className="flex h-7 w-7 items-center justify-center rounded-lg text-text-muted hover:bg-[oklch(0.97_0.005_260/0.5)]"
-                  aria-label="Close"
-                >
-                  <X size={14} />
-                </button>
-              </div>
-
-              <div className="space-y-3">
-                <Field label="Title">
-                  <input
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
-                  />
-                </Field>
-
-                <Field label="Description" optional>
-                  <textarea
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    rows={3}
-                    className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand resize-none"
-                  />
-                </Field>
-
-                <Field label="Target metric" optional>
-                  <input
-                    value={targetMetric}
-                    onChange={(e) => setTargetMetric(e.target.value)}
-                    placeholder="e.g. 50 qualified leads / month"
-                    className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
-                  />
-                </Field>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label="Target date" optional>
-                    <input
-                      type="date"
-                      value={targetDate}
-                      onChange={(e) => setTargetDate(e.target.value)}
-                      className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
-                    />
-                  </Field>
-
-                  <Field label="Status">
-                    <select
-                      value={status}
-                      onChange={(e) => setStatus(e.target.value)}
-                      className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
-                    >
-                      <option value="active">Active</option>
-                      <option value="paused">Paused</option>
-                      <option value="completed">Completed</option>
-                      <option value="archived">Archived</option>
-                    </select>
-                  </Field>
-                </div>
-              </div>
-
-              <div className="mt-6 flex items-center justify-between gap-3">
-                <button
-                  type="button"
-                  onClick={handleArchive}
-                  disabled={isPending}
-                  className="text-xs font-medium text-error hover:underline disabled:opacity-50"
-                >
-                  Archive
-                </button>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={close}
-                    disabled={isPending}
-                    className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-text-secondary hover:bg-gray-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSave}
-                    disabled={isPending || !title.trim()}
-                    className="rounded-xl bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
-                  >
-                    {isPending ? "Saving..." : "Save"}
-                  </button>
-                </div>
-              </div>
-            </GlassCard>
+        <div className="space-y-4 px-5 py-4">
+          <GoalField label="Title">
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className={INPUT_CLASS}
+            />
+          </GoalField>
+          <GoalField label="Description" optional>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={3}
+              className={`${INPUT_CLASS} resize-none`}
+            />
+          </GoalField>
+          <GoalField label="Target metric" optional>
+            <input
+              value={targetMetric}
+              onChange={(e) => setTargetMetric(e.target.value)}
+              placeholder="e.g. 50 qualified leads / month"
+              className={INPUT_CLASS}
+            />
+          </GoalField>
+          <div className="grid grid-cols-2 gap-3">
+            <GoalField label="Target date" optional>
+              <input
+                type="date"
+                value={targetDate}
+                onChange={(e) => setTargetDate(e.target.value)}
+                className={INPUT_CLASS}
+              />
+            </GoalField>
+            <GoalField label="Status">
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+                className={INPUT_CLASS}
+              >
+                <option value="active">Active</option>
+                <option value="paused">Paused</option>
+                <option value="completed">Met</option>
+                <option value="archived">Archived</option>
+              </select>
+            </GoalField>
           </div>
         </div>
-      )}
-    </>
-  );
-}
 
-function Field({ label, optional, children }: { label: string; optional?: boolean; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="block text-xs font-medium text-text-secondary mb-1.5">
-        {label}
-        {optional && <span className="ml-1 font-normal text-text-muted">(optional)</span>}
-      </label>
-      {children}
-    </div>
+        <footer className="hairline-t flex items-center justify-between gap-3 px-5 py-3.5">
+          <button
+            type="button"
+            onClick={handleArchive}
+            disabled={isPending}
+            className="spec text-state-failed underline underline-offset-2 hover:text-state-failed/80 disabled:opacity-50"
+          >
+            Archive
+          </button>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => handleOpenChange(false)}
+              disabled={isPending}
+              className="btn-ghost disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={isPending || !title.trim()}
+              className="btn-ink disabled:opacity-50"
+            >
+              {isPending ? "Saving…" : "Save"}
+            </button>
+          </div>
+        </footer>
+      </DialogContent>
+    </Dialog>
   );
 }

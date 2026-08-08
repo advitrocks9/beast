@@ -1,7 +1,8 @@
 import type { MetadataRoute } from "next";
+import { env } from "@beast/shared/env";
 
 function siteUrl(): string {
-  return process.env.NEXT_PUBLIC_APP_URL ?? "https://beast.team";
+  return env.NEXT_PUBLIC_APP_URL ?? "https://beast.team";
 }
 
 export default function sitemap(): MetadataRoute.Sitemap {
@@ -20,12 +21,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
       lastModified: now,
       changeFrequency: "monthly",
       priority: 0.9,
-    },
-    {
-      url: `${base}/vs/sintra`,
-      lastModified: now,
-      changeFrequency: "monthly",
-      priority: 0.7,
     },
     {
       url: `${base}/sign-in`,

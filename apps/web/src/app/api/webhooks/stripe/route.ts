@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { db, companies } from "@beast/db";
 import { eq } from "drizzle-orm";
-import { getStripe } from "@/lib/stripe/client";
+import { env } from "@beast/shared/env";
+import { getStripe, tierForPrice } from "@/lib/stripe/client";
 import { DEMO_MODE } from "@/lib/demo";
 
 /**
@@ -23,7 +24,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Missing signature" }, { status: 400 });
   }
 
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  const webhookSecret = env.STRIPE_WEBHOOK_SECRET;
   if (!webhookSecret) {
     console.error("[Stripe Webhook] STRIPE_WEBHOOK_SECRET not configured");
     return NextResponse.json({ error: "Webhook not configured" }, { status: 500 });
@@ -98,8 +99,17 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
     unpaid: "past_due",
   };
 
+  // Tier follows the subscribed price, not metadata: a portal plan change
+  // swaps the price but keeps the metadata written at first checkout.
+  const priceId = subscription.items.data[0]?.price.id;
+  const tier = priceId ? tierForPrice(priceId) : null;
+  if (!tier) {
+    console.error(`[Stripe Webhook] No tier maps to price ${priceId}; billing_tier left unchanged`);
+  }
+
   await db.update(companies).set({
     billingStatus: statusMap[subscription.status] ?? subscription.status,
+    ...(tier ? { billingTier: tier } : {}),
     updatedAt: new Date(),
   }).where(eq(companies.id, companyId));
 }
@@ -110,16 +120,17 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
 
   await db.update(companies).set({
     billingStatus: "canceled",
+    billingTier: "trial",
     stripeSubscriptionId: null,
     updatedAt: new Date(),
   }).where(eq(companies.id, companyId));
 }
 
 async function handlePaymentFailed(invoice: Stripe.Invoice) {
-  // Extract subscription ID from parent - Stripe v22 uses `parent.subscription_details`
-  const subId = (invoice as unknown as Record<string, unknown>).subscription as string
-    ?? (invoice.parent as Record<string, unknown> | null)?.subscription as string
-    ?? null;
+  // Stripe v22 moved the subscription ref off the invoice root; read both shapes untyped
+  const top: unknown = Reflect.get(invoice, "subscription");
+  const parent: unknown = invoice.parent ? Reflect.get(invoice.parent, "subscription") : null;
+  const subId = typeof top === "string" ? top : typeof parent === "string" ? parent : null;
 
   if (!subId) return;
 

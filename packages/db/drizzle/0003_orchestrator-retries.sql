@@ -1,0 +1,1 @@
+ALTER TABLE "tasks" ADD COLUMN "orchestrator_retries" integer DEFAULT 0 NOT NULL;

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { env } from "@beast/shared/env";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { DEMO_MODE } from "@/lib/demo";
 import { check as rateLimitCheck, clientIpFrom } from "@/lib/rate-limit";
@@ -71,8 +72,8 @@ export async function POST(request: Request) {
     );
   }
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const url = env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !anonKey) {
     return NextResponse.json({ error: "not_configured" }, { status: 500 });
   }

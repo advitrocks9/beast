@@ -1,8 +1,7 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { eq, and, inArray } from "drizzle-orm";
-import { deliverables, deliverableVersions, tasks, checkIns, referralCodes, aiEmployees, companies } from "@beast/db";
-import { generateShareSlug, generateReferralCode } from "@/lib/share/codes";
+import { eq, and, or, inArray, count } from "drizzle-orm";
+import { db, deliverables, deliverableVersions, tasks, checkIns, companies, proceduralMemories } from "@beast/db";
 import {
   extractFromTaskCompletion,
   extractFromFeedback,
@@ -11,11 +10,14 @@ import {
   advanceChain,
   publishToPlatform,
   recalculateGoalProgress,
+  dispatchRun,
 } from "@beast/ai";
-import type { SpawnPayload } from "@beast/ai";
-import { tasks as triggerTasks } from "@trigger.dev/sdk";
+import type { SpawnPayload, CandidateResult, WordDiff } from "@beast/ai";
+import { DELIVERABLE_STATUSES } from "@beast/shared";
 import { connectors, activityLog } from "@beast/db";
-import { createTRPCRouter, protectedProcedure, assertNotDemo } from "../init";
+import { createTRPCRouter, protectedProcedure, demoAllowedProcedure, assertNotDemo } from "../init";
+import { demoWhere, withDemoOverlay } from "@/lib/demo-overlay";
+import { triggerTask } from "@/lib/trigger";
 
 interface WallClockParts {
   year: number;
@@ -104,12 +106,87 @@ function nextMonday9amInTz(tz: string, now: Date = new Date()): Date {
   return wallClockInTzToUtc(parts.year, parts.month, parts.day + daysAhead, 9, 0, 0, safeTz);
 }
 
-async function triggerExecuteTask(payload: SpawnPayload): Promise<{ id: string }> {
-  const handle = await triggerTasks.trigger("execute-task", payload);
-  return { id: handle.id };
+const triggerExecuteTask = (payload: SpawnPayload) => triggerTask("execute-task", payload);
+
+/** Amendment ordinal for a just-promoted rule: rows are append-only, so the
+ * tenant's total row count is the number the manual stamps on it. */
+async function manualRuleNumberFor(
+  database: typeof db,
+  tenantId: string,
+  candidates: CandidateResult[],
+): Promise<number | null> {
+  if (!candidates.some((c) => c.promotedRuleId)) return null;
+  const [row] = await database
+    .select({ value: count() })
+    .from(proceduralMemories)
+    .where(eq(proceduralMemories.tenantId, tenantId));
+  return row?.value ?? null;
 }
 
-const DELIVERABLE_STATUSES = ["draft", "review", "revision", "approved", "published"] as const;
+/** The one run-dispatch seam: Trigger.dev when configured, in-process otherwise. */
+const dispatch = (taskId: string) => dispatchRun(taskId, { trigger: triggerExecuteTask });
+
+/**
+ * Demo copy-on-write: a review that targets a seed row (demoSessionId null)
+ * clones it into the visitor's session and the review applies to the clone;
+ * visitor-created and product rows come back unchanged. Idempotent per
+ * session per seed row.
+ */
+async function resolveReviewTarget(
+  database: typeof db,
+  input: {
+    deliverableId: string;
+    companyId: string;
+    demoSessionId: string | null;
+    reviewableStatuses: string[];
+  },
+) {
+  const target = await database.query.deliverables.findFirst({
+    where: and(
+      eq(deliverables.id, input.deliverableId),
+      eq(deliverables.companyId, input.companyId),
+      demoWhere(input.demoSessionId).seedOrMine(deliverables.demoSessionId),
+    ),
+  });
+  if (!target) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Deliverable not found" });
+  }
+  if (!input.demoSessionId || target.demoSessionId !== null) {
+    return target;
+  }
+
+  const existingClone = await database.query.deliverables.findFirst({
+    where: and(
+      eq(deliverables.supersedesDeliverableId, target.id),
+      eq(deliverables.demoSessionId, input.demoSessionId),
+    ),
+  });
+  if (existingClone) return existingClone;
+
+  if (!input.reviewableStatuses.includes(target.status)) {
+    throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Deliverable is not awaiting review" });
+  }
+
+  const [clone] = await database
+    .insert(deliverables)
+    .values({
+      taskId: target.taskId,
+      companyId: target.companyId,
+      aiEmployeeId: target.aiEmployeeId,
+      deliverableType: target.deliverableType,
+      title: target.title,
+      content: target.content,
+      renderedPreview: target.renderedPreview,
+      version: target.version,
+      status: target.status,
+      publishAfter: target.publishAfter,
+      demoSessionId: input.demoSessionId,
+      supersedesDeliverableId: target.id,
+    })
+    .returning();
+  if (!clone) throw new Error("deliverable clone returned no row");
+  return clone;
+}
 
 export const deliverablesRouter = createTRPCRouter({
   list: protectedProcedure
@@ -118,24 +195,42 @@ export const deliverablesRouter = createTRPCRouter({
       status: z.enum(DELIVERABLE_STATUSES).optional(),
     }))
     .query(async ({ ctx, input }) => {
-      const conditions = [eq(deliverables.companyId, ctx.companyId)];
+      const sessionId = ctx.demo.sessionId;
+      const conditions = [
+        eq(deliverables.companyId, ctx.companyId),
+        demoWhere(sessionId).seedOrMine(deliverables.demoSessionId),
+      ];
       if (input.employeeId) {
         conditions.push(eq(deliverables.aiEmployeeId, input.employeeId));
       }
       if (input.status) {
-        conditions.push(eq(deliverables.status, input.status));
+        // In demo the session's clones ride along regardless of status so the
+        // overlay can drop seed rows they superseded; re-filtered below.
+        // or() is undefined only when called with zero conditions
+        conditions.push(
+          sessionId
+            ? or(eq(deliverables.status, input.status), eq(deliverables.demoSessionId, sessionId))!
+            : eq(deliverables.status, input.status),
+        );
       }
-      return ctx.db.query.deliverables.findMany({
+      const rows = await ctx.db.query.deliverables.findMany({
         where: and(...conditions),
         orderBy: (d, { desc }) => [desc(d.createdAt)],
       });
+      return withDemoOverlay(rows, sessionId).filter(
+        (d) => !input.status || d.status === input.status,
+      );
     }),
 
   get: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
       return ctx.db.query.deliverables.findFirst({
-        where: and(eq(deliverables.id, input.id), eq(deliverables.companyId, ctx.companyId)),
+        where: and(
+          eq(deliverables.id, input.id),
+          eq(deliverables.companyId, ctx.companyId),
+          demoWhere(ctx.demo.sessionId).seedOrMine(deliverables.demoSessionId),
+        ),
       });
     }),
 
@@ -145,7 +240,11 @@ export const deliverablesRouter = createTRPCRouter({
       // deliverable_versions has no company_id of its own, so verify the
       // parent deliverable belongs to the caller before returning history.
       const owner = await ctx.db.query.deliverables.findFirst({
-        where: and(eq(deliverables.id, input.deliverableId), eq(deliverables.companyId, ctx.companyId)),
+        where: and(
+          eq(deliverables.id, input.deliverableId),
+          eq(deliverables.companyId, ctx.companyId),
+          demoWhere(ctx.demo.sessionId).seedOrMine(deliverables.demoSessionId),
+        ),
         columns: { id: true },
       });
       if (!owner) {
@@ -162,10 +261,11 @@ export const deliverablesRouter = createTRPCRouter({
    * countdown pill on /reviews and the post-approve UI.
    */
   pendingAutoPublish: protectedProcedure.query(async ({ ctx }) => {
-    return ctx.db.query.deliverables.findMany({
+    const rows = await ctx.db.query.deliverables.findMany({
       where: and(
         eq(deliverables.companyId, ctx.companyId),
         eq(deliverables.status, "auto_publishing"),
+        demoWhere(ctx.demo.sessionId).seedOrMine(deliverables.demoSessionId),
       ),
       columns: {
         id: true,
@@ -174,9 +274,12 @@ export const deliverablesRouter = createTRPCRouter({
         publishAfter: true,
         aiEmployeeId: true,
         approvedAt: true,
+        demoSessionId: true,
+        supersedesDeliverableId: true,
       },
       orderBy: (d, { asc }) => [asc(d.publishAfter)],
     });
+    return withDemoOverlay(rows, ctx.demo.sessionId);
   }),
 
   /**
@@ -201,14 +304,14 @@ export const deliverablesRouter = createTRPCRouter({
         .where(and(
           eq(deliverables.id, input.deliverableId),
           eq(deliverables.companyId, ctx.companyId),
-          eq(deliverables.status, "approved"),
+          eq(deliverables.status, "accepted"),
         ))
         .returning({ id: deliverables.id, publishAfter: deliverables.publishAfter });
 
       if (!updated) {
         throw new TRPCError({
           code: "PRECONDITION_FAILED",
-          message: "Deliverable must be in approved status before queueing",
+          message: "Deliverable must be accepted before queueing",
         });
       }
 
@@ -226,7 +329,7 @@ export const deliverablesRouter = createTRPCRouter({
     }),
 
   /**
-   * Cancel a scheduled auto-publish. Reverts to approved so the founder
+   * Cancel a scheduled auto-publish. Reverts to accepted so the founder
    * can publish manually or queue again with a different delay.
    */
   cancelAutoPublish: protectedProcedure
@@ -235,7 +338,7 @@ export const deliverablesRouter = createTRPCRouter({
       const [updated] = await ctx.db
         .update(deliverables)
         .set({
-          status: "approved",
+          status: "accepted",
           publishAfter: null,
           updatedAt: new Date(),
         })
@@ -309,7 +412,7 @@ export const deliverablesRouter = createTRPCRouter({
       return { version: newVersion };
     }),
 
-  approve: protectedProcedure
+  approve: demoAllowedProcedure
     .input(z.object({
       deliverableId: z.string().uuid(),
       chips: z.array(z.string()).default([]),
@@ -321,19 +424,30 @@ export const deliverablesRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const approvedAt = new Date();
       const rationale = input.feedbackText?.trim() || null;
+      const reviewId = crypto.randomUUID();
+
+      const target = await resolveReviewTarget(ctx.db, {
+        deliverableId: input.deliverableId,
+        companyId: ctx.companyId,
+        demoSessionId: ctx.demoSessionId,
+        reviewableStatuses: ["in_review", "revised"],
+      });
+      // A clone reviews shared seed work: the seed task, goals, and check-ins
+      // stay untouched so other visitors' demos are not judged for them.
+      const isDemoClone = target.supersedesDeliverableId !== null;
 
       const [updated] = await ctx.db
         .update(deliverables)
         .set({
-          status: "approved",
+          status: "accepted",
           approvalRationale: rationale,
           approvedAt,
           updatedAt: approvedAt,
         })
         .where(and(
-          eq(deliverables.id, input.deliverableId),
+          eq(deliverables.id, target.id),
           eq(deliverables.companyId, ctx.companyId),
-          inArray(deliverables.status, ["draft", "pending_review", "review", "revision"]),
+          inArray(deliverables.status, ["in_review", "revised"]),
         ))
         .returning();
 
@@ -347,13 +461,15 @@ export const deliverablesRouter = createTRPCRouter({
 
       if (!task) return;
 
-      // Mark the task itself as approved
-      await ctx.db.update(tasks).set({ status: "approved" }).where(eq(tasks.id, task.id));
+      if (!isDemoClone) {
+        await ctx.db.update(tasks).set({ status: "accepted" }).where(eq(tasks.id, task.id));
+      }
 
       await ctx.db.insert(activityLog).values({
         companyId: ctx.companyId,
         aiEmployeeId: updated.aiEmployeeId,
         actionType: "deliverable_approved",
+        demoSessionId: ctx.demoSessionId,
         actionDetail: {
           deliverableId: updated.id,
           deliverableTitle: updated.title,
@@ -362,51 +478,64 @@ export const deliverablesRouter = createTRPCRouter({
           approvalRationale: rationale,
           chips: input.chips,
           approvedWithoutEdits: input.approvedWithoutEdits,
+          reviewId,
         },
       });
 
       // Chain advancement: if this task has a parent, advance the chain
-      if (task.parentTaskId) {
-        advanceChain(task.parentTaskId, triggerExecuteTask).catch((err) => {
+      if (task.parentTaskId && !isDemoClone) {
+        advanceChain(task.parentTaskId, (payload) => dispatch(payload.task.taskId)).catch((err) => {
           console.error("Chain advancement failed on deliverable approve:", err);
         });
       }
 
       // Goal progress: recalculate if task is linked to a goal
-      if (task.goalId) {
+      if (task.goalId && !isDemoClone) {
         recalculateGoalProgress(task.goalId, ctx.companyId).catch((err) => {
           console.error("Goal progress recalculation failed:", err);
         });
       }
 
-      // Fire extraction async - don't block the user
-      const extractionPromise = extractFromTaskCompletion({
-        agentId: updated.aiEmployeeId,
-        tenantId: ctx.companyId,
-        taskId: task.id,
-        taskType: task.taskType,
-        taskTitle: task.title,
-        outputText: input.originalText ?? "",
-        status: "approved",
-      });
+      // Episodic extraction stays async - the review response doesn't need
+      // it. Skipped for demo sessions: episodic_memories has no session
+      // column, so the write would leak into every visitor's shared org.
+      if (!ctx.demoSessionId) {
+        extractFromTaskCompletion({
+          agentId: updated.aiEmployeeId,
+          tenantId: ctx.companyId,
+          taskId: task.id,
+          taskType: task.taskType,
+          taskTitle: task.title,
+          outputText: input.originalText ?? "",
+          status: "approved",
+        }).catch((err) => {
+          console.error("Task completion extraction failed on approve:", err);
+        });
+      }
 
-      // If approved without edits, store as canonical example for few-shot calibration
-      const calibrationPromise = input.approvedWithoutEdits && input.originalText
-        ? storeApprovedExample({
+      // Signal accumulation is awaited so the response carries the
+      // created/updated candidates - the "candidate rule appeared" moment.
+      const candidateById = new Map<string, CandidateResult>();
+      let diff: WordDiff | null = null;
+      try {
+        if (input.approvedWithoutEdits && input.originalText) {
+          const example = await storeApprovedExample({
             agentId: updated.aiEmployeeId,
             tenantId: ctx.companyId,
             taskType: task.taskType,
             taskTitle: task.title,
             outputText: input.originalText,
             taskId: task.id,
-          })
-        : Promise.resolve();
+            reviewId,
+            demoSessionId: ctx.demoSessionId,
+          });
+          candidateById.set(example.id, example);
+        }
 
-      // If approved WITH feedback (chips or text or edits), extract signals.
-      // editedText carries the founder's revisions so extractFromFeedback can
-      // diff agent output -> final, the same shape used for RLHF chip flow.
-      const feedbackPromise = (input.chips.length > 0 || input.feedbackText || input.editedText)
-        ? extractFromFeedback({
+        // editedText carries the founder's revisions so extractFromFeedback can
+        // diff agent output -> final, the same shape used for RLHF chip flow.
+        if (input.chips.length > 0 || input.feedbackText || input.editedText) {
+          const feedback = await extractFromFeedback({
             agentId: updated.aiEmployeeId,
             tenantId: ctx.companyId,
             taskId: task.id,
@@ -415,25 +544,30 @@ export const deliverablesRouter = createTRPCRouter({
             editedText: input.editedText,
             chips: input.chips,
             annotationText: input.feedbackText,
-          })
-        : Promise.resolve();
+            reviewId,
+            demoSessionId: ctx.demoSessionId,
+          });
+          diff = feedback.diff;
+          for (const c of feedback.candidates) candidateById.set(c.id, c);
+        }
 
-      // Founder rationale -> high-signal-weight rule candidate
-      const rationalePromise = rationale && input.originalText
-        ? extractRuleFromRationale({
+        if (rationale && input.originalText) {
+          const rationaleResult = await extractRuleFromRationale({
             agentId: updated.aiEmployeeId,
             tenantId: ctx.companyId,
             taskId: task.id,
             taskType: task.taskType,
             rationale,
             outputText: input.originalText,
-          })
-        : Promise.resolve();
-
-      // Await all extractions but don't let failures block the response
-      Promise.all([extractionPromise, calibrationPromise, feedbackPromise, rationalePromise]).catch((err) => {
-        console.error("Extraction failed on approve:", err);
-      });
+            reviewId,
+            demoSessionId: ctx.demoSessionId,
+          });
+          if (rationaleResult) candidateById.set(rationaleResult.candidate.id, rationaleResult.candidate);
+        }
+      } catch (err) {
+        // Approval already committed; learning is skipped, not the review
+        console.error("Signal accumulation failed on approve:", err);
+      }
 
       // Insert post-approval check-in. The weekly worker
       // surfaces unacknowledged check_ins in section 3 of the Monday email.
@@ -452,26 +586,35 @@ export const deliverablesRouter = createTRPCRouter({
         return text.replace(/\s+/g, " ").slice(0, 240);
       })();
 
-      const [checkInRow] = await ctx.db.insert(checkIns).values({
-        aiEmployeeId: updated.aiEmployeeId,
-        companyId: ctx.companyId,
-        taskId: task.id,
-        checkInType: "post_approval_followup",
-        scheduledFor,
-        content: {
-          deliverableId: updated.id,
-          deliverableTitle: updated.title,
-          deliverableType: updated.deliverableType,
-          goalId: task.goalId ?? null,
-          approvedAt: new Date().toISOString(),
-          scheduledFor: scheduledFor.toISOString(),
-          summary,
-        },
-      }).returning({ id: checkIns.id });
+      // check_ins has no session column, so a demo visitor's approval would
+      // surface a check-in to every visitor; skip it there.
+      const [checkInRow] = ctx.demoSessionId
+        ? [undefined]
+        : await ctx.db.insert(checkIns).values({
+            aiEmployeeId: updated.aiEmployeeId,
+            companyId: ctx.companyId,
+            taskId: task.id,
+            checkInType: "post_approval_followup",
+            scheduledFor,
+            content: {
+              deliverableId: updated.id,
+              deliverableTitle: updated.title,
+              deliverableType: updated.deliverableType,
+              goalId: task.goalId ?? null,
+              approvedAt: new Date().toISOString(),
+              scheduledFor: scheduledFor.toISOString(),
+              summary,
+            },
+          }).returning({ id: checkIns.id });
 
+      const candidates = [...candidateById.values()];
       return {
+        deliverableId: updated.id,
         checkInId: checkInRow?.id,
         scheduledFor: scheduledFor.toISOString(),
+        candidates,
+        diff,
+        manualRuleNumber: await manualRuleNumberFor(ctx.db, ctx.companyId, candidates),
       };
     }),
 
@@ -488,8 +631,8 @@ export const deliverablesRouter = createTRPCRouter({
       });
 
       if (!deliverable) throw new Error("Deliverable not found");
-      if (deliverable.status !== "approved") {
-        throw new Error("Only approved deliverables can be published");
+      if (deliverable.status !== "accepted") {
+        throw new Error("Only accepted deliverables can be published");
       }
 
       // Load the platform connector
@@ -546,21 +689,31 @@ export const deliverablesRouter = createTRPCRouter({
       return { publishedUrl: result.url };
     }),
 
-  requestRevision: protectedProcedure
+  requestRevision: demoAllowedProcedure
     .input(z.object({
       deliverableId: z.string().uuid(),
       chips: z.array(z.string()).default([]),
       feedbackText: z.string().optional(),
       originalText: z.string().optional(),
+      editedText: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
+      const reviewId = crypto.randomUUID();
+      const target = await resolveReviewTarget(ctx.db, {
+        deliverableId: input.deliverableId,
+        companyId: ctx.companyId,
+        demoSessionId: ctx.demoSessionId,
+        reviewableStatuses: ["in_review", "revised"],
+      });
+      const isDemoClone = target.supersedesDeliverableId !== null;
+
       const [updated] = await ctx.db
         .update(deliverables)
-        .set({ status: "revision", updatedAt: new Date() })
+        .set({ status: "revised", updatedAt: new Date() })
         .where(and(
-          eq(deliverables.id, input.deliverableId),
+          eq(deliverables.id, target.id),
           eq(deliverables.companyId, ctx.companyId),
-          inArray(deliverables.status, ["draft", "pending_review", "review", "revision"]),
+          inArray(deliverables.status, ["in_review", "revised"]),
         ))
         .returning();
 
@@ -574,33 +727,57 @@ export const deliverablesRouter = createTRPCRouter({
 
       if (!task) return;
 
-      // Extract feedback signals - this is where CIPHER-style learning happens
-      if (input.chips.length > 0 || input.feedbackText || input.originalText) {
-        extractFromFeedback({
+      // Mark the task as revising so the loop shows it back with the agent;
+      // a clone's task is shared seed state and stays put.
+      if (!isDemoClone) {
+        await ctx.db.update(tasks).set({ status: "revising" }).where(eq(tasks.id, task.id));
+      }
+
+      if (!ctx.demoSessionId) {
+        extractFromTaskCompletion({
           agentId: updated.aiEmployeeId,
           tenantId: ctx.companyId,
           taskId: task.id,
           taskType: task.taskType,
-          originalText: input.originalText ?? "",
-          chips: input.chips,
-          annotationText: input.feedbackText,
+          taskTitle: task.title,
+          outputText: input.originalText ?? "",
+          status: "revision",
         }).catch((err) => {
-          console.error("Extraction failed on requestRevision:", err);
+          console.error("Task completion extraction failed:", err);
         });
       }
 
-      // Also record this as a task completion with "revision" status
-      extractFromTaskCompletion({
-        agentId: updated.aiEmployeeId,
-        tenantId: ctx.companyId,
-        taskId: task.id,
-        taskType: task.taskType,
-        taskTitle: task.title,
-        outputText: input.originalText ?? "",
-        status: "revision",
-      }).catch((err) => {
-        console.error("Task completion extraction failed:", err);
-      });
+      // Signal accumulation is awaited so the response carries the candidates
+      let candidates: CandidateResult[] = [];
+      let diff: WordDiff | null = null;
+      if (input.chips.length > 0 || input.feedbackText || input.editedText || input.originalText) {
+        try {
+          const feedback = await extractFromFeedback({
+            agentId: updated.aiEmployeeId,
+            tenantId: ctx.companyId,
+            taskId: task.id,
+            taskType: task.taskType,
+            originalText: input.originalText ?? "",
+            editedText: input.editedText,
+            chips: input.chips,
+            annotationText: input.feedbackText,
+            reviewId,
+            demoSessionId: ctx.demoSessionId,
+          });
+          candidates = feedback.candidates;
+          diff = feedback.diff;
+        } catch (err) {
+          // Revision request already committed; learning is skipped, not the review
+          console.error("Signal accumulation failed on requestRevision:", err);
+        }
+      }
+
+      return {
+        deliverableId: updated.id,
+        candidates,
+        diff,
+        manualRuleNumber: await manualRuleNumberFor(ctx.db, ctx.companyId, candidates),
+      };
     }),
 
   reject: protectedProcedure
@@ -634,7 +811,7 @@ export const deliverablesRouter = createTRPCRouter({
         .where(and(
           eq(deliverables.id, input.deliverableId),
           eq(deliverables.companyId, ctx.companyId),
-          inArray(deliverables.status, ["draft", "pending_review", "review", "revision"]),
+          inArray(deliverables.status, ["in_review", "revised"]),
         ))
         .returning();
 
@@ -680,6 +857,7 @@ export const deliverablesRouter = createTRPCRouter({
             taskType: task.taskType,
             rationale: `REJECTED: ${input.reason}`,
             outputText: input.originalText,
+            reviewId: crypto.randomUUID(),
           })
         : Promise.resolve();
 
@@ -697,104 +875,5 @@ export const deliverablesRouter = createTRPCRouter({
     }))
     .mutation(async ({ ctx: _ctx, input: _input }) => {
       throw new Error("Not implemented");
-    }),
-
-  /**
-   * Generate (or return existing) share slug + referral code for a deliverable.
-   * Idempotent: re-sharing the same deliverable returns the original slug + the
-   * deliverable's most-recent referral code rather than minting new ones.
-   * spec.
-   */
-  share: protectedProcedure
-    .input(z.object({ deliverableId: z.string().uuid() }))
-    .mutation(async ({ ctx, input }) => {
-      const deliverable = await ctx.db.query.deliverables.findFirst({
-        where: and(
-          eq(deliverables.id, input.deliverableId),
-          eq(deliverables.companyId, ctx.companyId),
-        ),
-        columns: {
-          id: true,
-          aiEmployeeId: true,
-          shareSlug: true,
-          shareEnabledAt: true,
-          content: true,
-        },
-      });
-      if (!deliverable) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Deliverable not found" });
-      }
-
-      // Idempotent path: already shared, return existing slug + most-recent code.
-      if (deliverable.shareSlug && deliverable.shareEnabledAt) {
-        const existingCode = await ctx.db.query.referralCodes.findFirst({
-          where: and(
-            eq(referralCodes.companyId, ctx.companyId),
-            eq(referralCodes.sourceDeliverableId, deliverable.id),
-          ),
-          orderBy: (rc, { desc }) => [desc(rc.createdAt)],
-          columns: { code: true },
-        });
-        if (existingCode) {
-          return { shareSlug: deliverable.shareSlug, referralCode: existingCode.code };
-        }
-        // Fall through to mint a new code if none exists (e.g. deliverable was
-        // marked shared by a separate path with no referral_codes row).
-      }
-
-      const employee = await ctx.db.query.aiEmployees.findFirst({
-        where: eq(aiEmployees.id, deliverable.aiEmployeeId),
-        columns: { name: true },
-      });
-
-      // Mint slug + code. The slug column has a UNIQUE constraint; a collision
-      // here would surface as a Postgres error and bubble to the client.
-      // 12-char URL-safe slug at 62^12 entropy makes that vanishingly unlikely.
-      const shareSlug = deliverable.shareSlug ?? generateShareSlug();
-      const referralCode = generateReferralCode(employee?.name ?? "beast");
-
-      await ctx.db.transaction(async (tx) => {
-        if (!deliverable.shareSlug) {
-          // Snapshot content at share time: later edits or
-          // rejections must NOT change what the public URL serves.
-          await tx
-            .update(deliverables)
-            .set({
-              shareSlug,
-              shareEnabledAt: new Date(),
-              shareSnapshot: deliverable.content,
-            })
-            .where(eq(deliverables.id, deliverable.id));
-        }
-        await tx.insert(referralCodes).values({
-          code: referralCode,
-          companyId: ctx.companyId,
-          sourceDeliverableId: deliverable.id,
-        });
-      });
-
-      return { shareSlug, referralCode };
-    }),
-
-  /**
-   * Revoke a public share link. Clears shareEnabledAt so both the SSR page and
-   * the public share.get (which require shareEnabledAt IS NOT NULL) stop serving
-   * it. The slug + snapshot are kept so a later re-share is idempotent.
-   */
-  unshare: protectedProcedure
-    .input(z.object({ deliverableId: z.string().uuid() }))
-    .mutation(async ({ ctx, input }) => {
-      const result = await ctx.db
-        .update(deliverables)
-        .set({ shareEnabledAt: null })
-        .where(and(
-          eq(deliverables.id, input.deliverableId),
-          eq(deliverables.companyId, ctx.companyId),
-        ))
-        .returning({ id: deliverables.id });
-      if (result.length === 0) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Deliverable not found" });
-      }
-      return { ok: true };
     }),
 });

@@ -1,29 +1,21 @@
-import { GlassCard } from "@beast/ui";
-
 export default function EmployeesLoading() {
   return (
-    <div className="space-y-8">
-      <div>
-        <div className="h-8 w-44 animate-pulse rounded-md bg-[oklch(0.92_0_0)]" />
-        <div className="mt-2 h-4 w-80 animate-pulse rounded-md bg-[oklch(0.94_0_0)]" />
-      </div>
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
+    <div className="mx-auto max-w-6xl">
+      <header className="rule-b pb-4">
+        <div className="h-8 w-36 bg-panel" />
+        <div className="mt-2 h-3.5 w-72 bg-panel" />
+      </header>
+      <div className="mt-5">
         {[0, 1, 2].map((i) => (
-          <GlassCard key={i} hoverable={false} className="flex h-full flex-col p-6">
-            <div className="flex items-center gap-4">
-              <div className="h-12 w-12 animate-pulse rounded-full bg-[oklch(0.92_0_0)]" />
-              <div className="flex-1 space-y-2">
-                <div className="h-4 w-3/4 animate-pulse rounded-md bg-[oklch(0.92_0_0)]" />
-                <div className="h-3 w-1/2 animate-pulse rounded-md bg-[oklch(0.94_0_0)]" />
-              </div>
+          <div key={i} className="hairline-b flex items-center gap-4 px-1 py-4 last:border-b-0">
+            <div className="h-14 w-14 shrink-0 bg-panel" />
+            <div className="min-w-0 flex-1 space-y-2">
+              <div className="h-5 w-40 bg-panel" />
+              <div className="h-3.5 w-56 bg-panel" />
+              <div className="h-3 w-64 bg-panel" />
             </div>
-            <div className="mt-4 h-4 w-full animate-pulse rounded-md bg-[oklch(0.94_0_0)]" />
-            <div className="mt-2 h-4 w-5/6 animate-pulse rounded-md bg-[oklch(0.94_0_0)]" />
-            <div className="mt-5 flex items-center justify-between">
-              <div className="h-3 w-16 animate-pulse rounded-md bg-[oklch(0.94_0_0)]" />
-              <div className="h-3 w-20 animate-pulse rounded-md bg-[oklch(0.94_0_0)]" />
-            </div>
-          </GlassCard>
+            <div className="h-5 w-16 shrink-0 bg-panel" />
+          </div>
         ))}
       </div>
     </div>

@@ -13,11 +13,7 @@ interface GeneratePlanPayload {
   employeesByRole?: Record<string, { id: string; name: string }>;
 }
 
-/**
- * Generates a multi-step execution plan for a parent task.
- * Uses Claude Sonnet to break the objective into sequential steps.
- * Stores the plan on the parent task and sets status to "planned".
- */
+// Generates the multi-step plan, stores it on the parent task, and flips it to plan_review.
 export const generatePlanJob = task({
   id: "generate-plan",
   run: async (payload: GeneratePlanPayload) => {
@@ -29,18 +25,17 @@ export const generatePlanJob = task({
       employeesByRole: payload.employeesByRole,
     });
 
-    // Status guard: only flip to "planned" if the parent is still in
-    // pending or a prior planned state. A founder cancellation, an
+    // Status guard: only flip to "plan_review" if the parent is still in
+    // the pre-execution lifecycle. A founder cancellation, an
     // execute-task auto-advance, or a chain failure between trigger and
-    // run() must not be regressed to "planned" by a Trigger.dev retry of
-    // a transient LLM error. Same shape as the cancelled-flip guard from
-    //
+    // run() must not be regressed by a Trigger.dev retry of
+    // a transient LLM error. Same shape as the cancel guard.
     await db.update(tasks).set({
-      plan: plan as unknown as Record<string, unknown>,
-      status: "planned",
+      plan,
+      status: "plan_review",
     }).where(and(
       eq(tasks.id, payload.parentTaskId),
-      inArray(tasks.status, ["pending", "planned"]),
+      inArray(tasks.status, ["queued", "planning", "plan_review"]),
     ));
 
     return plan;

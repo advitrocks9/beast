@@ -1,5 +1,3 @@
-import type { SpawnPayload } from "../chains/advance";
-
 /** Recurrence configuration stored in tasks.recurrence JSONB. */
 export interface RecurrenceConfig {
   frequency: "daily" | "weekly" | "monthly";
@@ -29,6 +27,9 @@ export interface TickContext {
 /** Result of a tick - stats for logging. */
 export interface TickResult {
   companyId: string;
+  tasksTimedOut: number;
+  tasksRequeued: number;
+  tasksRedispatched: number;
   recurringTasksSpawned: number;
   statusUpdates: number;
   checkInsDispatched: number;
@@ -37,12 +38,8 @@ export interface TickResult {
   errors: string[];
 }
 
-/** Dispatch instructions returned by runTick for the Trigger.dev wrapper to execute. */
+/** Check-in instructions for the caller: trigger the generate-checkin worker or call generateCheckIn inline. */
 export interface TickDispatch {
-  tasksToSpawn: Array<{
-    taskId: string;
-    payload: SpawnPayload;
-  }>;
   checkInsToDispatch: Array<{
     employeeId: string;
     companyId: string;

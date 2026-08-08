@@ -4,12 +4,15 @@ import { useState, useRef, useEffect, useLayoutEffect } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTRPC } from "@/trpc/client";
-import { GlassCard } from "@beast/ui";
-import { roleMeta } from "@/lib/colors";
+import { DEMO_MODE } from "@/lib/demo";
+import { Monogram } from "@/components/monogram";
+import { RegisterMark } from "@/components/state-chip";
+import { ProvenanceTag } from "@/components/provenance-tag";
 
-interface DraftMessage {
+interface MemoEntry {
   role: "user" | "assistant";
   content: string;
+  at: Date;
   taskHref?: string;
 }
 
@@ -29,10 +32,14 @@ function deriveTaskHref(content: string): string | undefined {
   return undefined;
 }
 
+function memoTime(d: Date): string {
+  return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+}
+
 export function ChatThread({ employeeId, employeeName, employeeRoleType }: ChatThreadProps) {
-  const [draftMessages, setDraftMessages] = useState<DraftMessage[]>([]);
+  const [draftMessages, setDraftMessages] = useState<MemoEntry[]>([]);
   const [input, setInput] = useState("");
-  const [showJumpPill, setShowJumpPill] = useState(false);
+  const [showJump, setShowJump] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const initialScrollDone = useRef(false);
@@ -46,19 +53,17 @@ export function ChatThread({ employeeId, employeeName, employeeRoleType }: ChatT
     trpc.chat.list.queryOptions({ employeeId, limit: HISTORY_LIMIT }),
   );
 
-  const messages: DraftMessage[] = [
+  const messages: MemoEntry[] = [
     ...(history.data ?? []).map((row) => ({
       role: row.role as "user" | "assistant",
       content: row.content,
+      at: row.createdAt,
       taskHref: row.role === "assistant" ? deriveTaskHref(row.content) : undefined,
     })),
     ...draftMessages,
   ];
 
-  // Initial scroll: history.data flips from undefined to an array exactly
-  // once. useLayoutEffect plus requestAnimationFrame waits for the messages
-  // to lay out before snapping to bottom; without the RAF the scrollHeight
-  // is still the empty-state height and the scroll lands mid-thread.
+  // RAF waits for the loaded thread to lay out; without it scrollHeight is still the empty height.
   useLayoutEffect(() => {
     if (initialScrollDone.current) return;
     if (!history.data || history.data.length === 0) return;
@@ -71,9 +76,7 @@ export function ChatThread({ employeeId, employeeName, employeeRoleType }: ChatT
     return () => cancelAnimationFrame(id);
   }, [history.data]);
 
-  // Subsequent scrolls: only auto-snap when the founder is already near the
-  // bottom. Otherwise show a "Jump to latest" pill so a new message does
-  // not yank them away from older context they were re-reading.
+  // Only auto-snap near the bottom so a new memo never yanks the founder off older context.
   useEffect(() => {
     if (!initialScrollDone.current) return;
     const el = scrollRef.current;
@@ -81,9 +84,9 @@ export function ChatThread({ employeeId, employeeName, employeeRoleType }: ChatT
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     if (distanceFromBottom < 80) {
       el.scrollTop = el.scrollHeight;
-      setShowJumpPill(false);
+      setShowJump(false);
     } else {
-      setShowJumpPill(true);
+      setShowJump(true);
     }
   }, [messages.length]);
 
@@ -91,7 +94,7 @@ export function ChatThread({ employeeId, employeeName, employeeRoleType }: ChatT
     const el = scrollRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-    setShowJumpPill(false);
+    setShowJump(false);
   }
 
   function refreshHistory() {
@@ -104,7 +107,7 @@ export function ChatThread({ employeeId, employeeName, employeeRoleType }: ChatT
     try {
       await appendMessage.mutateAsync({ employeeId, role, content, taskId });
     } catch {
-      // Best-effort persistence; the optimistic draft message keeps the UX moving.
+      // best-effort; the optimistic draft entry keeps the thread moving
     }
   }
 
@@ -113,13 +116,13 @@ export function ChatThread({ employeeId, employeeName, employeeRoleType }: ChatT
     const text = input.trim();
     if (!text || createTask.isPending) return;
 
-    setDraftMessages((prev) => [...prev, { role: "user", content: text }]);
+    setDraftMessages((prev) => [...prev, { role: "user", content: text, at: new Date() }]);
     setInput("");
     await persist("user", text);
 
     if (text.length < MIN_TASK_CHARS) {
       const ack = `I need a bit more to go on. Try: "Draft a tweet about our launch" or "Research three competitors in our space."`;
-      setDraftMessages((prev) => [...prev, { role: "assistant", content: ack }]);
+      setDraftMessages((prev) => [...prev, { role: "assistant", content: ack, at: new Date() }]);
       await persist("assistant", ack);
       refreshHistory();
       setDraftMessages([]);
@@ -143,6 +146,7 @@ export function ChatThread({ employeeId, employeeName, employeeRoleType }: ChatT
         {
           role: "assistant",
           content: ack,
+          at: new Date(),
           taskHref: `/dashboard/tasks/${task.id}`,
         },
       ]);
@@ -152,91 +156,105 @@ export function ChatThread({ employeeId, employeeName, employeeRoleType }: ChatT
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Something went wrong";
       const errorContent = `I could not start that. ${msg}`;
-      setDraftMessages((prev) => [...prev, { role: "assistant", content: errorContent }]);
+      setDraftMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: errorContent, at: new Date() },
+      ]);
       await persist("assistant", errorContent);
       refreshHistory();
       setDraftMessages([]);
     }
   }
 
-  const roleHex = roleMeta(employeeRoleType).text;
-
   return (
-    <GlassCard hoverable={false} className="relative flex flex-col h-[70vh] p-0 overflow-hidden">
+    <div className="panel relative flex h-[70vh] flex-col overflow-hidden">
       <div
         ref={scrollRef}
         onScroll={(e) => {
           const el = e.currentTarget;
           const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
-          if (distance < 80 && showJumpPill) setShowJumpPill(false);
+          if (distance < 80 && showJump) setShowJump(false);
         }}
-        className="flex-1 overflow-y-auto px-6 py-5 space-y-3"
+        className="flex-1 overflow-y-auto px-5 py-4"
       >
         {history.isLoading && (
-          <p className="text-center text-xs text-text-muted py-12">Loading thread...</p>
+          <div className="space-y-2.5 py-2">
+            <div className="h-3.5 w-2/3 bg-panel" />
+            <div className="h-3.5 w-1/2 bg-panel" />
+            <div className="h-3.5 w-3/5 bg-panel" />
+          </div>
         )}
 
         {!history.isLoading && messages.length === 0 && (
-          <div className="text-center text-sm text-text-muted py-16 px-4">
-            <p>No messages with {employeeName} yet.</p>
-            <p className="mt-2 text-xs">
-              Tell {employeeName} what to work on. Examples: &ldquo;Draft a tweet about our launch.&rdquo;
-              &middot; &ldquo;Research three competitors.&rdquo;
+          <div className="px-4 py-14 text-center">
+            <p className="spec-label">Memo thread empty</p>
+            <p className="mx-auto mt-2 max-w-sm text-[13px] leading-snug text-ink-secondary">
+              Write {employeeName} a memo. &ldquo;Draft a tweet about our launch&rdquo; becomes a
+              job on the queue; the deliverable comes back through review.
             </p>
           </div>
         )}
 
-        {messages.map((msg, i) => (
-          <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-            <div
-              className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
-                msg.role === "user" ? "bg-black text-white" : "bg-[oklch(0.97_0.005_260/0.6)] text-text"
-              }`}
-            >
-              {msg.role === "assistant" && (
-                <p className="mb-1 text-[10px] font-medium uppercase tracking-wider" style={{ color: roleHex }}>
-                  {employeeName}
+        {messages.map((msg, i) =>
+          msg.role === "user" ? (
+            <div key={i} className="hairline-b flex justify-end py-3 first:pt-1 last:border-b-0">
+              <div className="max-w-[80%] rounded-[2px] bg-panel-sunken px-3.5 py-2.5">
+                <p className="spec-label text-right">You · {memoTime(msg.at)}</p>
+                <p className="mt-1 text-[13.5px] leading-relaxed whitespace-pre-wrap">
+                  {msg.content}
                 </p>
-              )}
-              <p className="whitespace-pre-wrap">{msg.content}</p>
-              {msg.taskHref && (
-                <Link
-                  href={msg.taskHref}
-                  className="mt-2 inline-block text-xs font-medium text-brand hover:underline"
-                >
-                  Open task
-                </Link>
-              )}
-            </div>
-          </div>
-        ))}
-
-        {createTask.isPending && (
-          <div className="flex justify-start">
-            <div className="rounded-2xl bg-[oklch(0.97_0.005_260/0.6)] px-3.5 py-2.5">
-              <div className="flex gap-1">
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-text-muted [animation-delay:0ms]" />
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-text-muted [animation-delay:150ms]" />
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-text-muted [animation-delay:300ms]" />
               </div>
             </div>
-          </div>
+          ) : (
+            <div key={i} className="hairline-b flex items-start gap-3 py-3 first:pt-1 last:border-b-0">
+              <Monogram name={employeeName} roleType={employeeRoleType} size="sm" className="mt-0.5" />
+              <div className="min-w-0 flex-1">
+                <p className="spec-label">
+                  {employeeName} · {memoTime(msg.at)}
+                </p>
+                <p className="mt-1 text-[13.5px] leading-relaxed whitespace-pre-wrap">
+                  {msg.content}
+                </p>
+                {msg.taskHref && (
+                  <Link
+                    href={msg.taskHref}
+                    className="mt-1.5 inline-block text-[13px] font-semibold text-ink underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+                  >
+                    Open the job
+                  </Link>
+                )}
+              </div>
+            </div>
+          ),
+        )}
+
+        {createTask.isPending && (
+          <p className="flex items-center gap-2 py-3 text-identity-deep">
+            <RegisterMark size={11} />
+            <span className="spec-label text-identity-deep">{employeeName} is taking the brief</span>
+          </p>
         )}
       </div>
 
-      {showJumpPill && (
+      {showJump && (
         <button
           type="button"
           onClick={jumpToLatest}
-          className="absolute bottom-[88px] left-1/2 -translate-x-1/2 rounded-full bg-black px-3 py-1.5 text-xs font-medium text-white shadow-md hover:bg-gray-800"
-          aria-label="Jump to latest message"
+          aria-label="Jump to latest memo"
+          className="absolute bottom-[92px] left-1/2 -translate-x-1/2 rounded-[2px] bg-ink px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-[#2C2C29] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
         >
-          Jump to latest &darr;
+          Jump to latest
         </button>
       )}
 
-      <form onSubmit={handleSubmit} className="border-t border-[oklch(0.8_0.01_260/0.1)] px-6 py-4">
-        <div className="flex items-end gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2">
+      <form onSubmit={handleSubmit} className="hairline-t px-5 py-3.5">
+        {DEMO_MODE && (
+          <p className="mb-2 flex items-center gap-2">
+            <span className="spec-label">Chat is product-mode only</span>
+            <ProvenanceTag kind="stub" />
+          </p>
+        )}
+        <div className="flex items-end gap-2">
           <textarea
             ref={inputRef}
             value={input}
@@ -247,9 +265,11 @@ export function ChatThread({ employeeId, employeeName, employeeRoleType }: ChatT
                 handleSubmit(e);
               }
             }}
-            placeholder={`Message ${employeeName}...`}
+            disabled={DEMO_MODE}
+            placeholder={DEMO_MODE ? "Cloning the repo unlocks chat" : `Memo to ${employeeName}...`}
+            aria-label={`Memo to ${employeeName}`}
             rows={1}
-            className="flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-text-muted"
+            className="flex-1 resize-none rounded-[2px] border border-hairline bg-bg px-3.5 py-2.5 text-sm text-ink outline-none placeholder:text-ink-muted focus-visible:border-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:bg-panel disabled:text-ink-muted"
             style={{ maxHeight: "120px" }}
             onInput={(e) => {
               const target = e.target as HTMLTextAreaElement;
@@ -259,17 +279,13 @@ export function ChatThread({ employeeId, employeeName, employeeRoleType }: ChatT
           />
           <button
             type="submit"
-            disabled={!input.trim() || createTask.isPending}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-black text-white disabled:opacity-30"
-            aria-label="Send"
+            disabled={DEMO_MODE || !input.trim() || createTask.isPending}
+            className="btn-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-50"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="22" y1="2" x2="11" y2="13" />
-              <polygon points="22 2 15 22 11 13 2 9 22 2" />
-            </svg>
+            Send
           </button>
         </div>
       </form>
-    </GlassCard>
+    </div>
   );
 }

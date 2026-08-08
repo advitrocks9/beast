@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, desc, eq, gte, lte, inArray, sql, isNotNull } from "drizzle-orm";
+import { and, desc, eq, lte, inArray, sql, isNotNull } from "drizzle-orm";
 import {
   deliverables,
   checkIns,
@@ -26,7 +26,7 @@ export interface NotificationItem {
 }
 
 const SOURCE_TYPES = ["review", "checkin", "autonomy", "plan_approval"] as const;
-const REVIEW_STATES = ["draft", "pending_review", "review"] as const;
+const REVIEW_STATES = ["in_review"] as const;
 const AUTONOMY_STATES = ["queued", "shown"] as const;
 
 function in24h(): Date {
@@ -122,7 +122,7 @@ export const notificationsRouter = createTRPCRouter({
             eq(tasks.companyId, ctx.companyId),
             isNotNull(tasks.plan),
             eq(tasks.planApproved, false),
-            inArray(tasks.status, ["pending", "in_progress"]),
+            eq(tasks.status, "plan_review"),
           ),
         )
         .orderBy(desc(tasks.createdAt))
@@ -256,7 +256,7 @@ export const notificationsRouter = createTRPCRouter({
             eq(tasks.companyId, ctx.companyId),
             isNotNull(tasks.plan),
             eq(tasks.planApproved, false),
-            inArray(tasks.status, ["pending", "in_progress"]),
+            eq(tasks.status, "plan_review"),
           ),
         ),
       ctx.db

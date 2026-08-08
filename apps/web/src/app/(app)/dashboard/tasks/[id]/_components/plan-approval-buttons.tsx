@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { useTRPC } from "@/trpc/client";
 
+const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink";
+
 export function PlanApprovalButtons({ taskId }: { taskId: string }) {
   const trpc = useTRPC();
   const router = useRouter();
@@ -19,14 +21,14 @@ export function PlanApprovalButtons({ taskId }: { taskId: string }) {
       <button
         onClick={() => approve.mutate({ taskId, approved: false })}
         disabled={isPending}
-        className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-gray-50 disabled:opacity-50"
+        className={`btn-ghost disabled:opacity-50 ${FOCUS}`}
       >
         Reject plan
       </button>
       <button
         onClick={() => approve.mutate({ taskId, approved: true })}
         disabled={isPending}
-        className="rounded-lg bg-black px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+        className={`btn-ink disabled:opacity-50 ${FOCUS}`}
       >
         {isPending ? "Approving..." : "Approve plan"}
       </button>

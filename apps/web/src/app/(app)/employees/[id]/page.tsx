@@ -1,55 +1,31 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
-import { eq, and, desc, or, isNull, gte, notInArray } from "drizzle-orm";
+import { eq, and, desc, gte, inArray } from "drizzle-orm";
 import { createClient } from "@/lib/supabase/server";
+import { DEMO_MODE, demoSessionIdFromHeaders } from "@/lib/demo";
+import { demoWhere, withDemoOverlay } from "@/lib/demo-overlay";
 import { db } from "@beast/db";
-import { companies, aiEmployees, tasks, deliverables, activityLog, goals } from "@beast/db";
-import { GlassCard } from "@beast/ui";
+import { companies, aiEmployees, tasks, deliverables, proceduralMemories } from "@beast/db";
+import { roleMeta } from "@/lib/colors";
+import { splitRuleTitle } from "@/lib/rule-title";
+import { Monogram } from "@/components/monogram";
+import { StateChip } from "@/components/state-chip";
+import { ProvenanceTag } from "@/components/provenance-tag";
 import { DeskActions } from "./_components/desk-actions";
 import { CheckInFrequencyPicker } from "./_components/check-in-frequency-picker";
-import { formatActivityPhrase, LOW_SIGNAL_ACTIVITY_TYPES } from "@/lib/activity-format";
-import { roleMeta, statusMeta } from "@/lib/colors";
 
-const TREND_WINDOW_DAYS = 30;
+const PERFORMANCE_WINDOW_DAYS = 30;
+const DESK_STATUSES = ["running", "plan_review", "planning", "queued"] as const;
 
-interface DayBucket {
-  date: Date;
-  shipped: number;
-  rejected: number;
+function relativeTime(d: Date): string {
+  const m = Math.floor((Date.now() - d.getTime()) / 60000);
+  if (m < 1) return "now";
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h`;
+  return `${Math.floor(h / 24)}d`;
 }
-
-function buildTrendBuckets(rows: Array<{ status: string; updatedAt: Date | null; createdAt: Date }>): DayBucket[] {
-  const now = new Date();
-  const start = new Date(now);
-  start.setHours(0, 0, 0, 0);
-  start.setDate(start.getDate() - (TREND_WINDOW_DAYS - 1));
-
-  const buckets: DayBucket[] = [];
-  for (let i = 0; i < TREND_WINDOW_DAYS; i++) {
-    const d = new Date(start);
-    d.setDate(d.getDate() + i);
-    buckets.push({ date: d, shipped: 0, rejected: 0 });
-  }
-
-  for (const row of rows) {
-    const ts = row.updatedAt ?? row.createdAt;
-    if (!ts) continue;
-    const dayMs = new Date(ts);
-    dayMs.setHours(0, 0, 0, 0);
-    const idx = Math.floor((dayMs.getTime() - start.getTime()) / (24 * 60 * 60 * 1000));
-    if (idx < 0 || idx >= TREND_WINDOW_DAYS) continue;
-    const bucket = buckets[idx]!;
-    if (row.status === "approved" || row.status === "published") bucket.shipped += 1;
-    else if (row.status === "rejected") bucket.rejected += 1;
-  }
-  return buckets;
-}
-
-const ROLE_HOOK_LINE: Record<string, string> = {
-  marketing: "Tell me a competitor and I'll start a teardown pinned to your first goal.",
-  sales: "Send me a target list and I'll draft outreach pinned to your first goal.",
-  support: "Forward me a ticket and I'll draft a response pinned to your first goal.",
-};
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -74,405 +50,226 @@ export default async function EmployeeDeskPage({ params }: PageProps) {
     notFound();
   }
 
-  // Fetch employee's tasks
-  const employeeTasks = await db.query.tasks.findMany({
-    where: and(eq(tasks.aiEmployeeId, employee.id), eq(tasks.companyId, company!.id)),
-    orderBy: [desc(tasks.createdAt)],
-    limit: 20,
-  });
+  const demoSid = DEMO_MODE ? demoSessionIdFromHeaders(await headers()) : null;
+  const scope = demoWhere(demoSid);
+  const windowStart = new Date(Date.now() - PERFORMANCE_WINDOW_DAYS * 24 * 60 * 60 * 1000);
 
-  // Fetch employee's deliverables
-  const employeeDeliverables = await db.query.deliverables.findMany({
-    where: and(eq(deliverables.aiEmployeeId, employee.id), eq(deliverables.companyId, company!.id)),
-    orderBy: [desc(deliverables.createdAt)],
-    limit: 20,
-  });
-
-  // Fetch recent activity
-  const recentActivity = await db.query.activityLog.findMany({
-    where: and(
-      eq(activityLog.aiEmployeeId, employee.id),
-      eq(activityLog.companyId, company!.id),
-      notInArray(activityLog.actionType, [...LOW_SIGNAL_ACTIVITY_TYPES]),
-    ),
-    orderBy: [desc(activityLog.createdAt)],
-    limit: 10,
-  });
-
-  // Fetch goals this employee should reference: active goals at the company,
-  // either assigned to this employee or not yet assigned (the onboarding-captured
-  // goals land with aiEmployeeId=null and get implicitly owned by
-  // the role-matched employee on first hire).
-  const employeeGoals = await db.query.goals.findMany({
-    where: and(
-      eq(goals.companyId, company!.id),
-      eq(goals.status, "active"),
-      or(eq(goals.aiEmployeeId, employee.id), isNull(goals.aiEmployeeId)),
-    ),
-    orderBy: (g, { desc: d }) => [d(g.createdAt)],
-  });
-
-  // 30d outcome trend: pull every final-state deliverable for this
-  // employee in the trailing 30 days, then bucket per day. Used to
-  // render a small per-day strip showing shipped (green) vs rejected
-  // (red) so the founder sees the cadence and recent rejection clusters
-  // alongside the static 30d card.
-  const trendStart = new Date(Date.now() - TREND_WINDOW_DAYS * 24 * 60 * 60 * 1000);
-  const trendRows = await db
-    .select({
-      status: deliverables.status,
-      updatedAt: deliverables.updatedAt,
-      createdAt: deliverables.createdAt,
-    })
-    .from(deliverables)
-    .where(
-      and(
+  const [deskTasks, deliverableRowsRaw, rules, outcomeRowsRaw] = await Promise.all([
+    db.query.tasks.findMany({
+      where: and(
+        eq(tasks.aiEmployeeId, employee.id),
+        eq(tasks.companyId, company!.id),
+        inArray(tasks.status, [...DESK_STATUSES]),
+        scope.seedOrMine(tasks.demoSessionId),
+      ),
+      orderBy: [desc(tasks.createdAt)],
+      limit: 8,
+    }),
+    db.query.deliverables.findMany({
+      where: and(
         eq(deliverables.aiEmployeeId, employee.id),
         eq(deliverables.companyId, company!.id),
-        gte(deliverables.updatedAt, trendStart),
+        scope.seedOrMine(deliverables.demoSessionId),
       ),
-    );
-  const trendBuckets = buildTrendBuckets(trendRows);
-  const trendTotals = trendBuckets.reduce(
-    (acc, b) => ({ shipped: acc.shipped + b.shipped, rejected: acc.rejected + b.rejected }),
-    { shipped: 0, rejected: 0 },
+      orderBy: [desc(deliverables.updatedAt)],
+      limit: 12,
+    }),
+    db.query.proceduralMemories.findMany({
+      where: and(
+        eq(proceduralMemories.agentId, employee.id),
+        eq(proceduralMemories.tenantId, company!.id),
+        eq(proceduralMemories.isCurrent, true),
+      ),
+      columns: { id: true, title: true, confidence: true },
+      orderBy: (m, { asc }) => [asc(m.createdAt)],
+    }),
+    db.query.deliverables.findMany({
+      where: and(
+        eq(deliverables.aiEmployeeId, employee.id),
+        eq(deliverables.companyId, company!.id),
+        gte(deliverables.updatedAt, windowStart),
+        inArray(deliverables.status, ["accepted", "published", "revised", "rejected"]),
+        scope.seedOrMine(deliverables.demoSessionId),
+      ),
+      columns: { id: true, status: true, demoSessionId: true, supersedesDeliverableId: true },
+    }),
+  ]);
+
+  const deliverableRows = withDemoOverlay(deliverableRowsRaw, demoSid).slice(0, 8);
+  const outcomeRows = withDemoOverlay(outcomeRowsRaw, demoSid);
+  const shipped = outcomeRows.filter(
+    (r) => r.status === "accepted" || r.status === "published",
+  ).length;
+  const approval =
+    outcomeRows.length > 0 ? `${Math.round((shipped / outcomeRows.length) * 100)}%` : "—";
+
+  const stationOrder: Record<string, number> = { running: 0, plan_review: 1, planning: 2, queued: 3 };
+  const currentWork = [...deskTasks].sort(
+    (a, b) =>
+      (stationOrder[a.status] ?? 9) - (stationOrder[b.status] ?? 9) ||
+      b.createdAt.getTime() - a.createdAt.getTime(),
   );
 
   const role = roleMeta(employee.roleType);
-  const st = statusMeta(employee.status ?? "idle");
-  const completedCount = employeeTasks.filter((t) => t.status === "completed").length;
-  const reviewCount = employeeDeliverables.filter((d) => d.status === "review").length;
 
   return (
-    <div className="space-y-6">
-      {/* Employee header */}
-      <GlassCard hoverable={false} className="p-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div
-              className="flex h-14 w-14 items-center justify-center rounded-full text-white text-xl font-bold"
-              style={{ backgroundColor: role.solid }}
-            >
-              {employee.name[0]}
-            </div>
+    <div className="mx-auto max-w-6xl">
+      <header className="rule-b pb-4">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex items-start gap-4">
+            <span className="flex shrink-0 flex-col items-center gap-1">
+              <Monogram name={employee.name} roleType={employee.roleType} size="xl" />
+              <span className="spec text-ink-muted">{role.solid}</span>
+            </span>
             <div>
-              <h1 className="font-(--font-display) text-2xl font-bold tracking-tight">
-                {employee.name}
-              </h1>
-              <p className="text-sm text-text-secondary">{employee.roleTitle}</p>
-              <div className="mt-1 flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: st.dot }} />
-                <span className="text-xs text-text-secondary">{st.label}</span>
+              <div className="flex flex-wrap items-center gap-2.5">
+                <h1 className="display text-3xl">{employee.name}</h1>
+                <StateChip status={employee.status ?? "idle"} />
               </div>
+              <p className="mt-1 text-[13.5px] text-ink-secondary">{employee.roleTitle}</p>
+              <p className="spec mt-1.5 text-ink-muted">
+                {shipped} shipped 30d · {approval} approval · {rules.length} standing rule
+                {rules.length === 1 ? "" : "s"}
+              </p>
             </div>
           </div>
-
-          <DeskActions employeeId={employee.id} employeeName={employee.name} />
-        </div>
-      </GlassCard>
-
-      {/* Intro panel: names goals back to the founder */}
-      {employeeGoals.length > 0 && (
-        <GlassCard hoverable={false} className="p-6">
-          <p className="text-sm text-text-secondary mb-3">
-            <span style={{ color: role.text }} className="font-medium">
-              {employee.name}
-            </span>{" "}
-            says hi.
-          </p>
-          <p className="text-sm leading-relaxed mb-3">
-            Hi, I&apos;m {employee.name}.{" "}
-            {employeeGoals.length === 1 ? "Your goal:" : "Your goals:"}
-          </p>
-          <ul className="space-y-1.5 mb-4 ml-1">
-            {employeeGoals.map((g) => (
-              <li key={g.id} className="text-sm leading-relaxed">
-                <span className="mr-2" style={{ color: role.text }}>
-                  &bull;
-                </span>
-                {g.title}
-                {g.targetDate && (
-                  <span className="text-text-muted">
-                    {" "}
-                    by {formatGoalDate(g.targetDate)}
-                  </span>
-                )}
-              </li>
-            ))}
-          </ul>
-          <p className="text-sm text-text-secondary">
-            {ROLE_HOOK_LINE[employee.roleType] ?? ROLE_HOOK_LINE.marketing}
-          </p>
-        </GlassCard>
-      )}
-
-      {/* Metrics row */}
-      <div className="grid grid-cols-3 gap-4">
-        <MetricCard label="Tasks completed" value={completedCount} />
-        <MetricCard label="Awaiting review" value={reviewCount} />
-        <CheckInFrequencyPicker
-          employeeId={employee.id}
-          initialFrequency={(employee.checkInFrequency ?? "daily") as "daily" | "weekly" | "per_task"}
-        />
-      </div>
-
-      {/* 30d outcome trend */}
-      {(trendTotals.shipped > 0 || trendTotals.rejected > 0) && (
-        <TrendStrip
-          buckets={trendBuckets}
-          shipped={trendTotals.shipped}
-          rejected={trendTotals.rejected}
-        />
-      )}
-
-      {/* Goals */}
-      {employeeGoals.length > 0 && (
-        <div>
-          <h2 className="heading-gradient text-lg font-semibold mb-3">Goals</h2>
-          <div className="space-y-3">
-            {employeeGoals.map((goal) => {
-              const progressColor = goal.progressPct >= 100 ? "#15803D" : "#0F766E";
-              return (
-                <GlassCard key={goal.id} hoverable={false} className="p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-sm font-medium">{goal.title}</p>
-                    <span className="text-xs font-medium" style={{ color: progressColor }}>
-                      {goal.progressPct}%
-                    </span>
-                  </div>
-                  {goal.targetMetric && (
-                    <p className="text-xs text-text-secondary mb-2">{goal.targetMetric}</p>
-                  )}
-                  <div className="h-1.5 w-full rounded-full bg-[oklch(0.9_0.01_260/0.3)]">
-                    <div
-                      className="h-full rounded-full transition-all duration-300"
-                      style={{ width: `${goal.progressPct}%`, backgroundColor: progressColor }}
-                    />
-                  </div>
-                </GlassCard>
-              );
-            })}
+          <div className="flex flex-col items-start gap-2.5 sm:items-end">
+            <DeskActions employeeId={employee.id} employeeName={employee.name} />
+            <CheckInFrequencyPicker
+              employeeId={employee.id}
+              initialFrequency={(employee.checkInFrequency ?? "daily") as "daily" | "weekly" | "per_task"}
+            />
           </div>
         </div>
-      )}
+      </header>
 
-      {/* Tasks */}
-      <div>
-        <h2 className="heading-gradient text-lg font-semibold mb-3">Tasks</h2>
-        {employeeTasks.length > 0 ? (
-          <div className="space-y-3">
-            {employeeTasks.slice(0, 8).map((t) => {
-              const ts = statusMeta(t.status);
-              return (
-                <Link key={t.id} href={`/dashboard/tasks/${t.id}`}>
-                  <GlassCard className="p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium truncate">{t.title}</p>
-                        <p className="text-xs text-text-secondary truncate">
-                          {t.taskType.replace(/_/g, " ")} · {new Date(t.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                        </p>
-                      </div>
-                      <span
-                        className="rounded-full px-2.5 py-0.5 text-xs font-medium shrink-0"
-                        style={{ backgroundColor: ts.bg, color: ts.fg }}
-                      >
-                        {ts.label}
+      <div className="mt-5 grid gap-5 lg:grid-cols-[1.6fr_1fr]">
+        <div className="min-w-0 space-y-5">
+          <section aria-label="On the desk">
+            <div className="rule-t flex items-baseline justify-between pt-2.5">
+              <h2 className="text-[15px] font-semibold">On the desk</h2>
+              <Link
+                href="/dashboard/tasks"
+                className="spec-label transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+              >
+                All jobs
+              </Link>
+            </div>
+            {currentWork.length === 0 ? (
+              <p className="mt-2.5 text-[13px] text-ink-muted">
+                Nothing on the desk. Brief a job and it stamps through the stations here.
+              </p>
+            ) : (
+              <ul className="mt-2">
+                {currentWork.map((t) => (
+                  <li key={t.id} className="hairline-b last:border-b-0">
+                    <Link
+                      href={`/dashboard/tasks/${t.id}`}
+                      className="flex flex-col gap-1.5 py-2.5 transition-colors hover:bg-panel focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink sm:flex-row sm:items-center sm:gap-3"
+                    >
+                      <span className="line-clamp-2 min-w-0 text-[13.5px] font-medium sm:line-clamp-1 sm:flex-1">
+                        {t.title}
                       </span>
-                    </div>
-                  </GlassCard>
-                </Link>
-              );
-            })}
-          </div>
-        ) : (
-          <GlassCard hoverable={false} className="p-4">
-            <p className="text-sm text-text-muted text-center py-6">
-              No tasks yet. Assign one from the chat panel or the New Task button.
-            </p>
-          </GlassCard>
-        )}
-      </div>
-
-      {/* Deliverables */}
-      <div>
-        <h2 className="heading-gradient text-lg font-semibold mb-3">Deliverables</h2>
-        {employeeDeliverables.length > 0 ? (
-          <div className="space-y-3">
-            {employeeDeliverables.slice(0, 8).map((del) => {
-              const ds = statusMeta(del.status);
-              return (
-                <Link key={del.id} href={`/review/${del.id}`}>
-                  <GlassCard className="p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium truncate">{del.title}</p>
-                        <p className="text-xs text-text-secondary truncate">
-                          {del.deliverableType.replace(/_/g, " ")} · v{del.version}
-                        </p>
-                      </div>
-                      <span
-                        className="rounded-full px-2.5 py-0.5 text-xs font-medium shrink-0"
-                        style={{
-                          backgroundColor: ds.bg,
-                          color: ds.fg,
-                        }}
-                      >
-                        {ds.label}
+                      <span className="flex shrink-0 items-center gap-3">
+                        {t.demoSessionId && <ProvenanceTag kind="live" />}
+                        <StateChip status={t.status} />
+                        <span className="spec w-8 text-right text-ink-muted">
+                          {relativeTime(t.createdAt)}
+                        </span>
                       </span>
-                    </div>
-                  </GlassCard>
-                </Link>
-              );
-            })}
-          </div>
-        ) : (
-          <GlassCard hoverable={false} className="p-4">
-            <p className="text-sm text-text-muted text-center py-6">
-              No deliverables yet. Assign a task to {employee.name} to get started.
-            </p>
-          </GlassCard>
-        )}
-      </div>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
 
-      {/* Activity */}
-      <div>
-        <h2 className="heading-gradient text-lg font-semibold mb-3">Recent Activity</h2>
-        {recentActivity.length > 0 ? (
-          <GlassCard hoverable={false} className="divide-y divide-[oklch(0.8_0.01_260/0.1)]">
-            {recentActivity.map((log) => {
-              const phrase = formatActivityPhrase(log.actionType, log.actionDetail as Record<string, unknown>);
-              return (
-                <div key={log.id} className="flex items-center gap-3 px-4 py-3">
-                  <div
-                    className="h-2 w-2 shrink-0 rounded-full"
-                    style={{ backgroundColor: role.solid }}
-                  />
-                  <p className="flex-1 text-sm">
-                    <span className="font-medium">{employee.name}</span>{" "}
-                    {phrase}
-                  </p>
-                  <span className="text-xs text-text-muted">
-                    {formatRelativeTime(log.createdAt)}
-                  </span>
-                </div>
-              );
-            })}
-          </GlassCard>
-        ) : (
-          <GlassCard hoverable={false} className="p-4">
-            <p className="text-sm text-text-muted text-center py-6">
-              No activity yet.
+          <section aria-label="Deliverables">
+            <div className="rule-t pt-2.5">
+              <h2 className="text-[15px] font-semibold">Deliverables</h2>
+            </div>
+            {deliverableRows.length === 0 ? (
+              <p className="mt-2.5 text-[13px] text-ink-muted">
+                No deliverables on file. The first accepted job opens {employee.name}&apos;s record.
+              </p>
+            ) : (
+              <ul className="mt-2">
+                {deliverableRows.map((d) => (
+                  <li key={d.id} className="hairline-b last:border-b-0">
+                    <Link
+                      href={`/review/${d.id}`}
+                      className="flex flex-col gap-1.5 py-2.5 transition-colors hover:bg-panel focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink sm:flex-row sm:items-center sm:gap-3"
+                    >
+                      <span className="min-w-0 sm:flex-1">
+                        <span className="line-clamp-2 text-[13.5px] leading-tight font-medium sm:line-clamp-1">
+                          {d.title}
+                        </span>
+                        <span className="spec-label">
+                          {d.deliverableType} · v{d.version}
+                        </span>
+                      </span>
+                      <span className="flex shrink-0 items-center gap-3">
+                        {d.demoSessionId && <ProvenanceTag kind="live" />}
+                        <StateChip status={d.status} />
+                        <span className="spec w-8 text-right text-ink-muted">
+                          {relativeTime(d.updatedAt)}
+                        </span>
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
+
+        <div className="min-w-0 space-y-5">
+          <section aria-label="Manual slice" className="panel p-4">
+            <div className="flex items-baseline justify-between gap-2">
+              <h2 className="text-[15px] font-semibold">{employee.name}&apos;s slice of the manual</h2>
+              <Link
+                href="/memory"
+                className="spec-label shrink-0 transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+              >
+                The manual
+              </Link>
+            </div>
+            {rules.length === 0 ? (
+              <p className="mt-2 text-[13px] leading-snug text-ink-muted">
+                No standing rules yet. Edit {employee.name}&apos;s deliverables in review; corroborated
+                edits become numbered rules here.
+              </p>
+            ) : (
+              <ol className="mt-2.5 space-y-2.5">
+                {rules.map((r) => {
+                  const { number, text } = splitRuleTitle(r.title);
+                  return (
+                    <li key={r.id} className="flex items-baseline gap-2.5">
+                      {number && <span className="spec shrink-0 font-semibold">{number}</span>}
+                      <span className="min-w-0 flex-1 text-[13px] leading-snug">{text}</span>
+                      <span className="spec shrink-0 text-ink-muted">{r.confidence.toFixed(2)}</span>
+                    </li>
+                  );
+                })}
+              </ol>
+            )}
+          </section>
+
+          <section aria-label="Memos" className="panel-tinted p-4">
+            <h2 className="text-[15px] font-semibold">Memos</h2>
+            <p className="mt-1.5 text-[13px] leading-snug text-ink-secondary">
+              Write {employee.name} a memo; anything past a sentence becomes a job on the queue and
+              comes back through review.
             </p>
-          </GlassCard>
-        )}
+            <Link
+              href={`/employees/${employee.id}/chat`}
+              className="btn-ink mt-3 w-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+            >
+              Open chat
+            </Link>
+          </section>
+        </div>
       </div>
     </div>
   );
-}
-
-function MetricCard({ label, value }: { label: string; value: string | number }) {
-  return (
-    <GlassCard hoverable={false} className="p-4 text-center">
-      <p className="font-(--font-display) text-2xl font-bold tracking-tight">{value}</p>
-      <p className="mt-0.5 text-xs text-text-secondary">{label}</p>
-    </GlassCard>
-  );
-}
-
-function TrendStrip({
-  buckets,
-  shipped,
-  rejected,
-}: {
-  buckets: DayBucket[];
-  shipped: number;
-  rejected: number;
-}) {
-  const shippedMeta = statusMeta("approved");
-  const rejectedMeta = statusMeta("rejected");
-  const peak = Math.max(1, ...buckets.map((b) => b.shipped + b.rejected));
-  const colWidth = 8;
-  const colGap = 2;
-  const height = 36;
-  const width = buckets.length * (colWidth + colGap) - colGap;
-
-  return (
-    <GlassCard hoverable={false} className="p-4">
-      <div className="flex items-baseline justify-between mb-2">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
-          30-day outcome trend
-        </p>
-        <p className="text-[11px] text-text-muted">
-          <span className="font-medium" style={{ color: shippedMeta.fg }}>{shipped} shipped</span>
-          {" / "}
-          <span className="font-medium" style={{ color: rejectedMeta.fg }}>{rejected} rejected</span>
-        </p>
-      </div>
-      <svg width="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="block">
-        {buckets.map((b, i) => {
-          const x = i * (colWidth + colGap);
-          const total = b.shipped + b.rejected;
-          if (total === 0) {
-            return (
-              <rect
-                key={i}
-                x={x}
-                y={height - 1}
-                width={colWidth}
-                height={1}
-                fill="#E5E7EB"
-              />
-            );
-          }
-          const totalH = (total / peak) * height;
-          const shippedH = (b.shipped / total) * totalH;
-          const rejectedH = totalH - shippedH;
-          return (
-            <g key={i}>
-              {b.rejected > 0 && (
-                <rect
-                  x={x}
-                  y={height - rejectedH}
-                  width={colWidth}
-                  height={rejectedH}
-                  fill={rejectedMeta.dot}
-                />
-              )}
-              {b.shipped > 0 && (
-                <rect
-                  x={x}
-                  y={height - rejectedH - shippedH}
-                  width={colWidth}
-                  height={shippedH}
-                  fill={shippedMeta.dot}
-                />
-              )}
-            </g>
-          );
-        })}
-      </svg>
-      <p className="mt-2 text-[10px] text-text-muted">
-        Each column is a day. Green = approved or published. Red = rejected. Empty = no activity.
-      </p>
-    </GlassCard>
-  );
-}
-
-function formatRelativeTime(date: Date): string {
-  const now = new Date();
-  const diff = now.getTime() - date.getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
-
-function formatGoalDate(raw: string | Date): string {
-  const d = raw instanceof Date ? raw : new Date(raw);
-  if (Number.isNaN(d.getTime())) return String(raw);
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }

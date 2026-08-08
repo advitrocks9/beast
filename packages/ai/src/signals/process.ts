@@ -1,6 +1,6 @@
 import { db, signals, aiEmployees, goals } from "@beast/db";
 import { eq, and, isNull, inArray } from "drizzle-orm";
-import { getClient, getModelId } from "../models";
+import { complete } from "../provider";
 import type { TickContext } from "../orchestrator/types";
 
 interface SignalDispatch {
@@ -9,10 +9,7 @@ interface SignalDispatch {
   title: string;
 }
 
-/**
- * Process pending signals: filter by relevance, route to appropriate employee.
- * Called from the orchestrator tick.
- */
+/** Process pending signals: filter by relevance, route to the right employee. */
 export async function processSignals(ctx: TickContext): Promise<{
   processed: number;
   routed: SignalDispatch[];
@@ -90,21 +87,17 @@ export async function processSignals(ctx: TickContext): Promise<{
   return result;
 }
 
-/** Use Haiku to score signal relevance (0-10). */
+/** Use the fast tier to score signal relevance (0-10). */
 async function scoreRelevance(title: string, summary: string, goalContext: string): Promise<number> {
-  const client = getClient();
-  const response = await client.messages.create({
-    model: getModelId("haiku"),
-    max_tokens: 32,
+  const raw = await complete({
+    tier: "fast",
+    purpose: "signal_relevance",
+    maxTokens: 32,
     system: "Score the relevance of this signal to the company on a scale of 0-10. Return only the number.",
-    messages: [{
-      role: "user",
-      content: `${goalContext}\n\nSignal: ${title}\n${summary}`,
-    }],
+    prompt: `${goalContext}\n\nSignal: ${title}\n${summary}`,
   });
 
-  const raw = response.content[0]?.type === "text" ? response.content[0].text.trim() : "0";
-  const score = parseInt(raw, 10);
+  const score = parseInt(raw.trim(), 10);
   return Number.isNaN(score) ? 5 : Math.max(0, Math.min(10, score));
 }
 

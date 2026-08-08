@@ -1,11 +1,10 @@
 import { z } from "zod";
 import { and, count, eq } from "drizzle-orm";
-import type Anthropic from "@anthropic-ai/sdk";
-import { knowledgeItems, companies, departments, functions, goals } from "@beast/db";
-import { getClient, getModelId } from "@beast/ai";
+import { knowledgeItems, companies, goals } from "@beast/db";
+import { resolveProvider } from "@beast/ai";
+import type { ProviderMessage, RunToolDef } from "@beast/ai";
 import { schedules } from "@trigger.dev/sdk";
 import { createTRPCRouter, protectedProcedure } from "../init";
-import { trackEvent } from "@/lib/events/track";
 
 const MAX_GOALS_PER_ONBOARDING = 3;
 const DEFAULT_GOAL_HORIZON_DAYS = 30;
@@ -36,10 +35,10 @@ const messageSchema = z.object({
   content: z.string(),
 });
 
-const SAVE_GOAL_TOOL: Anthropic.Tool = {
+const SAVE_GOAL_TOOL: RunToolDef = {
   name: "save_goal",
   description: "Save a stated goal the founder wants done in the next ~30 days. Call this for each concrete, action-oriented goal extracted from the user's message. Do not call more than 3 times per onboarding.",
-  input_schema: {
+  inputSchema: {
     type: "object" as const,
     properties: {
       title: {
@@ -63,11 +62,10 @@ const SAVE_GOAL_TOOL: Anthropic.Tool = {
   },
 };
 
-// Tool definition for extracting knowledge - lets Claude's natural text be the response
-const EXTRACT_KNOWLEDGE_TOOL: Anthropic.Tool = {
+const EXTRACT_KNOWLEDGE_TOOL: RunToolDef = {
   name: "save_knowledge",
   description: "Save extracted company knowledge from the user's message. Call this whenever the user shares information about their company. You can call it multiple times for different categories.",
-  input_schema: {
+  inputSchema: {
     type: "object" as const,
     properties: {
       items: {
@@ -100,6 +98,33 @@ const EXTRACT_KNOWLEDGE_TOOL: Anthropic.Tool = {
     required: ["items"],
   },
 };
+
+interface InterviewTurn {
+  text: string;
+  toolCalls: Array<{ id: string; name: string; input: unknown }>;
+  stopReason: "tool_use" | "end_turn" | "max_tokens";
+}
+
+async function runInterviewTurn(
+  system: string,
+  messages: ProviderMessage[],
+  maxTokens: number,
+): Promise<InterviewTurn> {
+  const turn: InterviewTurn = { text: "", toolCalls: [], stopReason: "end_turn" };
+  for await (const event of resolveProvider().stream({
+    tier: "standard",
+    system,
+    messages,
+    tools: [EXTRACT_KNOWLEDGE_TOOL, SAVE_GOAL_TOOL],
+    maxTokens,
+  })) {
+    if (event.type === "text_delta") turn.text += event.text;
+    else if (event.type === "tool_call") {
+      turn.toolCalls.push({ id: event.id, name: event.name, input: event.input });
+    } else turn.stopReason = event.stopReason;
+  }
+  return turn;
+}
 
 function buildSystemPrompt(
   companyName: string,
@@ -185,22 +210,14 @@ export const onboardingRouter = createTRPCRouter({
         goalsCapturedSoFar,
       );
 
-      const claudeMessages = input.messages.map((m) => ({
-        role: m.role as "user" | "assistant",
-        content: m.content,
+      const messages: ProviderMessage[] = input.messages.map((m) => ({
+        role: m.role,
+        content: [{ type: "text", text: m.content }],
       }));
 
-      const client = getClient();
-      const completion = await client.messages.create({
-        model: getModelId("sonnet"),
-        max_tokens: 1024,
-        system: systemPrompt,
-        tools: [EXTRACT_KNOWLEDGE_TOOL, SAVE_GOAL_TOOL],
-        messages: claudeMessages,
-      });
+      const completion = await runInterviewTurn(systemPrompt, messages, 1024);
 
-      // Extract tool calls from Claude's response
-      let extractedItems: Array<{
+      const extractedItems: Array<{
         category: string;
         title: string;
         content: string;
@@ -214,15 +231,15 @@ export const onboardingRouter = createTRPCRouter({
         description?: string;
       }> = [];
 
-      for (const block of completion.content) {
-        if (block.type === "tool_use" && block.name === "save_knowledge") {
-          const toolInput = block.input as { items: typeof extractedItems };
+      for (const call of completion.toolCalls) {
+        if (call.name === "save_knowledge") {
+          const toolInput = call.input as { items: typeof extractedItems };
           if (Array.isArray(toolInput.items)) {
             extractedItems.push(...toolInput.items);
           }
         }
-        if (block.type === "tool_use" && block.name === "save_goal") {
-          const goalInput = block.input as {
+        if (call.name === "save_goal") {
+          const goalInput = call.input as {
             title?: unknown;
             target_date?: unknown;
             target_metric?: unknown;
@@ -239,40 +256,37 @@ export const onboardingRouter = createTRPCRouter({
         }
       }
 
-      // When Claude called tools, send tool results back to get the conversational response
-      let aiResponse = "";
-      if (completion.stop_reason === "tool_use") {
-        const toolResults = completion.content
-          .filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use")
-          .map((b) => ({
-            type: "tool_result" as const,
-            tool_use_id: b.id,
-            content: "Saved successfully.",
-          }));
-
-        const followUp = await client.messages.create({
-          model: getModelId("sonnet"),
-          max_tokens: 512,
-          system: systemPrompt,
-          tools: [EXTRACT_KNOWLEDGE_TOOL, SAVE_GOAL_TOOL],
-          messages: [
-            ...claudeMessages,
-            { role: "assistant" as const, content: completion.content },
-            { role: "user" as const, content: toolResults },
+      // When the model called tools, send tool results back for the conversational reply.
+      let aiResponse = completion.text;
+      if (completion.stopReason === "tool_use" && completion.toolCalls.length > 0) {
+        const followUp = await runInterviewTurn(
+          systemPrompt,
+          [
+            ...messages,
+            {
+              role: "assistant",
+              content: [
+                ...(completion.text ? [{ type: "text" as const, text: completion.text }] : []),
+                ...completion.toolCalls.map((call) => ({
+                  type: "tool_call" as const,
+                  id: call.id,
+                  name: call.name,
+                  input: call.input,
+                })),
+              ],
+            },
+            {
+              role: "user",
+              content: completion.toolCalls.map((call) => ({
+                type: "tool_result" as const,
+                toolCallId: call.id,
+                content: "Saved successfully.",
+              })),
+            },
           ],
-        });
-        for (const block of followUp.content) {
-          if (block.type === "text") {
-            aiResponse += block.text;
-          }
-        }
-      } else {
-        // No tool calls - just grab the text
-        for (const block of completion.content) {
-          if (block.type === "text") {
-            aiResponse += block.text;
-          }
-        }
+          512,
+        );
+        aiResponse = followUp.text;
       }
 
       if (!aiResponse.trim()) {
@@ -465,91 +479,21 @@ export const onboardingRouter = createTRPCRouter({
     }
     await ctx.db
       .update(companies)
-      .set({ onboardingStatus: "functions", updatedAt: new Date() })
+      .set({ onboardingStatus: "hiring", updatedAt: new Date() })
       .where(eq(companies.id, ctx.companyId));
-    await trackEvent({
-      companyId: ctx.companyId,
-      userId: ctx.userId,
-      eventName: "onboarding_functions",
-    });
   }),
 
   /**
-   * Escape hatch: advance to the functions step without requiring an
-   * active goal or any knowledge entries. Founders who want defaults
-   * and intend to fill /knowledge later get unblocked. Tracked as a
-   * separate event so the funnel report can split assisted vs
-   * skipped onboarding.
+   * Escape hatch: advance to hiring without requiring an active goal or
+   * any knowledge entries. Founders who want defaults and intend to fill
+   * /knowledge later get unblocked.
    */
   skipInterview: protectedProcedure.mutation(async ({ ctx }) => {
     await ctx.db
       .update(companies)
-      .set({ onboardingStatus: "functions", updatedAt: new Date() })
+      .set({ onboardingStatus: "hiring", updatedAt: new Date() })
       .where(eq(companies.id, ctx.companyId));
-    await trackEvent({
-      companyId: ctx.companyId,
-      userId: ctx.userId,
-      eventName: "onboarding_interview_skipped",
-    });
   }),
-
-  saveFunctions: protectedProcedure
-    .input(z.object({
-      departments: z.array(z.object({
-        name: z.string().min(1),
-        functions: z.array(z.object({
-          name: z.string().min(1),
-          mode: z.enum(["ai", "ai_human", "human"]),
-        })),
-      })),
-    }))
-    .mutation(async ({ ctx, input }) => {
-      // Delete-then-recreate must be atomic. Without the tx, a connection
-      // drop after the delete but before the inserts wiped the tenant's
-      // entire department/function tree. /onboarding/functions is the
-      // only entry point so the founder couldn't recover without DB
-      // surgery, and the next saveFunctions retry would hit the empty
-      // state and proceed normally, masking the loss.
-      await ctx.db.transaction(async (tx) => {
-        await tx.delete(departments).where(eq(departments.companyId, ctx.companyId));
-
-        for (const dept of input.departments) {
-          const [created] = await tx.insert(departments).values({
-            companyId: ctx.companyId,
-            name: dept.name,
-          }).returning();
-
-          if (created && dept.functions.length > 0) {
-            await tx.insert(functions).values(
-              dept.functions.map((fn) => ({
-                departmentId: created.id,
-                companyId: ctx.companyId,
-                name: fn.name,
-                mode: fn.mode,
-              })),
-            );
-          }
-        }
-
-        await tx
-          .update(companies)
-          .set({ onboardingStatus: "hiring", updatedAt: new Date() })
-          .where(eq(companies.id, ctx.companyId));
-      });
-
-      await trackEvent({
-        companyId: ctx.companyId,
-        userId: ctx.userId,
-        eventName: "onboarding_hiring",
-        properties: {
-          departmentCount: input.departments.length,
-          functionCount: input.departments.reduce(
-            (acc, d) => acc + d.functions.length,
-            0,
-          ),
-        },
-      });
-    }),
 
   completeHiring: protectedProcedure.mutation(async ({ ctx }) => {
     // Fetch company timezone for schedule registration
@@ -562,11 +506,6 @@ export const onboardingRouter = createTRPCRouter({
       .update(companies)
       .set({ onboardingStatus: "complete", updatedAt: new Date() })
       .where(eq(companies.id, ctx.companyId));
-    await trackEvent({
-      companyId: ctx.companyId,
-      userId: ctx.userId,
-      eventName: "onboarding_complete",
-    });
 
     // Register orchestrator schedules for this company
     const tz = company?.timezone ?? "UTC";

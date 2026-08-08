@@ -1,212 +1,131 @@
 import Link from "next/link";
-import { eq, and, isNull, isNotNull, inArray, notInArray, count, asc, gte, or, desc } from "drizzle-orm";
+import { headers } from "next/headers";
+import { eq, and, inArray, desc, notInArray, isNull } from "drizzle-orm";
 import { createClient } from "@/lib/supabase/server";
-import { DEMO_MODE } from "@/lib/demo";
+import { DEMO_MODE, demoSessionIdFromHeaders } from "@/lib/demo";
+import { demoWhere, withDemoOverlay } from "@/lib/demo-overlay";
 import { db } from "@beast/db";
-import { companies, aiEmployees, goals, deliverables, checkIns, proceduralMemories, tasks, activityLog, collaborationProposals } from "@beast/db";
-import { GlassCard } from "@beast/ui";
-import { MemoryReceipt } from "../review/[id]/_components/memory-receipt";
+import {
+  companies,
+  aiEmployees,
+  deliverables,
+  checkIns,
+  proceduralMemories,
+  ruleCandidates,
+  tasks,
+  activityLog,
+  collaborationProposals,
+} from "@beast/db";
+import { LOW_SIGNAL_ACTIVITY_TYPES, formatActivityPhrase } from "@/lib/activity-format";
+import { roleColor } from "@/lib/colors";
+import { Monogram } from "@/components/monogram";
+import { StateChip } from "@/components/state-chip";
+import { ProvenanceTag } from "@/components/provenance-tag";
+import { Tally } from "@/components/tally";
 import { DashboardEmptyState } from "./_components/dashboard-empty-state";
 import { AutonomySuggestionBanner } from "./_components/autonomy-suggestion-banner";
 import { CheckInsInline } from "./_components/check-ins-inline";
-import { WeeklyDigest } from "./_components/weekly-digest";
-import { ActivityFeed, type ActivityItem } from "./_components/activity-feed";
-import { ActivityEmployeeChips } from "./_components/activity-employee-chips";
-import { LOW_SIGNAL_ACTIVITY_TYPES } from "@/lib/activity-format";
 import { CollaborationProposals, type ProposalItem } from "./_components/collaboration-proposals";
-import { RunReplay, type RunReplayData, type RunStep } from "./_components/run-replay";
-import { VoiceLoop, type VoiceLoopData } from "./_components/voice-loop";
+import { RunBoard, type RunBoardTask } from "./_components/run-board";
+import { CommissionDialog } from "./_components/commission-dialog";
 import type { StarterRole } from "@beast/shared";
-import { roleColor, roleMeta, statusMeta, BRAND } from "@/lib/colors";
 
-type DeliverableTrailStep = { name: string; inputSummary: string; resultSummary: string };
-type DeliverableContent = {
-  trail?: DeliverableTrailStep[];
-  content?: string;
-  citations?: unknown[];
-  appliedRules?: Array<{ summary: string }>;
-};
-const TYPE_LABEL: Record<string, string> = {
-  report: "teardown",
-  social_linkedin: "post",
-  blog: "blog post",
-  email: "email",
-  faq: "FAQ",
-};
-
-const MEMORY_PILL_CONFIDENCE_FLOOR = 0.7;
-const MEMORY_PILL_MAX = 8;
-
-function getGreeting(): string {
-  const hour = new Date().getHours();
-  if (hour < 12) return "Good morning";
-  if (hour < 17) return "Good afternoon";
-  return "Good evening";
+function relativeTime(d: Date): string {
+  const m = Math.floor((Date.now() - d.getTime()) / 60000);
+  if (m < 1) return "now";
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h`;
+  return `${Math.floor(h / 24)}d`;
 }
 
-interface DashboardPageProps {
-  searchParams: Promise<{ activityEmployee?: string }>;
-}
+const QUEUE_STATUSES = ["queued", "planning", "plan_review"] as const;
 
-export default async function DashboardPage({ searchParams }: DashboardPageProps) {
+export default async function DashboardPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  const { activityEmployee: activityEmployeeRaw } = await searchParams;
-  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  const activityEmployeeId = activityEmployeeRaw && UUID_RE.test(activityEmployeeRaw)
-    ? activityEmployeeRaw
-    : null;
+  const demoSid = DEMO_MODE ? demoSessionIdFromHeaders(await headers()) : null;
 
   const company = await db.query.companies.findFirst({
     where: eq(companies.userId, user!.id),
-    columns: { id: true, name: true, contextScore: true },
+    columns: { id: true, name: true },
   });
 
-  // Server-side env-var presence check. Mirrors system.integrations
-  // (apps/web/src/trpc/routers/system.ts) but inlined here so the banner
-  // can render in the same render pass as the rest of the dashboard
-  // without an extra tRPC hop. A missing core dep (Anthropic / Gemini)
-  // breaks every agent run; missing tool deps degrade output quality.
-  const integrationPresent = (key: string): boolean => {
-    if (DEMO_MODE) return true;
-    const v = process.env[key];
-    return typeof v === "string" && v.length > 0;
-  };
-  const missingCoreIntegrations: Array<{ label: string; envKey: string }> = [];
-  if (!integrationPresent("ANTHROPIC_API_KEY"))
-    missingCoreIntegrations.push({ label: "Anthropic", envKey: "ANTHROPIC_API_KEY" });
-  if (!integrationPresent("GEMINI_API_KEY"))
-    missingCoreIntegrations.push({ label: "Gemini embeddings", envKey: "GEMINI_API_KEY" });
-  const missingToolIntegrations: Array<{ label: string; envKey: string }> = [];
-  if (!integrationPresent("SERPER_API_KEY"))
-    missingToolIntegrations.push({ label: "Serper search", envKey: "SERPER_API_KEY" });
-  if (!integrationPresent("FIRECRAWL_API_KEY"))
-    missingToolIntegrations.push({ label: "Firecrawl", envKey: "FIRECRAWL_API_KEY" });
-  if (!integrationPresent("UNSTRUCTURED_API_KEY"))
-    missingToolIntegrations.push({ label: "Unstructured", envKey: "UNSTRUCTURED_API_KEY" });
-
-  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const scope = demoWhere(demoSid);
 
   const [
     employees,
-    companyGoals,
-    reviewCountResult,
+    runningTasks,
+    queueRowsRaw,
+    deliverableRowsRaw,
+    candidates,
+    rules,
+    activityRows,
     pendingCheckIns,
-    approvedCountRes,
-    autoPublishingRows,
-    planApprovalRowsRes,
-    weeklyShippedRows,
-    weeklyRuleRows,
-    weeklyRejectedRes,
-    recentActivityRows,
     pendingProposalRows,
   ] = await Promise.all([
-    db.query.aiEmployees.findMany({
-      where: eq(aiEmployees.companyId, company!.id),
-    }),
-    db.query.goals.findMany({
-      where: and(eq(goals.companyId, company!.id), isNull(goals.parentGoalId)),
-      orderBy: (g, { desc }) => [desc(g.createdAt)],
-      limit: 5,
-    }),
-    db
-      .select({ value: count() })
-      .from(deliverables)
-      .where(
-        and(
-          eq(deliverables.companyId, company!.id),
-          inArray(deliverables.status, ["draft", "pending_review"]),
-        ),
+    db.query.aiEmployees.findMany({ where: eq(aiEmployees.companyId, company!.id) }),
+    db.query.tasks.findMany({
+      where: and(
+        eq(tasks.companyId, company!.id),
+        eq(tasks.status, "running"),
+        scope.seedOrMine(tasks.demoSessionId),
       ),
+      orderBy: [desc(tasks.startedAt)],
+      limit: 2,
+    }),
+    db.query.tasks.findMany({
+      where: and(
+        eq(tasks.companyId, company!.id),
+        inArray(tasks.status, [...QUEUE_STATUSES]),
+        scope.seedOrMine(tasks.demoSessionId),
+      ),
+      orderBy: [desc(tasks.createdAt)],
+      limit: 6,
+    }),
+    db.query.deliverables.findMany({
+      where: and(
+        eq(deliverables.companyId, company!.id),
+        scope.seedOrMine(deliverables.demoSessionId),
+      ),
+      orderBy: [desc(deliverables.updatedAt)],
+      limit: 40,
+    }),
+    db.query.ruleCandidates.findMany({
+      where: and(
+        eq(ruleCandidates.tenantId, company!.id),
+        isNull(ruleCandidates.promotedToId),
+        scope.seedOrMine(ruleCandidates.demoSessionId),
+      ),
+      orderBy: [desc(ruleCandidates.updatedAt)],
+      limit: 3,
+    }),
+    db.query.proceduralMemories.findMany({
+      where: and(
+        eq(proceduralMemories.tenantId, company!.id),
+        eq(proceduralMemories.isCurrent, true),
+      ),
+      columns: { id: true, title: true, confidence: true, createdAt: true },
+      orderBy: [desc(proceduralMemories.confidence)],
+      limit: 4,
+    }),
+    db.query.activityLog.findMany({
+      where: and(
+        eq(activityLog.companyId, company!.id),
+        scope.seedOrMine(activityLog.demoSessionId),
+        notInArray(activityLog.actionType, [...LOW_SIGNAL_ACTIVITY_TYPES]),
+      ),
+      orderBy: [desc(activityLog.createdAt)],
+      limit: 10,
+    }),
     db.query.checkIns.findMany({
       where: and(
         eq(checkIns.companyId, company!.id),
         eq(checkIns.acknowledged, false),
       ),
-      // Postgres ASC defaults to NULLS LAST so a row with a real
-      // scheduledFor sorts before one without; legacy rows (NULL column,
-      // value still in JSONB) fall back to createdAt.
       orderBy: (c, { asc }) => [asc(c.scheduledFor), asc(c.createdAt)],
-      limit: 5,
-    }),
-    db
-      .select({ value: count() })
-      .from(deliverables)
-      .where(
-        and(
-          eq(deliverables.companyId, company!.id),
-          eq(deliverables.status, "approved"),
-        ),
-      ),
-    db
-      .select({ id: deliverables.id, publishAfter: deliverables.publishAfter })
-      .from(deliverables)
-      .where(
-        and(
-          eq(deliverables.companyId, company!.id),
-          eq(deliverables.status, "auto_publishing"),
-        ),
-      )
-      .orderBy(asc(deliverables.publishAfter)),
-    db
-      .select({ value: count() })
-      .from(tasks)
-      .where(
-        and(
-          eq(tasks.companyId, company!.id),
-          isNotNull(tasks.plan),
-          eq(tasks.planApproved, false),
-          inArray(tasks.status, ["pending", "in_progress", "planned"]),
-        ),
-      ),
-    db
-      .select({
-        id: deliverables.id,
-        title: deliverables.title,
-        deliverableType: deliverables.deliverableType,
-        aiEmployeeId: deliverables.aiEmployeeId,
-        updatedAt: deliverables.updatedAt,
-      })
-      .from(deliverables)
-      .where(
-        and(
-          eq(deliverables.companyId, company!.id),
-          or(
-            eq(deliverables.status, "approved"),
-            eq(deliverables.status, "published"),
-          ),
-          gte(deliverables.updatedAt, sevenDaysAgo),
-        ),
-      )
-      .orderBy(desc(deliverables.updatedAt))
-      .limit(10),
-    db.query.proceduralMemories.findMany({
-      where: and(
-        eq(proceduralMemories.tenantId, company!.id),
-        eq(proceduralMemories.isCurrent, true),
-        gte(proceduralMemories.createdAt, sevenDaysAgo),
-      ),
-      columns: { id: true, title: true, ruleType: true, createdAt: true },
-      orderBy: (pm, { desc }) => [desc(pm.createdAt)],
-    }),
-    db
-      .select({ value: count() })
-      .from(deliverables)
-      .where(
-        and(
-          eq(deliverables.companyId, company!.id),
-          eq(deliverables.status, "rejected"),
-          gte(deliverables.updatedAt, sevenDaysAgo),
-        ),
-      ),
-    db.query.activityLog.findMany({
-      where: and(
-        eq(activityLog.companyId, company!.id),
-        notInArray(activityLog.actionType, [...LOW_SIGNAL_ACTIVITY_TYPES]),
-        activityEmployeeId ? eq(activityLog.aiEmployeeId, activityEmployeeId) : undefined,
-      ),
-      orderBy: [desc(activityLog.createdAt)],
-      limit: 10,
+      limit: 3,
     }),
     db.query.collaborationProposals.findMany({
       where: and(
@@ -214,504 +133,243 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         eq(collaborationProposals.status, "pending"),
       ),
       orderBy: (p, { desc: d }) => [d(p.createdAt)],
-      limit: 10,
+      limit: 5,
     }),
   ]);
 
-  const primaryEmployeeId = employees
-    .slice()
-    .sort((a, b) => (a.createdAt?.getTime?.() ?? 0) - (b.createdAt?.getTime?.() ?? 0))[0]?.id;
-  const primaryEmployeeName = employees.find((e) => e.id === primaryEmployeeId)?.name ?? "Alex";
-  const approvedCount = approvedCountRes[0]?.value ?? 0;
+  const employeeById = new Map(employees.map((e) => [e.id, e]));
+  const deliverableRows = withDemoOverlay(deliverableRowsRaw, demoSid);
+  const deliverableByTaskId = new Map(
+    deliverableRows.filter((d) => d.taskId).map((d) => [d.taskId, d]),
+  );
+  const reviewRows = deliverableRows.filter((d) => d.status === "in_review").slice(0, 5);
+  const reviewCount = deliverableRows.filter((d) => d.status === "in_review").length;
+  const shippedThisMonth = deliverableRows.filter(
+    (d) => (d.status === "accepted" || d.status === "published") && d.updatedAt >= thirtyDaysAgo,
+  ).length;
+  const newRulesThisMonth = rules.filter((r) => r.createdAt >= thirtyDaysAgo).length;
+  const queueRows = queueRowsRaw.filter((t) => t.status !== "running");
 
-  const memoryRules = primaryEmployeeId && approvedCount > 0
-    ? await db.query.proceduralMemories.findMany({
-        where: and(
-          eq(proceduralMemories.agentId, primaryEmployeeId),
-          eq(proceduralMemories.tenantId, company!.id),
-          eq(proceduralMemories.isCurrent, true),
-        ),
-        columns: {
-          id: true,
-          title: true,
-          description: true,
-          sourceEpisodes: true,
-          signalWeight: true,
-          createdAt: true,
-          tasksAppliedTo: true,
-          examples: true,
-          approvalRateDelta: true,
-        },
-        orderBy: (pm, { desc }) => [desc(pm.signalWeight), desc(pm.tasksAppliedTo)],
-      })
-    : [];
+  const board = runningTasks[0] ?? null;
+  const boardTask: RunBoardTask | null = board
+    ? {
+        id: board.id,
+        title: board.title,
+        status: board.status,
+        employeeName: employeeById.get(board.aiEmployeeId)?.name ?? "Employee",
+        roleType: employeeById.get(board.aiEmployeeId)?.roleType ?? "marketing",
+      }
+    : null;
 
-  const memoryRulesForPill = memoryRules
-    .filter((r) => (r.signalWeight ?? 0) >= MEMORY_PILL_CONFIDENCE_FLOOR)
-    .slice(0, MEMORY_PILL_MAX)
-    .map((r) => ({
-      ruleId: r.id,
-      summary: r.title,
-      evidence: r.description,
-      extractedFromDeliverableId: r.sourceEpisodes?.[0] ?? "",
-      extractedFromTitle: "",
-      extractedAt: r.createdAt.toISOString(),
-      confidence: r.signalWeight ?? 1.0,
-      tasksAppliedTo: r.tasksAppliedTo ?? 0,
-    }));
+  const proposals: ProposalItem[] = pendingProposalRows.map((p) => ({
+    id: p.id,
+    fromEmployeeName: employeeById.get(p.fromEmployeeId)?.name ?? "Employee",
+    fromEmployeeColor: roleColor(employeeById.get(p.fromEmployeeId)?.roleType),
+    toEmployeeName: employeeById.get(p.toEmployeeId)?.name ?? "Employee",
+    toEmployeeColor: roleColor(employeeById.get(p.toEmployeeId)?.roleType),
+    proposal: p.proposal,
+    sourceDeliverableId: p.sourceDeliverableId,
+    createdAt: p.createdAt.toISOString(),
+  }));
 
-  const workingCount = employees.filter((e) => e.status === "working").length;
-  const reviewCount = reviewCountResult[0]?.value ?? 0;
-  const autoPublishCount = autoPublishingRows.length;
-  const planApprovalCount = planApprovalRowsRes[0]?.value ?? 0;
-  const nextAutoPublishAt = autoPublishingRows[0]?.publishAfter ?? null;
-  const blocker = pickBlocker({
-    reviewCount,
-    autoPublishCount,
-    nextAutoPublishAt,
-    planApprovalCount,
-    workingCount,
-  });
-  const totalDeliverables = reviewCount + approvedCount;
-  const isEmpty = totalDeliverables === 0 && employees.length > 0;
   const starterEmployees = employees
     .filter((e): e is typeof e & { roleType: StarterRole } =>
       e.roleType === "marketing" || e.roleType === "sales" || e.roleType === "support",
     )
     .map((e) => ({ id: e.id, name: e.name, roleType: e.roleType as StarterRole }));
-  const employeeNameById = new Map(employees.map((e) => [e.id, e.name]));
-  const employeeRoleById = new Map(employees.map((e) => [e.id, e.roleType]));
-  const weeklyShippedItems = weeklyShippedRows.map((r) => ({
-    id: r.id,
-    title: r.title,
-    deliverableType: r.deliverableType,
-    employeeName: employeeNameById.get(r.aiEmployeeId) ?? "AI Employee",
-  }));
-  const proposalItems: ProposalItem[] = pendingProposalRows.map((r) => ({
-    id: r.id,
-    fromEmployeeName: employeeNameById.get(r.fromEmployeeId) ?? "AI Employee",
-    fromEmployeeColor: roleMeta(employeeRoleById.get(r.fromEmployeeId)).text,
-    toEmployeeName: employeeNameById.get(r.toEmployeeId) ?? "AI Employee",
-    toEmployeeColor: roleMeta(employeeRoleById.get(r.toEmployeeId)).text,
-    proposal: r.proposal,
-    sourceDeliverableId: r.sourceDeliverableId,
-    createdAt: r.createdAt.toISOString(),
-  }));
 
-  const activityItems: ActivityItem[] = recentActivityRows.map((r) => ({
-    id: r.id,
-    actionType: r.actionType,
-    actionDetail: (r.actionDetail as Record<string, unknown>) ?? {},
-    createdAt: r.createdAt.toISOString(),
-    employeeId: r.aiEmployeeId,
-    employeeName: r.aiEmployeeId
-      ? employeeNameById.get(r.aiEmployeeId) ?? "Beast"
-      : "Beast",
-    employeeColor: roleColor(r.aiEmployeeId ? employeeRoleById.get(r.aiEmployeeId) : undefined),
-  }));
-  const latestRule = weeklyRuleRows[0]
-    ? { title: weeklyRuleRows[0].title, ruleType: weeklyRuleRows[0].ruleType }
-    : null;
-
-  const inlineCheckIns = pendingCheckIns.map((c) => {
-    const content = (c.content as Record<string, unknown> | null) ?? {};
-    const fallbackScheduled = typeof content.scheduledFor === "string"
-      ? content.scheduledFor
-      : null;
-    return {
-      id: c.id,
-      aiEmployeeId: c.aiEmployeeId,
-      scheduledFor: c.scheduledFor ? c.scheduledFor.toISOString() : fallbackScheduled,
-      deliverableTitle: typeof content.deliverableTitle === "string"
-        ? content.deliverableTitle
-        : null,
-      deliverableType: typeof content.deliverableType === "string"
-        ? content.deliverableType
-        : null,
-    };
-  });
-  const inlineEmployees = employees.map((e) => ({
-    id: e.id,
-    name: e.name,
-    roleType: e.roleType,
-  }));
-
-  // Showcase run for the "Watch Alex work" replay. Built from a real seeded
-  // deliverable's reasoning trail, so it works on the read-only demo with no
-  // extra data. Prefer a research-heavy report.
-  const showcaseRows = await db.query.deliverables.findMany({
-    where: eq(deliverables.companyId, company!.id),
-    orderBy: (d, { desc }) => [desc(d.createdAt)],
-    limit: 25,
-  });
-  const showcase = showcaseRows
-    .map((d) => ({ d, c: (d.content ?? {}) as DeliverableContent }))
-    .filter((x) => (x.c.trail?.length ?? 0) >= 2)
-    .sort((a, b) => (b.d.deliverableType === "report" ? 1 : 0) - (a.d.deliverableType === "report" ? 1 : 0))[0];
-
-  let replayData: RunReplayData | null = null;
-  if (showcase) {
-    const emp = employees.find((e) => e.id === showcase.d.aiEmployeeId);
-    const trail = showcase.c.trail ?? [];
-    const typeLabel = TYPE_LABEL[showcase.d.deliverableType] ?? "deliverable";
-    const steps: RunStep[] = [
-      { kind: "plan", title: "Picked up the task", detail: showcase.d.title },
-      ...trail.map((t): RunStep => {
-        const search = /search/i.test(t.name);
-        return {
-          kind: search ? "search" : "read",
-          title: search ? "Searched the web" : "Read a source",
-          detail: t.inputSummary,
-          result: t.resultSummary,
-        };
-      }),
-      { kind: "draft", title: `Drafted the ${typeLabel}`, detail: "Grounded every claim in a cited source." },
-    ];
-    const body = showcase.c.content ?? "";
-    replayData = {
-      employeeName: emp?.name ?? "Alex",
-      roleColor: roleMeta(emp?.roleType).solid,
-      taskTitle: showcase.d.title,
-      deliverableTitle: showcase.d.title,
-      steps,
-      citations: showcase.c.citations?.length ?? 0,
-      preview: body.length > 220 ? `${body.slice(0, 220).trim()}…` : body,
-      ruleApplied: showcase.c.appliedRules?.[0]?.summary,
-    };
-  }
-
-  // Voice-loop: the learn->apply story for the strongest rule, from real
-  // provenance (the feedback that taught it, the example it now follows, the lift).
-  let voiceLoopData: VoiceLoopData | null = null;
-  const loopRule =
-    memoryRules.find((r) => (r.tasksAppliedTo ?? 0) > 0 && (r.sourceEpisodes?.length ?? 0) > 0) ??
-    memoryRules[0];
-  if (loopRule) {
-    const source = showcaseRows.find((d) => d.id === loopRule.sourceEpisodes?.[0]);
-    const example = (loopRule.examples as { good?: string } | null)?.good;
-    const rationale = source?.approvalRationale?.split(". ")[0]?.replace(/\.$/, "");
-    const primaryEmp = employees.find((e) => e.id === primaryEmployeeId);
-    if (source && example && rationale) {
-      voiceLoopData = {
-        employeeName: primaryEmp?.name ?? "Alex",
-        feedback: rationale,
-        feedbackSource: source.title,
-        ruleTitle: loopRule.title,
-        example,
-        appliedCount: loopRule.tasksAppliedTo ?? 0,
-        approvalDelta: loopRule.approvalRateDelta ?? 0,
-      };
-    }
-  }
+  const isEmpty = deliverableRows.length === 0 && !board && queueRows.length === 0;
 
   return (
-    <div className="space-y-6">
-      {/* Greeting */}
-      <GlassCard hoverable={false} className="p-6">
-        <h1 className="font-(--font-display) text-2xl font-bold tracking-tight">
-          {getGreeting()}
-        </h1>
-        <p className="mt-1 text-sm text-text-secondary">
-          {blocker.href ? (
-            <Link href={blocker.href} className="hover:text-text underline-offset-4 hover:underline">
-              {blocker.text}
-            </Link>
-          ) : (
-            blocker.text
-          )}
-        </p>
-      </GlassCard>
-
-      {replayData && <RunReplay data={replayData} />}
-
-      {missingCoreIntegrations.length > 0 && (
-        <div
-          className="rounded-xl border border-[oklch(0.75_0.18_25/0.5)] bg-[oklch(0.97_0.04_25/0.6)] px-4 py-3 text-xs"
-          role="alert"
-          style={{ color: "#991B1B" }}
-        >
-          <p className="font-semibold">
-            Agents cannot run: {missingCoreIntegrations.map((m) => m.label).join(" and ")} {missingCoreIntegrations.length === 1 ? "is" : "are"} unconfigured.
-          </p>
-          <p className="mt-1 text-text-secondary">
-            Set{" "}
-            {missingCoreIntegrations.map((m, i) => (
-              <span key={m.envKey}>
-                {i > 0 && (i === missingCoreIntegrations.length - 1 ? " and " : ", ")}
-                <code className="rounded border border-red-200 bg-white/70 px-1.5 py-0.5 font-mono text-[11px]">
-                  {m.envKey}
-                </code>
-              </span>
-            ))}
-            , redeploy, then check{" "}
-            <Link href="/settings/connectors" className="font-medium underline-offset-2 hover:underline">
-              /settings/connectors
-            </Link>
-            .
+    <div className="mx-auto max-w-6xl">
+      <header className="rule-b flex flex-wrap items-end justify-between gap-3 pb-4">
+        <div>
+          <h1 className="display text-3xl">{company!.name}</h1>
+          <p className="spec mt-1.5 text-ink-muted">
+            {employees.length} on the roster · {shippedThisMonth} shipped this month ·{" "}
+            {newRulesThisMonth} new rule{newRulesThisMonth === 1 ? "" : "s"} · {reviewCount} awaiting
+            sign-off
           </p>
         </div>
-      )}
-      {missingCoreIntegrations.length === 0 && missingToolIntegrations.length > 0 && (
-        <div
-          className="rounded-xl border border-[oklch(0.85_0.12_75/0.5)] bg-[oklch(0.98_0.04_75/0.5)] px-4 py-2.5 text-xs"
-          role="status"
-          style={{ color: "#92400E" }}
-        >
-          <p>
-            {missingToolIntegrations.length} agent tool{missingToolIntegrations.length === 1 ? "" : "s"} unconfigured ({missingToolIntegrations.map((m) => m.label).join(", ")}). Output quality is reduced.{" "}
-            <Link href="/settings/connectors" className="font-medium underline-offset-2 hover:underline">
-              Open /settings/connectors
-            </Link>
-            .
-          </p>
-        </div>
-      )}
+        <CommissionDialog demoMode={DEMO_MODE} />
+      </header>
 
       <AutonomySuggestionBanner />
 
-      <MemoryReceipt
-        rules={memoryRulesForPill}
-        scopeKey={`dashboard:${company!.id}`}
-        employeeName={primaryEmployeeName}
-        surface="dashboard"
-      />
-
-      <WeeklyDigest
-        shippedCount={weeklyShippedRows.length}
-        shippedItems={weeklyShippedItems}
-        pendingReviewCount={reviewCount}
-        newRulesCount={weeklyRuleRows.length}
-        rejectedCount={weeklyRejectedRes[0]?.value ?? 0}
-        latestRule={latestRule}
-      />
-
-      {voiceLoopData && <VoiceLoop data={voiceLoopData} />}
-
-      {inlineCheckIns.length > 0 && (
-        <CheckInsInline checkIns={inlineCheckIns} employees={inlineEmployees} />
-      )}
-
-      {proposalItems.length > 0 && (
-        <CollaborationProposals items={proposalItems} />
-      )}
-
-      {/* Employee grid */}
-      <div>
-        <div className="mb-3 flex items-baseline justify-between">
-          <h2 className="heading-gradient text-lg font-semibold">Your Team</h2>
-          <a
-            href="/employees"
-            className="text-xs font-medium text-text-secondary hover:text-foreground"
-          >
-            View all &rarr;
-          </a>
-        </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {employees.map((emp) => (
-            <EmployeeCard
-              key={emp.id}
-              id={emp.id}
-              name={emp.name}
-              role={emp.roleTitle}
-              status={emp.status ?? "idle"}
-              roleType={emp.roleType}
-            />
-          ))}
-
-          {/* Hire card */}
-          <GlassCard className="flex min-h-[140px] items-center justify-center border-dashed p-6">
-            <div className="text-center">
-              <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-brand-light text-brand">
-                <span className="text-xl">+</span>
-              </div>
-              <p className="mt-2 text-sm font-medium text-text-secondary">Hire Employee</p>
-            </div>
-          </GlassCard>
-        </div>
-      </div>
-
-      {/* Goals */}
-      <div>
-        <h2 className="heading-gradient text-lg font-semibold mb-3">Company Goals</h2>
-        {companyGoals.length > 0 ? (
-          <div className="space-y-3">
-            {companyGoals.map((goal) => (
-              <GoalCard
-                key={goal.id}
-                title={goal.title}
-                targetMetric={goal.targetMetric}
-                targetDate={goal.targetDate}
-                progressPct={goal.progressPct}
-                status={goal.status}
-              />
-            ))}
-          </div>
-        ) : (
-          <GlassCard hoverable={false} className="p-4">
-            <p className="text-sm text-text-muted text-center py-6">
-              No goals set yet. Create a company goal to get your team working toward objectives.
-            </p>
-          </GlassCard>
-        )}
-      </div>
-
-      {/* Activity / first-project starters when empty */}
       {isEmpty ? (
         <DashboardEmptyState employees={starterEmployees} />
       ) : (
-        <div>
-          <ActivityEmployeeChips
-            employees={employees.map((e) => ({ id: e.id, name: e.name, roleType: e.roleType ?? null }))}
-            activeEmployeeId={activityEmployeeId}
-          />
-          <ActivityFeed
-            items={activityItems}
-            scopeName={activityEmployeeId
-              ? employees.find((e) => e.id === activityEmployeeId)?.name ?? null
-              : null}
-          />
+        <div className="mt-5 grid gap-5 lg:grid-cols-[1.6fr_1fr]">
+          <div className="min-w-0 space-y-5">
+            <RunBoard task={boardTask} />
+
+            <section aria-label="Queue">
+              <div className="rule-t flex items-baseline justify-between pt-2.5">
+                <h2 className="text-[15px] font-semibold">Queue</h2>
+                <Link href="/dashboard/tasks" className="spec-label transition-colors hover:text-ink">
+                  All jobs
+                </Link>
+              </div>
+              {queueRows.length === 0 ? (
+                <p className="mt-2.5 text-[13px] text-ink-muted">
+                  Queue is clear. The orchestrator picks up recurring work on its own.
+                </p>
+              ) : (
+                <ul className="mt-2">
+                  {queueRows.map((t) => {
+                    const emp = employeeById.get(t.aiEmployeeId);
+                    return (
+                      <li key={t.id} className="hairline-b last:border-b-0">
+                        <Link
+                          href={`/dashboard/tasks/${t.id}`}
+                          className="flex flex-col gap-1.5 py-2.5 transition-colors hover:bg-panel sm:flex-row sm:items-center sm:gap-3"
+                        >
+                          <span className="flex min-w-0 items-center gap-3 sm:flex-1">
+                            <Monogram name={emp?.name ?? "?"} roleType={emp?.roleType} size="sm" />
+                            <span className="line-clamp-2 min-w-0 flex-1 text-[13.5px] font-medium sm:line-clamp-1">
+                              {t.title}
+                            </span>
+                          </span>
+                          <span className="flex shrink-0 items-center gap-3 pl-9 sm:pl-0">
+                            {t.demoSessionId && <ProvenanceTag kind="live" />}
+                            <StateChip status={t.status} />
+                            <span className="spec w-8 text-right text-ink-muted">
+                              {relativeTime(t.createdAt)}
+                            </span>
+                          </span>
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+
+            <section aria-label="Ledger">
+              <div className="rule-t pt-2.5">
+                <h2 className="text-[15px] font-semibold">Ledger</h2>
+              </div>
+              <ol className="mt-2 space-y-1.5">
+                {activityRows.map((a) => (
+                  <li key={a.id} className="flex items-baseline gap-3">
+                    <span className="spec w-8 shrink-0 text-ink-muted">
+                      {relativeTime(a.createdAt)}
+                    </span>
+                    <span className="spec min-w-0 flex-1 truncate text-ink-secondary">
+                      {formatActivityPhrase(a.actionType, (a.actionDetail ?? {}) as Record<string, unknown>)}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </section>
+
+            <CheckInsInline
+              checkIns={pendingCheckIns.map((c) => ({
+                id: c.id,
+                aiEmployeeId: c.aiEmployeeId,
+                scheduledFor: c.scheduledFor?.toISOString() ?? null,
+                deliverableTitle: deliverableByTaskId.get(c.taskId ?? "")?.title ?? null,
+                deliverableType: deliverableByTaskId.get(c.taskId ?? "")?.deliverableType ?? null,
+              }))}
+              employees={employees.map((e) => ({ id: e.id, name: e.name, roleType: e.roleType }))}
+            />
+          </div>
+
+          <div className="min-w-0 space-y-5">
+            <section aria-label="Review tray" className="panel-tinted p-4">
+              <div className="flex items-baseline justify-between">
+                <h2 className="text-[15px] font-semibold">Review tray</h2>
+                <span className="spec bg-ink px-1.5 py-0.5 text-[10px] text-white">
+                  {reviewCount}
+                </span>
+              </div>
+              {reviewRows.length === 0 ? (
+                <p className="mt-2 text-[13px] text-ink-muted">Nothing waiting on you.</p>
+              ) : (
+                <ul className="mt-2">
+                  {reviewRows.map((d) => {
+                    const emp = employeeById.get(d.aiEmployeeId);
+                    return (
+                      <li key={d.id} className="hairline-b last:border-b-0">
+                        <Link
+                          href={`/review/${d.id}`}
+                          className="flex flex-col gap-1 py-2.5 transition-colors hover:bg-bg sm:flex-row sm:items-center sm:gap-2.5"
+                        >
+                          <span className="flex min-w-0 items-center gap-2.5 sm:flex-1">
+                            <Monogram name={emp?.name ?? "?"} roleType={emp?.roleType} size="sm" />
+                            <span className="min-w-0 flex-1">
+                              <span className="line-clamp-2 text-[13px] leading-tight font-medium sm:line-clamp-1">
+                                {d.title}
+                              </span>
+                              <span className="spec-label">{d.deliverableType}</span>
+                            </span>
+                          </span>
+                          {d.demoSessionId && (
+                            <ProvenanceTag
+                              kind="live"
+                              className="ml-[34px] self-start sm:ml-0 sm:shrink-0 sm:self-auto"
+                            />
+                          )}
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              <Link
+                href="/reviews"
+                className="btn-ink mt-3 w-full"
+              >
+                Open review
+              </Link>
+            </section>
+
+            <section aria-label="Manual amendments" className="panel p-4">
+              <div className="flex items-baseline justify-between">
+                <h2 className="text-[15px] font-semibold">Candidate amendments</h2>
+                <Link href="/memory" className="spec-label transition-colors hover:text-ink">
+                  The manual
+                </Link>
+              </div>
+              {candidates.length === 0 ? (
+                <p className="mt-2 text-[13px] text-ink-muted">
+                  Edit a deliverable and the diff becomes a candidate rule here.
+                </p>
+              ) : (
+                <ul className="mt-2.5 space-y-3">
+                  {candidates.map((c) => (
+                    <li key={c.id}>
+                      <p className="text-[13px] leading-snug font-medium">{c.title}</p>
+                      <p className="spec mt-1 flex items-center gap-2 text-ink-muted">
+                        <Tally count={c.distinctReviewCount} threshold={3} />
+                        {c.distinctReviewCount} review{c.distinctReviewCount === 1 ? "" : "s"} ·
+                        confidence {c.confidence.toFixed(2)}
+                        {c.demoSessionId && <ProvenanceTag kind="live" />}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="hairline-t mt-3 pt-2.5">
+                <p className="spec-label">Standing rules</p>
+                <ul className="mt-1.5 space-y-1">
+                  {rules.map((r) => (
+                    <li key={r.id} className="flex items-baseline gap-2 text-[12.5px]">
+                      <span className="min-w-0 flex-1 truncate">{r.title}</span>
+                      <span className="spec shrink-0 text-ink-muted">
+                        {r.confidence.toFixed(2)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </section>
+
+
+            {proposals.length > 0 && <CollaborationProposals items={proposals} />}
+          </div>
         </div>
       )}
     </div>
   );
-}
-
-function EmployeeCard({
-  id,
-  name,
-  role,
-  status,
-  roleType,
-}: {
-  id: string;
-  name: string;
-  role: string;
-  status: string;
-  roleType: string;
-}) {
-  const roleHex = roleColor(roleType);
-  const st = statusMeta(status);
-
-  return (
-    <a href={`/employees/${id}`}>
-      <GlassCard className="p-5">
-        <div className="flex items-start gap-3">
-          <div
-            className="flex h-10 w-10 items-center justify-center rounded-full text-white text-sm font-semibold"
-            style={{ backgroundColor: roleHex }}
-          >
-            {name[0]}
-          </div>
-          <div className="flex-1">
-            <div className="font-semibold text-sm">{name}</div>
-            <div className="text-xs text-text-secondary">{role}</div>
-          </div>
-        </div>
-        <div className="mt-4 flex items-center gap-1.5">
-          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: st.dot }} />
-          <span className="text-xs text-text-secondary">{st.label}</span>
-        </div>
-      </GlassCard>
-    </a>
-  );
-}
-
-function GoalCard({
-  title,
-  targetMetric,
-  targetDate,
-  progressPct,
-  status,
-}: {
-  title: string;
-  targetMetric: string | null;
-  targetDate: string | null;
-  progressPct: number;
-  status: string;
-}) {
-  const progressColor = progressPct >= 75 ? statusMeta("completed").fg : BRAND;
-  const sm = statusMeta(status);
-
-  return (
-    <GlassCard hoverable={false} className="p-4">
-      <div className="flex items-center justify-between mb-2">
-        <p className="text-sm font-medium">{title}</p>
-        <span
-          className="rounded-full px-2 py-0.5 text-[10px] font-medium"
-          style={{ backgroundColor: sm.bg, color: sm.fg }}
-        >
-          {status}
-        </span>
-      </div>
-
-      {/* Progress bar */}
-      <div className="mb-2">
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-xs text-text-secondary">{targetMetric ?? "Progress"}</span>
-          <span className="text-xs font-medium" style={{ color: progressColor }}>
-            {progressPct}%
-          </span>
-        </div>
-        <div className="h-1.5 w-full rounded-full bg-[oklch(0.9_0.01_260/0.3)]">
-          <div
-            className="h-full rounded-full transition-all duration-300"
-            style={{ width: `${progressPct}%`, backgroundColor: progressColor }}
-          />
-        </div>
-      </div>
-
-      {targetDate && (
-        <p className="text-[10px] text-text-muted">
-          Target: {new Date(targetDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-        </p>
-      )}
-    </GlassCard>
-  );
-}
-
-interface BlockerInput {
-  reviewCount: number;
-  autoPublishCount: number;
-  nextAutoPublishAt: Date | null;
-  planApprovalCount: number;
-  workingCount: number;
-}
-
-function pickBlocker(input: BlockerInput): { text: string; href: string | null } {
-  if (input.reviewCount > 0) {
-    const noun = input.reviewCount === 1 ? "deliverable needs" : "deliverables need";
-    return {
-      text: `${input.reviewCount} ${noun} your sign-off.`,
-      href: "/reviews",
-    };
-  }
-  if (input.autoPublishCount > 0) {
-    const noun = input.autoPublishCount === 1 ? "post" : "posts";
-    const seconds = input.nextAutoPublishAt
-      ? Math.max(0, Math.round((input.nextAutoPublishAt.getTime() - Date.now()) / 1000))
-      : 0;
-    const window = seconds > 0 ? ` in ${seconds}s` : " any moment";
-    return {
-      text: `${input.autoPublishCount} ${noun} auto-publishing${window}. Cancel here if needed.`,
-      href: "/reviews",
-    };
-  }
-  if (input.planApprovalCount > 0) {
-    const noun = input.planApprovalCount === 1 ? "plan" : "plans";
-    return {
-      text: `${input.planApprovalCount} ${noun} waiting on your approval.`,
-      href: "/dashboard/tasks?filter=in_flight",
-    };
-  }
-  if (input.workingCount > 0) {
-    const noun = input.workingCount === 1 ? "employee is" : "employees are";
-    return {
-      text: `${input.workingCount} ${noun} working. Nothing on your desk yet.`,
-      href: "/dashboard/tasks?filter=in_flight",
-    };
-  }
-  return {
-    text: "Your team is idle. Open a desk and tell someone what to do.",
-    href: null,
-  };
 }

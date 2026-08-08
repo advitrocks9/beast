@@ -2,188 +2,98 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-@custom-variant dark (&:is(.dark *));
-
 @theme {
-  /* Base. Cool-neutral canvas with true-white cards, so depth comes from real
-     surface contrast instead of glass-on-white that vanished against #F8F9FB. */
+  /* World: the company's own identity program. Bright coated stock, ink, one
+     identity color. Depth comes from rules and panel tone, never shadows. */
   --color-bg: #FFFFFF;
-  --color-bg-warm: #FBFBFD;
-  --color-surface: #FFFFFF;
-  --color-surface-hover: #F4F5F7;
-  --color-surface-solid: #FFFFFF;
-  --color-surface-sunken: #F1F2F5;
+  --color-panel: #F4F4F2;
+  --color-panel-sunken: #ECECEA;
+  --color-ink: #131311;
+  --color-ink-secondary: #4A4A46;
+  --color-ink-muted: #6E6D68;
 
-  /* Glass. Reserved for the nav and over-imagery now; a present cool border so
-     it still reads as a panel where it is used. */
-  --color-glass: oklch(1 0 0 / 0.72);
-  --color-glass-border: oklch(0.84 0.006 255 / 0.5);
-  --color-glass-heavy: oklch(1 0 0 / 0.85);
+  --color-identity: #E8420C;
+  --color-identity-deep: #BC3105;
+  --color-identity-tint: #FBEDE6;
+  --color-identity-fg: #FFFFFF;
 
-  /* Brand. Spruce teal is the single owned accent: links, focus, active nav,
-     the "working" state, and the voice/memory moments. This replaces the dead
-     --color-accent that the @theme inline block silently aliased to near-white. */
-  --color-brand: #0F766E;
-  --color-brand-deep: #0B5C56;
-  --color-brand-light: #E6F2F0;
-  --color-brand-glow: oklch(0.6 0.07 185 / 0.18);
-  --color-brand-fg: #FFFFFF;
+  --color-rule: #131311;
+  --color-hairline: #DAD9D4;
 
-  /* Text. #4B5563 ~7:1 and #6B7280 ~4.83:1 both pass AA on the warm canvas;
-     the old #9CA3AF muted came in at 2.4:1 and is gone. */
-  --color-text: #18181B;
-  --color-text-secondary: #4B5563;
-  --color-text-muted: #6B7280;
+  /* Job-ticket states. Chips are squared ink blocks, never pills. */
+  --color-state-queued: #6E6D68;
+  --color-state-running: #E8420C;
+  --color-state-review: #131311;
+  --color-state-accepted: #1E7A34;
+  --color-state-revising: #BC3105;
+  --color-state-failed: #C92A1B;
+  --color-state-published: #1E7A34;
 
-  /* Status / signal. Bright value for dots and fills; AA text shades live in
-     lib/colors.ts so a tinted chip never paints a hue as text on its own tint. */
-  --color-active: #15803D;   /* approved / done */
-  --color-working: #0F766E;  /* in-flight, shares the brand teal on purpose */
-  --color-review: #F59E0B;   /* needs review, "your turn" */
-  --color-idle: #6B7280;     /* idle (was #9CA3AF) */
-  --color-error: #DC2626;
+  /* Roster spot colors: identity applications, never reused for status. */
+  --color-emp-alex: #2E5FD0;
+  --color-emp-jordan: #8A3D63;
+  --color-emp-sam: #A07A00;
 
-  /* Employee roles. Identity only, low chroma, never reused as status. */
-  --color-marketing: #B05A38; /* clay, Alex */
-  --color-sales: #8A3D63;     /* mulberry, Jordan */
-  --color-support: #46618A;   /* slate-blue, Sam */
+  --radius-sm: 2px;
+  --radius-md: 2px;
+  --radius-lg: 3px;
+  --radius-card: 3px;
 
-  /* Feedback chips */
-  --color-chip-negative-bg: #FEF2F2;
-  --color-chip-negative-text: #B91C1C;
-  --color-chip-positive-bg: #ECFDF3;
-  --color-chip-positive-text: #15803D;
-  --color-chip-neutral-bg: #EEF6F5;
-  --color-chip-neutral-text: #0B5C56;
+  --font-sans: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-fragment), ui-monospace, monospace;
 
-  /* Shadows. Neutral so cards lift cleanly off the canvas. */
-  --shadow-xs: 0 1px 2px oklch(0.3 0 0 / 0.05);
-  --shadow-sm: 0 1px 2px oklch(0.3 0 0 / 0.05), 0 4px 12px oklch(0.3 0 0 / 0.06);
-  --shadow-md: 0 8px 24px oklch(0.3 0 0 / 0.09);
-  --shadow-glass: 0 4px 16px oklch(0.3 0 0 / 0.06), inset 0 1px 0 oklch(1 0 0 / 0.4);
+  --ease-press: cubic-bezier(0.16, 1, 0.3, 1);
 
-  /* Radius */
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 16px;
-  --radius-xl: 24px;
-  --radius-card: 20px;
-  --radius-pill: 9999px;
-
-  /* Fonts */
-  --font-display: 'Cabinet Grotesk', sans-serif;
-  --font-body: 'Satoshi', sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
+  /* Shadows flattened and large radii squared so stock utilities obey the world. */
+  --shadow-xs: 0 0 0 0 transparent;
+  --shadow-sm: 0 0 0 0 transparent;
+  --shadow-md: 0 0 0 0 transparent;
+  --shadow-glass: 0 0 0 0 transparent;
+  --radius-xl: 3px;
+  --radius-2xl: 3px;
+  --radius-pill: 2px;
 }
 
-/* Card surface. Solid white on the warm canvas with a real hairline + lift,
-   replacing the translucent glass that disappeared on the old white page. */
-.glass {
-  background: var(--color-surface-solid);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-sm);
-}
-
-.glass:hover {
-  border-color: oklch(0.84 0.006 255 / 0.9);
-  box-shadow: var(--shadow-md);
-}
-
-.glass-heavy {
-  background: var(--color-surface-solid);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-md);
-}
-
-/* The one place glass stays glass: the top nav floating over content. */
-.glass-nav {
-  background: oklch(1 0 0 / 0.75);
-  backdrop-filter: blur(16px) saturate(1.2);
-  border-bottom: 1px solid var(--color-border);
-}
-
-.glass-frosted {
-  background: oklch(1 0 0 / 0.6);
-  backdrop-filter: blur(28px) saturate(1.2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
-}
-
-.tnum { font-variant-numeric: tabular-nums; }
-
-/* Goal progress range: painted track + a small thumb in the goal's color. */
-.progress-range {
-  -webkit-appearance: none;
-  appearance: none;
-  height: 6px;
-  border-radius: 9999px;
-  outline: none;
-}
-.progress-range::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  height: 14px;
-  width: 14px;
-  border-radius: 9999px;
-  background: var(--thumb-color, #0F766E);
-  border: 2px solid white;
-  box-shadow: 0 1px 3px oklch(0.3 0 0 / 0.2);
-  cursor: pointer;
-}
-.progress-range::-moz-range-thumb {
-  height: 14px;
-  width: 14px;
-  border-radius: 9999px;
-  background: var(--thumb-color, #0F766E);
-  border: 2px solid white;
-  box-shadow: 0 1px 3px oklch(0.3 0 0 / 0.2);
-  cursor: pointer;
-}
-
-/* Headings: solid warm ink. Crisp, no gradient. */
-.heading-gradient {
-  color: var(--color-text);
-}
-
-/* Primary button: solid warm ink. Premium, achromatic, lets the teal stay rare. */
-.btn-primary {
-  background: var(--color-text);
-  color: white;
-  border-radius: 12px;
-  padding: 10px 20px;
-  font: 500 14px/1 var(--font-body);
-  letter-spacing: -0.01em;
-  box-shadow: 0 1px 2px oklch(0.2 0 0 / 0.18), 0 6px 16px oklch(0.2 0 0 / 0.12);
-  transition: all 150ms ease;
-}
-
-.btn-primary:hover {
-  transform: translateY(-1px);
-  background: #27272A;
-  box-shadow: 0 2px 4px oklch(0.2 0 0 / 0.2), 0 10px 22px oklch(0.2 0 0 / 0.16);
-}
-
-/* Brand button: the teal accent CTA, used sparingly for the one key action. */
-.btn-brand {
-  background: var(--color-brand);
-  color: var(--color-brand-fg);
-  border-radius: 12px;
-  padding: 10px 20px;
-  font: 500 14px/1 var(--font-body);
-  letter-spacing: -0.01em;
-  box-shadow: 0 1px 2px oklch(0.35 0.06 185 / 0.25), 0 8px 18px oklch(0.35 0.06 185 / 0.18);
-  transition: all 150ms ease;
-}
-.btn-brand:hover {
-  transform: translateY(-1px);
-  background: var(--color-brand-deep);
+/* shadcn variable layer, retargeted to the manual world. */
+:root {
+  color-scheme: light;
+  --background: #FFFFFF;
+  --foreground: #131311;
+  --card: #FFFFFF;
+  --card-foreground: #131311;
+  --popover: #FFFFFF;
+  --popover-foreground: #131311;
+  --primary: #131311;
+  --primary-foreground: #FFFFFF;
+  --secondary: #F4F4F2;
+  --secondary-foreground: #131311;
+  --muted: #F4F4F2;
+  --muted-foreground: #6E6D68;
+  --accent: #FBEDE6;
+  --accent-foreground: #BC3105;
+  --destructive: #C92A1B;
+  --border: #DAD9D4;
+  --input: #DAD9D4;
+  --ring: #E8420C;
+  --chart-1: #E8420C;
+  --chart-2: #2E5FD0;
+  --chart-3: #8A3D63;
+  --chart-4: #A07A00;
+  --chart-5: #1E7A34;
+  --radius: 2px;
+  --sidebar: #FFFFFF;
+  --sidebar-foreground: #131311;
+  --sidebar-primary: #131311;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #F4F4F2;
+  --sidebar-accent-foreground: #131311;
+  --sidebar-border: #DAD9D4;
+  --sidebar-ring: #E8420C;
 }
 
 @theme inline {
   --font-heading: var(--font-display);
-  --font-sans: var(--font-body);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -215,85 +125,6 @@
   --color-card: var(--card);
   --color-foreground: var(--foreground);
   --color-background: var(--background);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
-}
-
-/* shadcn neutrals, warmed. They own surfaces/borders/text; the @theme palette
-   above owns brand + semantic + role. --primary is warm ink so the shadcn Button
-   default and the .btn-primary class are one primary; --ring is the brand teal. */
-:root {
-  --background: #FBFBFD;
-  --foreground: #18181B;
-  --card: #FFFFFF;
-  --card-foreground: #18181B;
-  --popover: #FFFFFF;
-  --popover-foreground: #18181B;
-  --primary: #18181B;
-  --primary-foreground: #FFFFFF;
-  --secondary: #F2F3F5;
-  --secondary-foreground: #18181B;
-  --muted: #F2F3F5;
-  --muted-foreground: #6B7280;
-  --accent: #EFF1F4;
-  --accent-foreground: #18181B;
-  --destructive: #DC2626;
-  --border: #E7E9ED;
-  --input: #E7E9ED;
-  --ring: #0F766E;
-  --chart-1: #0F766E;
-  --chart-2: #A85D44;
-  --chart-3: #834A6A;
-  --chart-4: #46618A;
-  --chart-5: #F59E0B;
-  --radius: 0.625rem;
-  --sidebar: #FCFCFD;
-  --sidebar-foreground: #18181B;
-  --sidebar-primary: #18181B;
-  --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: #EFF1F4;
-  --sidebar-accent-foreground: #18181B;
-  --sidebar-border: #E7E9ED;
-  --sidebar-ring: #0F766E;
-}
-
-.dark {
-  --background: oklch(0.165 0.006 70);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0.006 70);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0.006 70);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.985 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0.006 70);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0.006 70);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0.006 70);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.62 0.1 185);
-  --chart-1: oklch(0.62 0.1 185);
-  --chart-2: oklch(0.6 0.12 45);
-  --chart-3: oklch(0.55 0.12 350);
-  --chart-4: oklch(0.6 0.08 260);
-  --chart-5: oklch(0.7 0.15 70);
-  --sidebar: oklch(0.205 0.006 70);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.62 0.1 185);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0.006 70);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.62 0.1 185);
 }
 
 @layer base {
@@ -302,35 +133,212 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-sans);
+    font-feature-settings: "ss01";
     overflow-x: hidden;
   }
-  html {
-    font-family: var(--font-body), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    overflow-x: hidden;
-  }
 }
 
-@keyframes memory-receipt-pulse {
-  0% { box-shadow: 0 0 0 0 oklch(0.55 0.08 185 / 0.4); }
-  100% { box-shadow: 0 0 0 14px oklch(0.55 0.08 185 / 0); }
+/* Display voice: Archivo pushed wide and heavy, tight, caps for mastheads. */
+.display {
+  font-family: var(--font-display);
+  font-variation-settings: "wdth" 122;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 0.98;
 }
 
-.memory-receipt-pulse {
-  animation: memory-receipt-pulse 1.4s ease-out;
+.display-caps {
+  font-family: var(--font-display);
+  font-variation-settings: "wdth" 122;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  line-height: 1;
 }
 
-@keyframes cite-flash-anim {
-  0%   { box-shadow: 0 0 0 0 oklch(0.55 0.08 185 / 0); }
-  20%  { box-shadow: 0 0 0 4px oklch(0.55 0.08 185 / 0.45); }
-  100% { box-shadow: 0 0 0 12px oklch(0.55 0.08 185 / 0); }
+/* Spec voice: Fragment Mono for identifiers, counts, timestamps, rule numbers. */
+.spec {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
 }
 
-.cite-flash {
-  animation: cite-flash-anim 900ms ease-out;
+.spec-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-ink-muted);
 }
+
+.tnum { font-variant-numeric: tabular-nums; }
+
+/* Manual rules: the 1px ink line is the structural element of every page. */
+.rule-t { border-top: 1px solid var(--color-rule); }
+.rule-b { border-bottom: 1px solid var(--color-rule); }
+.hairline-t { border-top: 1px solid var(--color-hairline); }
+.hairline-b { border-bottom: 1px solid var(--color-hairline); }
+
+/* Panels: flat stock, tone shift on hover, no shadows. */
+.panel {
+  background: var(--color-bg);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-card);
+}
+.panel-tinted {
+  background: var(--color-panel);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-card);
+}
+a.panel:hover, button.panel:hover, .panel-hover:hover {
+  background: var(--color-panel);
+  border-color: var(--color-ink-muted);
+}
+
+/* Job-ticket state chip: squared, mono, stamped. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding: 3px 7px;
+  border-radius: 2px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.chip-solid { color: #fff; }
+.chip-outline { background: transparent; }
+
+/* Buttons: press-plate. Ink primary, identity for the one commissioning act. */
+.btn-ink,
+.btn-identity,
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 2px;
+  padding: 9px 16px;
+  font: 600 13.5px/1 var(--font-sans);
+  letter-spacing: 0.005em;
+  transition: background 150ms var(--ease-press), border-color 150ms var(--ease-press), transform 150ms var(--ease-press);
+}
+.btn-ink { background: var(--color-ink); color: #fff; }
+.btn-ink:hover { background: #2C2C29; }
+.btn-identity { background: var(--color-identity); color: var(--color-identity-fg); }
+.btn-identity:hover { background: var(--color-identity-deep); }
+.btn-ghost { background: transparent; color: var(--color-ink); border: 1px solid var(--color-hairline); }
+.btn-ghost:hover { border-color: var(--color-ink); }
+.btn-ink:active, .btn-identity:active, .btn-ghost:active { transform: translateY(1px); }
+
+/* Deliverable documents: markdown set in the manual's voice. Tables are
+   hairline spec tables with a mono header row; no blockquote drama. */
+.doc-body { font-size: 14px; line-height: 1.65; color: var(--color-ink); }
+.doc-body > :first-child { margin-top: 0; }
+.doc-body > :last-child { margin-bottom: 0; }
+.doc-body .doc-table { margin: 0 0 12px; overflow-x: auto; }
+.doc-body .doc-table:last-child { margin-bottom: 0; }
+.doc-body p { margin: 0 0 12px; }
+.doc-body h1, .doc-body h2, .doc-body h3, .doc-body h4, .doc-body h5, .doc-body h6 {
+  margin: 18px 0 6px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.doc-body h1 { font-size: 16px; }
+.doc-body h2 { font-size: 15px; }
+.doc-body h3, .doc-body h4, .doc-body h5, .doc-body h6 { font-size: 14px; }
+.doc-body ul, .doc-body ol { margin: 0 0 12px; padding-left: 20px; }
+.doc-body ul { list-style: disc; }
+.doc-body ol { list-style: decimal; }
+.doc-body li { margin: 2px 0; }
+.doc-body li > p { margin: 0; }
+.doc-body a { color: var(--color-ink); text-decoration: underline; text-underline-offset: 2px; }
+.doc-body a:hover { color: var(--color-identity-deep); }
+.doc-body strong { font-weight: 600; }
+.doc-body code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: var(--color-panel);
+  padding: 1px 4px;
+  border-radius: 2px;
+}
+.doc-body pre {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  background: var(--color-panel);
+  border: 1px solid var(--color-hairline);
+  border-radius: 2px;
+  overflow-x: auto;
+}
+.doc-body pre code { background: none; padding: 0; }
+.doc-body blockquote {
+  margin: 0 0 12px;
+  padding-left: 12px;
+  border-left: 1px solid var(--color-hairline);
+  color: var(--color-ink-secondary);
+}
+.doc-body hr { margin: 16px 0; border: 0; border-top: 1px solid var(--color-hairline); }
+.doc-body table {
+  width: 100%;
+  margin: 0;
+  border-collapse: collapse;
+  border: 1px solid var(--color-hairline);
+}
+.doc-body th {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-ink-muted);
+  background: var(--color-panel);
+  text-align: left;
+  padding: 6px 10px;
+  border: 1px solid var(--color-hairline);
+}
+.doc-body td {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  padding: 6px 10px;
+  border: 1px solid var(--color-hairline);
+}
+
+/* The register mark: rotating crop-mark circle that means "press is running". */
+.register-mark {
+  animation: register-spin 2.4s linear infinite;
+  transform-origin: center;
+}
+@keyframes register-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Run-ticket lines arrive like a printed record advancing. */
+@keyframes line-arrive {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.line-arrive { animation: line-arrive 240ms var(--ease-press) both; }
+
+/* Stamp: the approval moment. */
+@keyframes stamp-in {
+  0% { opacity: 0; transform: scale(1.12); }
+  60% { opacity: 1; transform: scale(0.98); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.stamp-in { animation: stamp-in 300ms var(--ease-press) both; }
+
+/* Candidate-rule tally: corroboration strokes fill left to right. */
+@keyframes tally-fill {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+.tally-fill { animation: tally-fill 220ms var(--ease-press) both; transform-origin: bottom; }
 
 @media (prefers-reduced-motion: reduce) {
-  .cite-flash, .memory-receipt-pulse {
-    animation: none;
-  }
+  .register-mark, .line-arrive, .stamp-in, .tally-fill { animation: none; }
 }

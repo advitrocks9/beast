@@ -1,8 +1,8 @@
 import { db } from "@beast/db";
 import { episodicMemories, proceduralMemories, deliverables, activityLog } from "@beast/db";
 import { eq, and, or, sql, lt, gte, inArray, isNull } from "drizzle-orm";
-import { getClient, getModelId } from "../models";
-import { embed } from "./embeddings";
+import { complete } from "../provider";
+import { accumulateSignal } from "./extraction";
 
 // ── Memory Consolidation ──
 
@@ -11,7 +11,8 @@ import { embed } from "./embeddings";
  * 1. Gather unconsolidated episodes
  * 2. Group by episode_type + task similarity
  * 3. For groups ≥ 3 episodes, extract a pattern via LLM
- * 4. Promote to procedural memory if confidence > 0.7
+ * 4. Accumulate patterns with LLM confidence ≥ 0.7 as rule candidates,
+ *    one signal per source episode; the standard gate decides promotion
  * 5. Mark consolidated episodes
  */
 export async function consolidateMemories(agentId: string, tenantId: string): Promise<{
@@ -69,15 +70,12 @@ export async function consolidateMemories(agentId: string, tenantId: string): Pr
       })
       .join("\n- ");
 
-    const client = getClient();
-    const completion = await client.messages.create({
-      model: getModelId("haiku"),
-      max_tokens: 512,
+    const raw = await complete({
+      tier: "fast",
+      purpose: "memory_consolidation",
+      maxTokens: 512,
       system: "Extract recurring patterns from episodic memories. Return JSON only.",
-      messages: [
-        {
-          role: "user",
-          content: `${groupEpisodes.length} episodes of type "${type}":
+      prompt: `${groupEpisodes.length} episodes of type "${type}":
 - ${summaries}
 
 Episode prefixes [APPROVED] / [PUBLISHED] / [REVISION] / [REJECTED] tag the outcome.
@@ -99,11 +97,8 @@ Return:
 }
 
 If no clear pattern emerges, return {"patterns": []}.`,
-        },
-      ],
     });
 
-    const raw = completion.content[0]?.type === "text" ? completion.content[0].text : "{}";
     let parsed: {
       patterns: Array<{
         title: string;
@@ -119,77 +114,61 @@ If no clear pattern emerges, return {"patterns": []}.`,
       continue;
     }
 
-    // Step 4: Pre-compute embeddings for qualifying patterns BEFORE the
-    // DB write so a Trigger.dev retry of an embed failure does not duplicate
-    // procedural rows. The original code inserted procedural memories
-    // inside the loop with the embed call between them; an embed throw on
-    // pattern N+1 would have left N rows committed, then attempt 2 of the
-    // task would re-extract patterns via paid LLM call and re-insert all
-    // N+1 rows duplicating the first N.
+    // Step 4: Each source episode contributes one signal to the pattern's
+    // candidate; the episode id doubles as the review id since one review
+    // action produced one episode. Weight per signal is the LLM confidence,
+    // so total weight matches the old confidence * count formula.
     const qualifying = (parsed.patterns ?? []).filter((p) => p.confidence >= 0.7);
-    const patternRows = await Promise.all(
-      qualifying.map(async (pattern) => {
-        const vector = await embed(`${pattern.title}: ${pattern.description}`);
-        const isNegative = pattern.polarity === "negative";
-        const ruleType = type === "feedback_received" || type === "task_completed"
-          ? (isNegative ? "avoid_pattern" : "style_rule")
-          : "skill_template";
-        return {
+    const promotedTitles: string[] = [];
+    for (const pattern of qualifying) {
+      const isNegative = pattern.polarity === "negative";
+      const ruleType = type === "feedback_received" || type === "task_completed"
+        ? (isNegative ? "avoid_pattern" : "style_rule")
+        : "skill_template";
+      let last = null;
+      for (const ep of groupEpisodes) {
+        last = await accumulateSignal({
           agentId,
           tenantId,
+          category: "pattern",
           ruleType,
+          taskScope: pattern.task_scope,
           title: pattern.title,
           description: pattern.description,
-          taskScope: pattern.task_scope,
-          version: 1,
-          isCurrent: true,
-          sourceEpisodes: groupEpisodes.map((e) => e.id),
-          signalCount: groupEpisodes.length,
-          signalWeight: pattern.confidence * groupEpisodes.length,
-          embedding: vector,
-        };
-      }),
-    );
-
-    // Step 5: Atomic write. procedural inserts + episode-marked-consolidated
-    // updates + audit row roll back together. If the marking fails, no
-    // procedural row commits; if any procedural insert fails, no episode
-    // is marked. Without this, a partial commit between the two for-loops
-    // in the original code would let the retry re-fire the LLM call and
-    // double-write procedural rows for episodes that were never marked.
-    if (patternRows.length > 0 || groupEpisodes.length > 0) {
-      const episodeIds = groupEpisodes.map((e) => e.id);
-      await db.transaction(async (tx) => {
-        if (patternRows.length > 0) {
-          await tx.insert(proceduralMemories).values(patternRows);
-          patternsExtracted += patternRows.length;
-
-          // Surface the rule promotion in the dashboard ActivityFeed so
-          // the founder doesn't have to visit /settings/rules to discover
-          // what the agent learned overnight. One row per episode-type
-          // group; with ~3 active groups per agent the feed sees at most
-          // a handful of these per nightly run.
-          await tx.insert(activityLog).values({
-            companyId: tenantId,
-            aiEmployeeId: agentId,
-            actionType: "patterns_learned",
-            actionDetail: {
-              count: patternRows.length,
-              episodeType: type,
-              fromEpisodes: groupEpisodes.length,
-              titles: patternRows.slice(0, 3).map((p) => p.title),
-            },
-          });
-        }
-        if (episodeIds.length > 0) {
-          await tx
-            .update(episodicMemories)
-            .set({ isConsolidated: true })
-            .where(inArray(episodicMemories.id, episodeIds));
-          episodesConsolidated += episodeIds.length;
-        }
-      });
+          weight: pattern.confidence,
+          reviewId: ep.id,
+          episodeIds: [ep.id],
+        });
+      }
+      patternsExtracted++;
+      if (last?.promotedRuleId) promotedTitles.push(pattern.title);
     }
+
+    // Step 5: Mark episodes consolidated + audit row atomically.
+    const episodeIds = groupEpisodes.map((e) => e.id);
+    await db.transaction(async (tx) => {
+      if (qualifying.length > 0) {
+        // Surface overnight learning in the dashboard ActivityFeed so the
+        // founder doesn't have to visit /settings/rules to discover it.
+        await tx.insert(activityLog).values({
+          companyId: tenantId,
+          aiEmployeeId: agentId,
+          actionType: "patterns_learned",
+          actionDetail: {
+            count: qualifying.length,
+            promoted: promotedTitles.length,
+            episodeType: type,
+            fromEpisodes: groupEpisodes.length,
+            titles: qualifying.slice(0, 3).map((p) => p.title),
+          },
+        });
+      }
+      await tx
+        .update(episodicMemories)
+        .set({ isConsolidated: true })
+        .where(inArray(episodicMemories.id, episodeIds));
+      episodesConsolidated += episodeIds.length;
+    });
   }
 
   // Step 6: Decay old episodes + archive long-stale low-salience ones
@@ -291,9 +270,9 @@ interface DeliverableRow {
 
 function approvalRate(rows: DeliverableRow[]): number | null {
   if (rows.length === 0) return null;
-  const good = rows.filter((d) => d.status === "approved" || d.status === "published").length;
+  const good = rows.filter((d) => d.status === "accepted" || d.status === "published").length;
   const bad = rows.filter(
-    (d) => d.status === "revision" || d.status === "rejected",
+    (d) => d.status === "revised" || d.status === "rejected",
   ).length;
   const denom = good + bad;
   if (denom === 0) return null;

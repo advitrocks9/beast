@@ -2,6 +2,7 @@ import type {
   EmployeeRole,
   TaskStatus,
   DeliverableType,
+  DeliverableStatus,
   KnowledgeCategory,
   OnboardingStatus,
 } from "./constants";
@@ -67,7 +68,7 @@ export interface Deliverable {
   title: string;
   content: Record<string, unknown>;
   version: number;
-  status: "draft" | "review" | "revision" | "approved" | "published";
+  status: DeliverableStatus;
   publishedUrl: string | null;
   publishedAt: Date | null;
   createdAt: Date;

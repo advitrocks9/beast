@@ -1,10 +1,17 @@
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import { createClient } from "@/lib/supabase/server";
-import { DEMO_MODE } from "@/lib/demo";
+import { DEMO_MODE, demoSessionIdFromHeaders } from "@/lib/demo";
 import { db } from "@beast/db";
-import { companies } from "@beast/db";
+import { companies, demoSessions } from "@beast/db";
 import { eq } from "drizzle-orm";
+
+import { after } from "next/server";
+import { setBackgroundScheduler } from "@beast/ai";
+
+// In-process agent runs must outlive the serverless response.
+setBackgroundScheduler((work) => after(work));
+
 
 /**
  * Block a mutation that would spend money or call an external API. The public
@@ -28,11 +35,17 @@ export const createTRPCContext = async (opts: { headers: Headers }) => {
     db,
     user,
     headers: opts.headers,
+    demo: { sessionId: DEMO_MODE ? demoSessionIdFromHeaders(opts.headers) : null },
   };
 };
 
+export interface Meta {
+  demoAllowed?: boolean;
+}
+
 const t = initTRPC
   .context<Awaited<ReturnType<typeof createTRPCContext>>>()
+  .meta<Meta>()
   .create({
     transformer: superjson,
   });
@@ -42,23 +55,18 @@ export const createCallerFactory = t.createCallerFactory;
 export const baseProcedure = t.procedure;
 
 /**
- * Public procedure: no auth required, no company scoping.
- * For routes like /share/[slug] that are deliberately unauthenticated.
- */
-export const publicProcedure = t.procedure;
-
-/**
  * Protected procedure: requires auth.
  * Resolves Supabase user -> Beast companyId and injects into context.
  */
-export const protectedProcedure = t.procedure.use(async ({ ctx, type, next }) => {
+export const protectedProcedure = t.procedure.use(async ({ ctx, type, meta, next }) => {
   if (!ctx.user) {
     throw new TRPCError({ code: "UNAUTHORIZED" });
   }
 
-  // The public demo is read-only: block every write so a visitor cannot mutate
-  // the shared seeded company.
-  if (DEMO_MODE && type === "mutation") {
+  // Demo writes are allowlisted: only procedures built from demoAllowedProcedure
+  // may mutate, scoped to the visitor's session overlay; everything else stays
+  // read-only against the shared seeded company.
+  if (DEMO_MODE && type === "mutation" && !meta?.demoAllowed) {
     throw new TRPCError({
       code: "FORBIDDEN",
       message: "This is a read-only demo. Clone the repo and add your own keys to make changes.",
@@ -85,3 +93,35 @@ export const protectedProcedure = t.procedure.use(async ({ ctx, type, next }) =>
     },
   });
 });
+
+/**
+ * Mutations a demo visitor may run. In demo mode the visitor must carry a live
+ * session cookie and ctx.demoSessionId is that session; in product mode it is
+ * null, so writes can pass it straight through as the row's demo_session_id.
+ */
+export const demoAllowedProcedure = protectedProcedure
+  .meta({ demoAllowed: true })
+  .use(async ({ ctx, next }) => {
+    let demoSessionId: string | null = null;
+    if (DEMO_MODE) {
+      if (!ctx.demo.sessionId) {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "Demo session missing. Reload the page to start one.",
+        });
+      }
+      const [session] = await ctx.db
+        .update(demoSessions)
+        .set({ lastSeenAt: new Date() })
+        .where(eq(demoSessions.id, ctx.demo.sessionId))
+        .returning({ id: demoSessions.id });
+      if (!session) {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "Demo session expired. Reload the page to start a new one.",
+        });
+      }
+      demoSessionId = session.id;
+    }
+    return next({ ctx: { ...ctx, demoSessionId } });
+  });

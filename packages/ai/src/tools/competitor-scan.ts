@@ -1,5 +1,6 @@
 import type { ToolDefinition } from "../types";
 import type { Citation } from "@beast/shared";
+import { env } from "@beast/shared/env";
 
 interface FirecrawlScrapeResponse {
   success: boolean;
@@ -46,7 +47,7 @@ export function createCompetitorScanTool(): ToolDefinition {
     execute: async (input) => {
       const url = input.url as string;
 
-      const apiKey = process.env.FIRECRAWL_API_KEY;
+      const apiKey = env.FIRECRAWL_API_KEY;
       if (!apiKey) {
         return {
           text: "Competitor scanning is not configured. FIRECRAWL_API_KEY is missing.",

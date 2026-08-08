@@ -1,198 +1,162 @@
 # Beast
 
-[![CI](https://github.com/advitrocks9/beast/actions/workflows/ci.yml/badge.svg)](https://github.com/advitrocks9/beast/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Live demo](https://img.shields.io/badge/demo-live-22C55E.svg)](https://beast-demo.vercel.app)
+Beast is an autonomous AI company. You brief jobs, agent employees run them in
+bounded tool loops, deliverables land in a review queue, and your edits become
+the company's standing rules. The interface is delegation and review, not
+prompting.
 
-An autonomous AI-employee platform. You hire a named agent (Alex in marketing,
-Jordan in sales, Sam in support), give it a goal, and it ships real
-deliverables for review, learns your voice from your edits, and keeps working
-in the background against weekly targets.
+**[beast-demo.vercel.app](https://beast-demo.vercel.app)**. No signup. A run is
+already on the press when you land. Commission a job and it executes live
+against a real model; edit a deliverable and watch the company amend its own
+operating manual.
 
-It is a full product surface built as a monorepo: a tool-using agent runtime,
-a three-tier memory system on pgvector, a background orchestrator loop, a
-human-in-the-loop review queue, publishing connectors, and billing.
+![The office](docs/office.png)
 
-**Live demo: [beast-demo.vercel.app](https://beast-demo.vercel.app)** (seeded
-data, read-only)
+## The loop
 
-![Beast dashboard](docs/dashboard.png)
+Brief → queued → running → in_review → accepted or revised. Runs are bounded
+(50 steps, hard wall clock) and file with their full trajectory: every tool
+call, source, and rule that shaped them. `failed` and `timed_out` are real
+states, and an orchestrator sweeps stuck runs, retries failures, and spawns
+recurring work.
 
-## What it does
+The learning gate is the core mechanism. Review edits are diffed word by word
+and distilled into candidate rules. Confidence is `1 - e^(-w/2)` over
+accumulated signal weight, and promotion requires both distinct corroborating
+reviews and confidence ≥ 0.6, so a single review never rewrites the company.
+Rules that start hurting approval rate are rolled back by drift detection.
 
-A founder at a small company needs marketing, sales, and support handled but
-cannot hire three people. Beast gives them three AI employees instead:
+The demo demonstrates this directly: the seeded candidate
+`use 'folks', never 'guys'` sits at 2 of 3 corroborating reviews. Change one
+word in the October newsletter and it promotes into the manual as R-010,
+scoped to your visitor session so the shared seed stays clean.
 
-- **Hire** an employee in a short onboarding interview that captures the
-  company's voice, products, and goals.
-- The employee **plans and runs tasks**: a competitor teardown with cited
-  sources, a batch of LinkedIn posts, a cold-email sequence, a pass over the
-  support inbox.
-- Finished work lands in a **review queue**. You approve, edit, or reject.
-- Every edit becomes a **procedural rule** the agent applies next time, so the
-  output drifts toward sounding like you wrote it.
-- A **weekly digest** reports what shipped, what is waiting on you, and what
-  the agent wants to do next.
+![The review room](docs/review-room.png)
+
+## Memory
+
+Three tiers, all browsable at `/memory`:
+
+| tier | holds | read point |
+|---|---|---|
+| episodic | past jobs and outcomes | planning, by similarity |
+| semantic | facts the company has learned, pgvector | retrieval per run |
+| procedural | the operating manual: numbered rules with confidence | injected into every matching run |
+
+![The operating manual](docs/memory.png)
 
 ## Architecture
 
 ```mermaid
 flowchart LR
   subgraph web["apps/web (Next.js)"]
-    UI[dashboard / review queue]
+    UI[office / review / memory]
     TRPC[tRPC routers]
+    SSE["/api/runs/:id/stream"]
   end
   subgraph ai["packages/ai"]
-    AGENT[agent runtime + tools]
-    MEM[(memory: episodic / semantic / procedural)]
-    ORCH[orchestrator tick]
+    RUNNER[runner + dispatch seam]
+    AGENT[bounded agent loop]
+    PROV[provider: anthropic / openrouter / stub]
+    MEM[(episodic / semantic / procedural)]
+    ORCH[orchestrator sweeps]
   end
-  subgraph workers["apps/workers (Trigger.dev)"]
+  subgraph workers["apps/workers (Trigger.dev, product mode)"]
     EXEC[execute-task]
-    CRON[scheduled: check-ins, drift, auto-publish]
+    CRON[schedules]
   end
   DB[(Postgres + pgvector)]
 
-  UI --> TRPC --> DB
-  TRPC -- enqueue --> EXEC
-  EXEC --> AGENT --> MEM --> DB
-  CRON --> ORCH --> DB
-  AGENT -- deliverable --> DB
-  UI -- approve/edit --> TRPC -- extract rule --> MEM
+  UI --> TRPC --> RUNNER
+  RUNNER --> AGENT --> PROV
+  AGENT --> MEM --> DB
+  RUNNER --> DB --> SSE --> UI
+  CRON --> ORCH --> RUNNER
+  EXEC --> RUNNER
 ```
 
-The core loop: a tRPC mutation enqueues a Trigger.dev job, the job runs the
-agent against Anthropic with a registered tool set, the agent writes a
-deliverable plus a reasoning trail to Postgres, the founder reviews it, and the
-approval or edit is fed back into procedural memory.
+- **Provider layer**: Anthropic, then OpenRouter's free tier, then a
+  deterministic stub, resolved from env. The whole product runs end to end at
+  $0 and every path stays testable. Model tiers (`fast | standard | deep`)
+  route per call site.
+- **One dispatch seam**: Trigger.dev in product mode, in-process otherwise. One
+  SSE endpoint serves live events, paced replays, and simulated runs; every
+  stream and artifact carries a provenance label (`seeded`, `replay`, `live`,
+  `simulated`, `stub`).
+- **Demo isolation**: visitor writes are copy-on-write rows keyed to a session
+  cookie, overlaid on the shared seed at read time. Promoted rules and episodes
+  carry the same scope. Live runs are rate-limited per visitor and per day and
+  degrade to labelled replays past the budget. A nightly job purges sessions
+  and reseeds.
 
-### The pieces
+### If you only read five files
 
-- **`packages/ai`: the agent runtime.** A tool-using loop over the Anthropic
-  API (`agent.ts`) with a tool registry, a scratchpad, streamed run events, and
-  model tiering (haiku for classification, sonnet for content, opus for
-  strategy). On top of it: per-role skills and personas, multi-step task chains
-  (classify then plan then advance), inter-employee collaboration proposals,
-  goal breakdown, and an autonomy layer that decides what an employee may do
-  without asking.
+- [`packages/ai/src/agent.ts`](packages/ai/src/agent.ts): the bounded tool
+  loop, scratchpad planning, streamed run events.
+- [`packages/ai/src/memory/extraction.ts`](packages/ai/src/memory/extraction.ts):
+  how an edit becomes a rule. `accumulateSignal` is the only writer of
+  procedural memory.
+- [`packages/ai/src/runner.ts`](packages/ai/src/runner.ts): the run lifecycle,
+  timeout persistence, and the quota-degrade path to labelled simulated runs.
+- [`packages/db/src/seed.ts`](packages/db/src/seed.ts): the demo company.
+  Seeded confidences are computed with the real formula, so every number is a
+  reachable state.
+- [`packages/ai/src/memory/memory.test.ts`](packages/ai/src/memory/memory.test.ts):
+  the pins that matter. One review never promotes; three distinct reviews
+  promote exactly once.
 
-- **Memory (`packages/ai/src/memory`).** Three stores. *Episodic*: what
-  happened on a task. *Semantic*: facts about the company, embedded with Gemini
-  and retrieved by cosine similarity over pgvector. *Procedural*: rules learned
-  from edits and feedback, scored by confidence and applied as few-shot
-  guidance. A consolidation pass merges and decays memories by salience over
-  time.
+## The gate
 
-- **Orchestrator (`packages/ai/src/orchestrator`).** A tick that runs on a
-  schedule: advances goals, spawns recurring tasks, generates check-ins,
-  updates employee status, and detects drift (auto-rollback or auto-deprecate a
-  rule that starts hurting output).
+```bash
+pnpm typecheck && pnpm lint && pnpm test
+pnpm test:e2e
+```
 
-- **`apps/web`: Next.js app.** App Router, React 19, tRPC v11, Tailwind v4,
-  Supabase auth. ~25 tRPC routers cover employees, tasks, deliverables,
-  reviews, goals, memory, knowledge, collaboration, autonomy, billing, and
-  connectors. Server components read Postgres directly through Drizzle.
-
-- **`apps/workers`: Trigger.dev v4.** Every long job runs here: executing a
-  task, generating a plan, ingesting a document, crawling a site, the nightly
-  consolidation, the weekly digest, drift detection, and the auto-publish
-  sweep.
-
-- **`packages/db`: Drizzle + Postgres.** 28 tables, SQL migrations, pgvector
-  for embeddings.
-
-- **Publishing connectors.** LinkedIn, X, and WordPress over OAuth, with tokens
-  encrypted at rest. Approved deliverables can auto-publish behind a drift
-  guard.
-
-### Engineering highlights
-
-If you only read a few files, read these:
-
-- [`packages/ai/src/agent.ts`](packages/ai/src/agent.ts) - the tool-using agent
-  loop: tool dispatch, a scratchpad the model plans against, streamed run
-  events, and per-task model tiering.
-- [`packages/ai/src/memory/consolidation.ts`](packages/ai/src/memory/consolidation.ts)
-  - the nightly pass that merges, decays by salience, and archives memories so
-  the store does not grow without bound.
-- [`packages/ai/src/memory/extraction.ts`](packages/ai/src/memory/extraction.ts)
-  - how a founder's edit becomes a procedural rule: diff and chip signals
-  accumulate into rule candidates that promote past a confidence threshold.
-- [`packages/ai/src/orchestrator/tick.ts`](packages/ai/src/orchestrator/tick.ts)
-  - the scheduled loop that advances goals and detects drift, auto-rolling-back
-  a rule that starts hurting approval rate.
-- [`apps/web/src/trpc/init.ts`](apps/web/src/trpc/init.ts) - the read-only demo
-  guard that blocks every mutation at the tRPC layer.
-
-## Tech stack
-
-TypeScript end to end. Next.js 16, React 19, tRPC v11, TanStack Query,
-Tailwind v4, Drizzle ORM, Postgres + pgvector, Supabase (auth), Trigger.dev v4
-(workers), the Anthropic SDK (agents), Gemini (embeddings), Stripe (billing),
-Cloudflare R2 (files), Resend (email). Turborepo + pnpm workspaces.
+CI runs all of it plus an e2e smoke that commissions a canned job in demo mode
+and asserts it reaches `in_review` with a real deliverable. Deploys only ship
+on green CI, fail loudly on missing secrets or schema drift, and health-check
+the deployed URL. A scheduled workflow probes uptime every 15 minutes and
+resets the demo nightly.
 
 ## Run it
 
-### Demo mode (no accounts, no API keys)
-
-Renders the full product against a seeded company with auth bypassed and every
-paid call disabled. This is what the live demo runs on.
+Demo mode, no keys:
 
 ```bash
 pnpm install
-docker compose up -d                          # Postgres with pgvector
-cp .env.example .env.local                     # the defaults already point at it
+docker compose up -d
+cp .env.example .env.local
 pnpm --filter @beast/db db:migrate
-pnpm --filter @beast/db db:seed                # seed the demo company
+pnpm --filter @beast/db db:seed
 NEXT_PUBLIC_DEMO_MODE=1 pnpm --filter @beast/web dev
 ```
 
-Open http://localhost:3000 and you land in the seeded dashboard as the demo
-founder.
+Open http://localhost:3000. Runs execute against the deterministic stub and are
+labelled as simulated. Add an `OPENROUTER_API_KEY` (free) or
+`ANTHROPIC_API_KEY` to `.env.local` and the same runs go live; nothing else
+changes.
 
-### Full setup (real auth + live agents)
+Product mode needs Supabase (auth plus a database with pgvector), a model key,
+and optionally Trigger.dev for workers, Stripe test mode for billing, and the
+publishing OAuth apps. `.env.example` documents every variable and which mode
+needs it.
 
-1. Create a free [Supabase](https://supabase.com) project. Put its URL and anon
-   key in `.env.local`, and its connection string in `DATABASE_URL`. On a
-   serverless host (Vercel), use the transaction-mode pooler connection string;
-   the app sets `prepare: false` so it works behind pgbouncer.
-2. Add an `ANTHROPIC_API_KEY` and `GEMINI_API_KEY` for live agents and
-   embeddings.
-3. Run the migrations, leave `NEXT_PUBLIC_DEMO_MODE` unset, and `pnpm dev`.
-4. To run the background agent loop, configure Trigger.dev and start
-   `pnpm --filter @beast/workers dev`.
-
-`.env.example` documents every variable and what is optional.
-
-## Screens
-
-The human review queue, where every deliverable lands for sign-off:
-
-![Review queue](docs/reviews.png)
-
-An employee desk: chat with a hire, its memory and reasoning in context:
-
-![Employee desk](docs/employee.png)
-
-## Repo layout
+## Layout
 
 ```
 apps/
-  web/        Next.js app: UI, tRPC API, Supabase auth
-  workers/    Trigger.dev background jobs and crons
+  web/        Next.js app: UI, tRPC, SSE streaming, demo overlay
+  workers/    Trigger.dev wrappers and schedules (product mode)
 packages/
-  ai/         agent runtime, memory, orchestrator, skills, publishing
-  db/         Drizzle schema, migrations, seed
-  shared/     types and constants shared across packages
-  ui/         shared UI primitives
+  ai/         agent loop, provider layer, memory, extraction, orchestrator
+  db/         Drizzle schema, migrations, the seeded company
+  shared/     state machine, env validation, canned briefs
+  ui/         shared primitives
 ```
 
 ## Notes
 
-Beast is a personal build, not a live business; the pricing and billing flows
-are wired end to end but run against Stripe test mode. The demo deploy is
-deliberately read-only.
-
-## License
+Billing runs against Stripe test mode, publishing connectors are optional, and
+the public demo resets nightly.
 
 MIT. See [LICENSE](LICENSE).

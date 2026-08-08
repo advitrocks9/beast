@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { eq, and, inArray, count } from "drizzle-orm";
+import { eq, and, count } from "drizzle-orm";
 import { createClient } from "@/lib/supabase/server";
 import { db } from "@beast/db";
 import { companies, aiEmployees, deliverables } from "@beast/db";
@@ -34,7 +34,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       .where(
         and(
           eq(deliverables.companyId, company.id),
-          inArray(deliverables.status, ["draft", "pending_review"]),
+          eq(deliverables.status, "in_review"),
         ),
       ),
   ]);
@@ -45,7 +45,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     id: e.id,
     name: e.name,
     roleType: e.roleType as "marketing" | "sales" | "support",
-    status: (e.status ?? "idle") as "idle" | "working" | "review" | "active",
+    status: e.status ?? "idle",
   }));
 
   return (

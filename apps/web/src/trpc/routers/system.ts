@@ -1,6 +1,7 @@
 import { sql, eq } from "drizzle-orm";
 import { schedules } from "@trigger.dev/sdk";
 import { companies } from "@beast/db";
+import { env, type Env } from "@beast/shared/env";
 import { createTRPCRouter, protectedProcedure } from "../init";
 import { DEMO_MODE } from "@/lib/demo";
 
@@ -69,11 +70,7 @@ export const systemRouter = createTRPCRouter({
   integrations: protectedProcedure.query(async () => {
     // Don't disclose which prod integrations are wired up to an anonymous
     // demo visitor; report everything as configured for the showcase.
-    const present = (key: string): boolean => {
-      if (DEMO_MODE) return true;
-      const v = process.env[key];
-      return typeof v === "string" && v.length > 0;
-    };
+    const present = (key: keyof Env): boolean => DEMO_MODE || env[key] !== undefined;
 
     return [
       {

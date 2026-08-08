@@ -1,8 +1,12 @@
 import { notFound } from "next/navigation";
-import { eq, and } from "drizzle-orm";
+import { headers } from "next/headers";
+import { eq, and, inArray } from "drizzle-orm";
 import { createClient } from "@/lib/supabase/server";
+import { DEMO_MODE, demoSessionIdFromHeaders } from "@/lib/demo";
+import { demoWhere } from "@/lib/demo-overlay";
+import { splitRuleTitle } from "@/lib/rule-title";
 import { db } from "@beast/db";
-import { companies, deliverables, aiEmployees, tasks } from "@beast/db";
+import { companies, deliverables, aiEmployees, tasks, proceduralMemories } from "@beast/db";
 import { ReviewShell } from "./_components/review-shell";
 
 interface PageProps {
@@ -20,25 +24,49 @@ export default async function ReviewPage({ params }: PageProps) {
     columns: { id: true },
   });
 
+  const demoSid = DEMO_MODE ? demoSessionIdFromHeaders(await headers()) : null;
   const deliverable = await db.query.deliverables.findFirst({
-    where: and(eq(deliverables.id, id), eq(deliverables.companyId, company!.id)),
+    where: and(
+      eq(deliverables.id, id),
+      eq(deliverables.companyId, company!.id),
+      demoWhere(demoSid).seedOrMine(deliverables.demoSessionId),
+    ),
   });
 
   if (!deliverable) {
     notFound();
   }
 
-  const employee = await db.query.aiEmployees.findFirst({
-    where: eq(aiEmployees.id, deliverable.aiEmployeeId),
-    columns: { id: true, name: true, roleType: true },
-  });
+  const content = deliverable.content as Record<string, unknown>;
+  const appliedRuleIds = Array.isArray(content.appliedRules)
+    ? (content.appliedRules as Array<{ ruleId?: string }>)
+        .flatMap((r) => (typeof r.ruleId === "string" ? [r.ruleId] : []))
+    : [];
 
-  const task = deliverable.taskId
-    ? await db.query.tasks.findFirst({
-        where: eq(tasks.id, deliverable.taskId),
-        columns: { title: true },
-      })
-    : null;
+  const [employee, task, ruleRows] = await Promise.all([
+    db.query.aiEmployees.findFirst({
+      where: eq(aiEmployees.id, deliverable.aiEmployeeId),
+      columns: { id: true, name: true, roleType: true },
+    }),
+    deliverable.taskId
+      ? db.query.tasks.findFirst({
+          where: eq(tasks.id, deliverable.taskId),
+          columns: { title: true },
+        })
+      : null,
+    appliedRuleIds.length > 0
+      ? db.query.proceduralMemories.findMany({
+          where: inArray(proceduralMemories.id, appliedRuleIds),
+          columns: { id: true, title: true },
+        })
+      : [],
+  ]);
+
+  const ruleNumbers: Record<string, string> = {};
+  for (const r of ruleRows) {
+    const { number } = splitRuleTitle(r.title);
+    if (number) ruleNumbers[r.id] = number;
+  }
 
   return (
     <ReviewShell
@@ -46,16 +74,19 @@ export default async function ReviewPage({ params }: PageProps) {
         id: deliverable.id,
         title: deliverable.title,
         deliverableType: deliverable.deliverableType,
-        content: deliverable.content as Record<string, unknown>,
+        content,
         status: deliverable.status,
         version: deliverable.version ?? 1,
         aiEmployeeId: deliverable.aiEmployeeId,
         taskId: deliverable.taskId,
         publishAfter: deliverable.publishAfter?.toISOString() ?? null,
+        createdAt: deliverable.createdAt.toISOString(),
       }}
       employeeName={employee?.name ?? "AI Employee"}
       employeeRoleType={employee?.roleType ?? "marketing"}
       taskTitle={task?.title}
+      ruleNumbers={ruleNumbers}
+      provenance={DEMO_MODE ? (deliverable.demoSessionId ? "live" : "seeded") : null}
     />
   );
 }

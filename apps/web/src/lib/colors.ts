@@ -1,28 +1,23 @@
-// Single source of truth for role and status color. Hexes mirror the CSS tokens
-// in app/globals.css so TS and CSS never drift. Every semantic carries a bright
-// value for dots/fills and a separate AA-passing text shade, so a tinted chip is
-// never a saturated hue painted as text on its own tint.
+// TS mirror of the identity-program tokens in app/globals.css so chips and dots
+// never drift from CSS. Chips are squared ink blocks; fg always passes AA on bg.
 
-export const BRAND = "#0F766E";
-export const BRAND_DEEP = "#0B5C56";
-export const BRAND_LIGHT = "#E6F2F0";
-export const INK = "#1C1A17";
-export const MUTED = "#6B7280";
+export const INK = "#131311";
+export const MUTED = "#6E6D68";
+export const IDENTITY = "#E8420C";
+export const IDENTITY_DEEP = "#BC3105";
 
-// Roles are identity only: low chroma, never reused as a status signal.
 export type RoleType = "marketing" | "sales" | "support";
 
 type RoleMeta = { solid: string; tint: string; text: string };
 
 const ROLE_META: Record<RoleType, RoleMeta> = {
-  marketing: { solid: "#A85D44", tint: "#F1ECEA", text: "#9A4A2C" }, // muted clay, Alex
-  sales: { solid: "#834A6A", tint: "#F0EAEF", text: "#7A3457" }, // muted plum, Jordan
-  support: { solid: "#46618A", tint: "#E9EDF3", text: "#3C5478" }, // slate-blue, Sam
+  marketing: { solid: "#2E5FD0", tint: "#EBF0FA", text: "#244BA6" },
+  sales: { solid: "#8A3D63", tint: "#F4ECF1", text: "#753253" },
+  support: { solid: "#A07A00", tint: "#F6F1E3", text: "#7D5F00" },
 };
 
-const ROLE_FALLBACK: RoleMeta = { solid: MUTED, tint: "#F1F2F4", text: MUTED };
+const ROLE_FALLBACK: RoleMeta = { solid: MUTED, tint: "#F4F4F2", text: MUTED };
 
-// Solid hexes only, in the shape the app's inline maps used (drop-in replacement).
 export const ROLE_COLORS: Record<string, string> = {
   marketing: ROLE_META.marketing.solid,
   sales: ROLE_META.sales.solid,
@@ -38,49 +33,51 @@ export function roleColor(roleType?: string | null): string {
   return roleMeta(roleType).solid;
 }
 
-// Status / signal. dot = the bright value, bg = a light tint for chips,
-// fg = an AA-passing text shade for that tint or for white backgrounds.
-export type StatusMeta = { label: string; dot: string; bg: string; fg: string };
-
-const GREEN: Omit<StatusMeta, "label"> = { dot: "#22C55E", bg: "#ECFDF3", fg: "#15803D" };
-const TEAL: Omit<StatusMeta, "label"> = { dot: BRAND, bg: BRAND_LIGHT, fg: BRAND_DEEP };
-const AMBER: Omit<StatusMeta, "label"> = { dot: "#F59E0B", bg: "#FEF6E7", fg: "#8A5200" };
-const RED: Omit<StatusMeta, "label"> = { dot: "#DC2626", bg: "#FEF2F2", fg: "#B91C1C" };
-const GRAY: Omit<StatusMeta, "label"> = { dot: MUTED, bg: "#F3F1EA", fg: MUTED };
-
-const STATUS_META: Record<string, StatusMeta> = {
-  // in-flight / live = brand teal
-  working: { label: "Working", ...TEAL },
-  in_progress: { label: "In progress", ...TEAL },
-  active: { label: "Active", ...TEAL },
-  running: { label: "Running", ...TEAL },
-  // needs a human = amber ("your turn")
-  pending: { label: "Pending", ...AMBER },
-  waiting_review: { label: "Needs review", ...AMBER },
-  needs_review: { label: "Needs review", ...AMBER },
-  review: { label: "In review", ...AMBER },
-  revision: { label: "Revision", ...AMBER },
-  blocked: { label: "Blocked", ...AMBER },
-  // success / terminal-good = green; published stays on-brand teal-deep (live)
-  approved: { label: "Approved", ...GREEN },
-  completed: { label: "Completed", ...GREEN },
-  done: { label: "Done", ...GREEN },
-  published: { label: "Published", dot: BRAND_DEEP, bg: BRAND_LIGHT, fg: BRAND_DEEP },
-  // failure = red
-  rejected: { label: "Rejected", ...RED },
-  failed: { label: "Failed", ...RED },
-  error: { label: "Error", ...RED },
-  // dormant = gray
-  idle: { label: "Idle", ...GRAY },
-  paused: { label: "Paused", ...GRAY },
-  scheduled: { label: "Scheduled", ...GRAY },
-  queued: { label: "Queued", ...GRAY },
-  draft: { label: "Draft", ...GRAY },
+// dot = bright value, bg/fg = chip surface and AA text. `mode` picks the chip
+// rendering: solid ink block, outline, or struck (cancelled).
+export type StatusMeta = {
+  label: string;
+  dot: string;
+  bg: string;
+  fg: string;
+  mode: "solid" | "outline" | "struck";
 };
 
-const STATUS_FALLBACK: StatusMeta = { label: "Unknown", ...GRAY };
+const GREEN = { dot: "#1E7A34", bg: "#1E7A34", fg: "#FFFFFF" };
+const GREEN_OUT = { dot: "#1E7A34", bg: "transparent", fg: "#1E7A34" };
+const IDENT = { dot: IDENTITY, bg: IDENTITY_DEEP, fg: "#FFFFFF" };
+const IDENT_OUT = { dot: IDENTITY, bg: "transparent", fg: IDENTITY_DEEP };
+const INK_SOLID = { dot: INK, bg: INK, fg: "#FFFFFF" };
+const INK_OUT = { dot: INK, bg: "transparent", fg: INK };
+const RED = { dot: "#C92A1B", bg: "#C92A1B", fg: "#FFFFFF" };
+const GRAY_OUT = { dot: MUTED, bg: "transparent", fg: MUTED };
+
+const STATUS_META: Record<string, StatusMeta> = {
+  queued: { label: "Queued", mode: "outline", ...GRAY_OUT },
+  planning: { label: "Planning", mode: "outline", ...GRAY_OUT },
+  plan_review: { label: "Plan review", mode: "outline", ...INK_OUT },
+  running: { label: "Running", mode: "solid", ...IDENT },
+  in_review: { label: "In review", mode: "solid", ...INK_SOLID },
+  revising: { label: "Revising", mode: "outline", ...IDENT_OUT },
+  accepted: { label: "Accepted", mode: "solid", ...GREEN },
+  revised: { label: "Revised", mode: "outline", ...IDENT_OUT },
+  rejected: { label: "Rejected", mode: "solid", ...RED },
+  auto_publishing: { label: "Publishing", mode: "outline", ...GREEN_OUT },
+  published: { label: "Published", mode: "outline", ...GREEN_OUT },
+  failed: { label: "Failed", mode: "solid", ...RED },
+  timed_out: { label: "Timed out", mode: "solid", ...RED },
+  cancelled: { label: "Cancelled", mode: "struck", ...GRAY_OUT },
+  // employee badges
+  idle: { label: "Idle", mode: "outline", ...GRAY_OUT },
+  working: { label: "Working", mode: "solid", ...IDENT },
+  waiting_review: { label: "Needs review", mode: "solid", ...INK_SOLID },
+  check_in: { label: "Check-in", mode: "outline", ...INK_OUT },
+};
+
+const STATUS_FALLBACK: StatusMeta = { label: "Unknown", mode: "outline", ...GRAY_OUT };
 
 export function statusMeta(status?: string | null): StatusMeta {
   if (status && status in STATUS_META) return STATUS_META[status]!;
   return STATUS_FALLBACK;
 }
+

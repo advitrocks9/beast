@@ -3,7 +3,6 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { autonomySuggestions, aiEmployees, deliverables } from "@beast/db";
 import { escalateAutonomy } from "@beast/ai";
 import { createTRPCRouter, protectedProcedure } from "../init";
-import { trackEvent } from "@/lib/events/track";
 
 const SUGGESTION_STATES = ["queued", "shown", "snoozed"] as const;
 
@@ -54,12 +53,6 @@ export const autonomyRouter = createTRPCRouter({
             eq(autonomySuggestions.state, "queued"),
           ),
         );
-      await trackEvent({
-        companyId: ctx.companyId,
-        userId: ctx.userId,
-        eventName: "autonomy_suggestion_shown",
-        properties: { suggestionId: input.suggestionId },
-      });
     }),
 
   accept: protectedProcedure
@@ -99,16 +92,6 @@ export const autonomyRouter = createTRPCRouter({
           .where(eq(autonomySuggestions.id, input.suggestionId));
       });
 
-      await trackEvent({
-        companyId: ctx.companyId,
-        userId: ctx.userId,
-        eventName: "autonomy_suggestion_accepted",
-        properties: {
-          suggestionId: input.suggestionId,
-          action: suggestion.action,
-        },
-      });
-
       return { state: "accepted" as const };
     }),
 
@@ -133,12 +116,6 @@ export const autonomyRouter = createTRPCRouter({
             eq(autonomySuggestions.companyId, ctx.companyId),
           ),
         );
-      await trackEvent({
-        companyId: ctx.companyId,
-        userId: ctx.userId,
-        eventName: "autonomy_suggestion_snoozed",
-        properties: { suggestionId: input.suggestionId, days: input.days },
-      });
       return { snoozeUntil: until };
     }),
 
@@ -158,12 +135,6 @@ export const autonomyRouter = createTRPCRouter({
             eq(autonomySuggestions.companyId, ctx.companyId),
           ),
         );
-      await trackEvent({
-        companyId: ctx.companyId,
-        userId: ctx.userId,
-        eventName: "autonomy_suggestion_dismissed",
-        properties: { suggestionId: input.suggestionId },
-      });
     }),
 
   // Last N approved deliverables that fed the streak. Powers the
@@ -178,7 +149,7 @@ export const autonomyRouter = createTRPCRouter({
         where: and(
           eq(deliverables.aiEmployeeId, input.aiEmployeeId),
           eq(deliverables.companyId, ctx.companyId),
-          eq(deliverables.status, "approved"),
+          eq(deliverables.status, "accepted"),
         ),
         columns: {
           id: true,

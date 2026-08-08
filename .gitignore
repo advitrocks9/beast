@@ -41,3 +41,4 @@ supabase/.temp/
 
 # Autonomous loop bookkeeping (state, tasks, logs, research). Local only.
 autonomous/
+.vercel

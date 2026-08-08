@@ -2,7 +2,9 @@ import { db, aiEmployees, tasks, activityLog } from "@beast/db";
 import { eq, and, inArray } from "drizzle-orm";
 import type { TickContext, StatusDetermination } from "./types";
 
-const ACTIVE_TASK_STATUSES = ["pending", "planned", "working", "review", "revision"];
+const ACTIVE_TASK_STATUSES = ["queued", "planning", "plan_review", "running", "in_review", "revising"];
+const WORKING_STATUSES = new Set(["running", "planning", "revising"]);
+const WAITING_REVIEW_STATUSES = new Set(["plan_review", "in_review"]);
 
 /**
  * Update employee statuses for a company based on current task state.
@@ -82,7 +84,6 @@ export function determineStatus(
 ): StatusDetermination {
   const previousStatus = employee.status;
 
-  // No active tasks → idle
   if (activeTasks.length === 0) {
     return {
       employeeId: employee.id,
@@ -92,32 +93,28 @@ export function determineStatus(
     };
   }
 
-  // Check for most relevant status (priority order)
-  const hasWorking = activeTasks.some((t) => t.status === "working");
-  if (hasWorking) {
+  if (activeTasks.some((t) => WORKING_STATUSES.has(t.status))) {
     return {
       employeeId: employee.id,
       previousStatus,
       newStatus: "working",
-      reason: "Has task in working status",
+      reason: "Has task running, planning, or revising",
     };
   }
 
-  const hasReview = activeTasks.some((t) => t.status === "review" || t.status === "revision");
-  if (hasReview) {
+  if (activeTasks.some((t) => WAITING_REVIEW_STATUSES.has(t.status))) {
     return {
       employeeId: employee.id,
       previousStatus,
       newStatus: "waiting_review",
-      reason: "Has task awaiting review",
+      reason: "Has task or plan awaiting review",
     };
   }
 
-  // Only pending/planned tasks - still idle (not actively working)
   return {
     employeeId: employee.id,
     previousStatus,
     newStatus: "idle",
-    reason: "Only pending/planned tasks",
+    reason: "Only queued tasks",
   };
 }

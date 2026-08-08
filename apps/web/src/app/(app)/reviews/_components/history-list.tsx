@@ -1,33 +1,29 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { useTRPC } from "@/trpc/client";
-import { GlassCard } from "@beast/ui";
-import { Check, Send, X } from "lucide-react";
-import { roleMeta, statusMeta } from "@/lib/colors";
+import { Monogram } from "@/components/monogram";
+import { StateChip } from "@/components/state-chip";
+import { ProvenanceTag } from "@/components/provenance-tag";
 
-type StatusFilter = "all" | "approved" | "rejected";
+type StatusFilter = "all" | "accepted" | "rejected" | "published";
 
 const STATUS_FILTERS: Array<{ value: StatusFilter; label: string }> = [
   { value: "all", label: "All" },
-  { value: "approved", label: "Approved" },
+  { value: "accepted", label: "Accepted" },
   { value: "rejected", label: "Rejected" },
+  { value: "published", label: "Published" },
 ];
 
 function parseStatusFilter(raw: string | null): StatusFilter {
-  if (raw === "approved" || raw === "rejected") return raw;
+  if (raw === "accepted" || raw === "rejected" || raw === "published") return raw;
   return "all";
 }
 
-function parseEmployeeFilter(raw: string | null): string | "all" {
-  if (raw && raw.length > 0) return raw;
-  return "all";
-}
-
-function parseTypeFilter(raw: string | null): string | "all" {
+function parseIdFilter(raw: string | null): string | "all" {
   if (raw && raw.length > 0) return raw;
   return "all";
 }
@@ -46,12 +42,6 @@ function typeChipLabel(t: string): string {
   return t.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-const STATUS_ICONS: Record<string, typeof Check> = {
-  approved: Check,
-  published: Send,
-  rejected: X,
-};
-
 const PAGE_SIZE = 30;
 
 function relativeDate(d: Date | string): string {
@@ -64,13 +54,37 @@ function relativeDate(d: Date | string): string {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+function FilterChip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      aria-pressed={active}
+      className={`spec whitespace-nowrap rounded-[2px] border px-2.5 py-1 uppercase tracking-[0.05em] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink ${
+        active
+          ? "border-ink bg-ink text-white"
+          : "border-hairline text-ink-secondary hover:border-ink hover:text-ink"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
 export function HistoryList() {
   const trpc = useTRPC();
   const router = useRouter();
   const searchParams = useSearchParams();
   const statusFilter = parseStatusFilter(searchParams.get("status"));
-  const employeeFilter = parseEmployeeFilter(searchParams.get("employee"));
-  const typeFilter = parseTypeFilter(searchParams.get("type"));
+  const employeeFilter = parseIdFilter(searchParams.get("employee"));
+  const typeFilter = parseIdFilter(searchParams.get("type"));
   const [offset, setOffset] = useState(0);
   const [activeIndex, setActiveIndex] = useState(-1);
   const itemRefs = useRef<(HTMLAnchorElement | null)[]>([]);
@@ -88,12 +102,10 @@ export function HistoryList() {
     }),
   );
 
-  const items = history.data ?? [];
+  const items = useMemo(() => history.data ?? [], [history.data]);
 
-  // Reset active index whenever the visible item set changes (filter swap,
-  // pagination, fresh fetch). Without this a stale activeIndex pointing at
-  // a no-longer-visible row makes Enter route to a deleted page or a row
-  // the founder isn't looking at.
+  // A stale activeIndex after a filter swap or page turn would make Enter
+  // open a row the founder is not looking at.
   useEffect(() => {
     setActiveIndex(-1);
   }, [statusFilter, employeeFilter, typeFilter, offset]);
@@ -133,136 +145,83 @@ export function HistoryList() {
     return () => window.removeEventListener("keydown", handler);
   }, [activeIndex, items, router]);
 
-  function handleFilterChange(next: StatusFilter) {
+  function setParam(key: string, next: string | "all") {
     const params = new URLSearchParams(searchParams.toString());
-    if (next === "all") params.delete("status");
-    else params.set("status", next);
-    const qs = params.toString();
-    router.replace(qs ? `/reviews?${qs}` : "/reviews", { scroll: false });
-    setOffset(0);
-  }
-
-  function handleEmployeeChange(next: string | "all") {
-    const params = new URLSearchParams(searchParams.toString());
-    if (next === "all") params.delete("employee");
-    else params.set("employee", next);
-    const qs = params.toString();
-    router.replace(qs ? `/reviews?${qs}` : "/reviews", { scroll: false });
-    setOffset(0);
-  }
-
-  function handleTypeChange(next: string | "all") {
-    const params = new URLSearchParams(searchParams.toString());
-    if (next === "all") params.delete("type");
-    else params.set("type", next);
+    if (next === "all") params.delete(key);
+    else params.set(key, next);
     const qs = params.toString();
     router.replace(qs ? `/reviews?${qs}` : "/reviews", { scroll: false });
     setOffset(0);
   }
 
   const filterChips = (
-    <div className="flex items-center gap-2">
-      {STATUS_FILTERS.map((chip) => {
-        const active = chip.value === statusFilter;
-        const m = chip.value === "all" ? null : statusMeta(chip.value);
-        return (
-          <button
-            key={chip.value}
-            onClick={() => handleFilterChange(chip.value)}
-            className="rounded-full border px-3 py-1 text-xs font-medium transition-colors"
-            style={{
-              borderColor: active ? (m ? m.dot : "#111827") : "oklch(0.85 0.01 260 / 0.4)",
-              backgroundColor: active ? (m ? m.bg : "#11182715") : "transparent",
-              color: active ? (m ? m.fg : "#111827") : "#6B7280",
-            }}
-          >
-            {chip.label}
-          </button>
-        );
-      })}
+    <div className="flex items-center gap-1.5">
+      {STATUS_FILTERS.map((chip) => (
+        <FilterChip
+          key={chip.value}
+          active={chip.value === statusFilter}
+          onClick={() => setParam("status", chip.value)}
+        >
+          {chip.label}
+        </FilterChip>
+      ))}
     </div>
   );
 
-  // A tenant with one deliverable type gets nothing from a one-chip
-  // type row; suppress until 2+ types appear in the history.
+  // One type gives the row nothing to narrow; show it from 2 up.
   const typeList = types.data ?? [];
   const typeChips = typeList.length >= 2 ? (
-    <div className="flex items-center gap-2 overflow-x-auto pb-1">
-      <button
-        onClick={() => handleTypeChange("all")}
-        className="rounded-full border px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap"
-        style={{
-          borderColor: typeFilter === "all" ? "#111827" : "oklch(0.85 0.01 260 / 0.4)",
-          backgroundColor: typeFilter === "all" ? "#11182715" : "transparent",
-          color: typeFilter === "all" ? "#111827" : "#6B7280",
-        }}
-      >
+    <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+      <FilterChip active={typeFilter === "all"} onClick={() => setParam("type", "all")}>
         All types
-      </button>
-      {typeList.map((t) => {
-        const active = t.deliverableType === typeFilter;
-        return (
-          <button
-            key={t.deliverableType}
-            onClick={() => handleTypeChange(t.deliverableType)}
-            className="rounded-full border px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap"
-            style={{
-              borderColor: active ? "#111827" : "oklch(0.85 0.01 260 / 0.4)",
-              backgroundColor: active ? "#11182715" : "transparent",
-              color: active ? "#111827" : "#6B7280",
-            }}
-          >
-            {typeChipLabel(t.deliverableType)}
-            <span className="ml-1.5 text-[10px] text-text-muted">{t.count}</span>
-          </button>
-        );
-      })}
+      </FilterChip>
+      {typeList.map((t) => (
+        <FilterChip
+          key={t.deliverableType}
+          active={t.deliverableType === typeFilter}
+          onClick={() => setParam("type", t.deliverableType)}
+        >
+          {typeChipLabel(t.deliverableType)} {t.count}
+        </FilterChip>
+      ))}
     </div>
   ) : null;
 
-  // A single-hire tenant doesn't need a filter row; suppress until 2+ exist.
   const employeeList = employees.data ?? [];
   const employeeChips = employeeList.length >= 2 ? (
-    <div className="flex items-center gap-2 overflow-x-auto pb-1">
-      <button
-        onClick={() => handleEmployeeChange("all")}
-        className="rounded-full border px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap"
-        style={{
-          borderColor: employeeFilter === "all" ? "#111827" : "oklch(0.85 0.01 260 / 0.4)",
-          backgroundColor: employeeFilter === "all" ? "#11182715" : "transparent",
-          color: employeeFilter === "all" ? "#111827" : "#6B7280",
-        }}
-      >
-        All hires
-      </button>
-      {employeeList.map((emp) => {
-        const active = emp.id === employeeFilter;
-        const rm = roleMeta(emp.roleType);
-        return (
-          <button
-            key={emp.id}
-            onClick={() => handleEmployeeChange(emp.id)}
-            className="rounded-full border px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap"
-            style={{
-              borderColor: active ? rm.solid : "oklch(0.85 0.01 260 / 0.4)",
-              backgroundColor: active ? rm.tint : "transparent",
-              color: active ? rm.text : "#6B7280",
-            }}
-          >
-            {emp.name}
-          </button>
-        );
-      })}
+    <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+      <FilterChip active={employeeFilter === "all"} onClick={() => setParam("employee", "all")}>
+        Full roster
+      </FilterChip>
+      {employeeList.map((emp) => (
+        <FilterChip
+          key={emp.id}
+          active={emp.id === employeeFilter}
+          onClick={() => setParam("employee", emp.id)}
+        >
+          {emp.name}
+        </FilterChip>
+      ))}
     </div>
   ) : null;
+
+  const filterBlock = (
+    <div className="mt-2.5 space-y-1.5">
+      {employeeChips}
+      {typeChips}
+      {filterChips}
+    </div>
+  );
 
   if (history.isLoading) {
     return (
-      <div className="space-y-3">
-        {employeeChips}
-        {typeChips}
-        {filterChips}
-        <p className="text-sm text-text-muted px-1">Loading history...</p>
+      <div>
+        {filterBlock}
+        <div className="mt-3 space-y-2" aria-hidden>
+          <div className="h-10 bg-panel" />
+          <div className="h-10 bg-panel" />
+          <div className="h-10 bg-panel" />
+        </div>
       </div>
     );
   }
@@ -276,120 +235,76 @@ export function HistoryList() {
     const scopeSuffix = `${employeePart}${typePart}`;
 
     return (
-      <div className="space-y-3">
-        {employeeChips}
-        {typeChips}
-        {filterChips}
-        <GlassCard hoverable={false} className="p-6">
-          <p className="text-sm text-text-muted text-center">
-            {statusFilter === "rejected"
-              ? `No rejected deliverables yet${scopeSuffix}. Reject from /review/[id] to start an avoid-pattern history.`
-              : statusFilter === "approved"
-                ? `No approved deliverables yet${scopeSuffix}.`
-                : `No completed reviews yet${scopeSuffix}. Approved or rejected deliverables show up here.`}
-          </p>
-        </GlassCard>
+      <div>
+        {filterBlock}
+        <p className="mt-3 text-[13px] text-ink-muted">
+          {statusFilter === "rejected"
+            ? `No rejections on record${scopeSuffix}. A rejection ends the job and files an avoid-pattern in the manual.`
+            : statusFilter === "published"
+              ? `Nothing published yet${scopeSuffix}. Accepted work can queue for publishing from its review page.`
+              : statusFilter === "accepted"
+                ? `Nothing accepted yet${scopeSuffix}.`
+                : `No completed reviews yet${scopeSuffix}. Every accept, publish, and reject is logged here.`}
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-3">
-      {employeeChips}
-      {typeChips}
-      <div className="flex items-center justify-between gap-3">
-        {filterChips}
-        <p className="text-[11px] text-text-muted">
-          <kbd className="rounded border border-gray-200 bg-white px-1 py-0.5 text-[10px] font-medium">J</kbd>
-          {" / "}
-          <kbd className="rounded border border-gray-200 bg-white px-1 py-0.5 text-[10px] font-medium">K</kbd>
-          {" walk "}
-          <kbd className="rounded border border-gray-200 bg-white px-1 py-0.5 text-[10px] font-medium">↵</kbd>
-          {" open"}
-        </p>
-      </div>
-      {items.map((item, i) => {
-        const meta = statusMeta(item.status);
-        const empColor = roleMeta(item.employeeRoleType).text;
-        const finalisedAt = item.approvedAt ?? item.updatedAt;
-        const Icon = STATUS_ICONS[item.status] ?? Check;
-        const isActive = i === activeIndex;
+    <div>
+      {filterBlock}
+      <ul className="mt-2">
+        {items.map((item, i) => {
+          const finalisedAt = item.approvedAt ?? item.updatedAt;
+          const isActive = i === activeIndex;
+          return (
+            <li key={item.id} className="hairline-b last:border-b-0">
+              <Link
+                href={`/review/${item.id}`}
+                ref={(el) => {
+                  itemRefs.current[i] = el;
+                }}
+                onMouseEnter={() => setActiveIndex(i)}
+                className={`flex items-center gap-3 py-2.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink ${
+                  isActive ? "bg-panel" : "hover:bg-panel"
+                }`}
+              >
+                <Monogram name={item.employeeName ?? "?"} roleType={item.employeeRoleType} size="sm" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13.5px] leading-tight font-medium">
+                    {item.title}
+                  </span>
+                  <span className="spec-label mt-0.5 block truncate">
+                    {item.deliverableType.replace(/_/g, " ")} · v{item.version}
+                    {item.approvalRationale ? ` · "${item.approvalRationale}"` : ""}
+                  </span>
+                </span>
+                {item.demoSessionId && <ProvenanceTag kind="live" />}
+                <StateChip status={item.status} />
+                <span className="spec w-16 shrink-0 text-right text-ink-muted">
+                  {relativeDate(finalisedAt)}
+                </span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
 
-        return (
-          <Link
-            key={item.id}
-            href={`/review/${item.id}`}
-            ref={(el) => {
-              itemRefs.current[i] = el;
-            }}
-            onMouseEnter={() => setActiveIndex(i)}
-          >
-            <GlassCard
-              className="p-4 transition-shadow"
-              style={isActive ? { boxShadow: `0 0 0 2px ${meta.dot}40` } : undefined}
-            >
-              <div className="flex items-start gap-3">
-                <div
-                  className="flex h-8 w-8 items-center justify-center rounded-full text-white shrink-0"
-                  style={{ backgroundColor: meta.fg }}
-                  aria-label={meta.label}
-                >
-                  <Icon size={14} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium truncate">{item.title}</p>
-                    <span
-                      className="rounded-full px-2 py-0.5 text-[10px] font-medium shrink-0"
-                      style={{
-                        backgroundColor: meta.bg,
-                        color: meta.fg,
-                      }}
-                    >
-                      {meta.label}
-                    </span>
-                  </div>
-                  <p className="text-xs text-text-secondary truncate mt-0.5">
-                    <span style={{ color: empColor }} className="font-medium">
-                      {item.employeeName ?? "Unknown"}
-                    </span>
-                    {" "}&middot;{" "}
-                    {item.deliverableType.replace(/_/g, " ")}
-                    {item.taskTitle ? ` · ${item.taskTitle}` : ""}
-                  </p>
-                  {item.approvalRationale && (
-                    <p className="mt-1 text-xs text-text-muted line-clamp-2">
-                      &ldquo;{item.approvalRationale}&rdquo;
-                    </p>
-                  )}
-                </div>
-                <div className="text-right shrink-0">
-                  <p className="text-[11px] text-text-muted">
-                    {relativeDate(finalisedAt)}
-                  </p>
-                  <p className="text-[10px] text-text-muted mt-0.5">v{item.version}</p>
-                </div>
-              </div>
-            </GlassCard>
-          </Link>
-        );
-      })}
-
-      <div className="flex items-center justify-between pt-2">
+      <div className="hairline-t mt-1 flex items-center justify-between pt-2.5">
         <button
           onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
           disabled={offset === 0 || history.isFetching}
-          className="rounded-lg border border-[oklch(0.8_0.01_260/0.2)] px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-[oklch(0.97_0.005_260/0.5)] disabled:opacity-30"
+          className="btn-ghost px-3 py-1.5 text-[12px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-40"
         >
           Newer
         </button>
-        <p className="text-[11px] text-text-muted">
-          Showing {offset + 1}-{offset + items.length}
+        <p className="spec text-ink-muted">
+          {offset + 1}-{offset + items.length}
         </p>
         <button
           onClick={() => setOffset(offset + PAGE_SIZE)}
           disabled={items.length < PAGE_SIZE || history.isFetching}
-          className="rounded-lg border border-[oklch(0.8_0.01_260/0.2)] px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-[oklch(0.97_0.005_260/0.5)] disabled:opacity-30"
+          className="btn-ghost px-3 py-1.5 text-[12px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-40"
         >
           Older
         </button>

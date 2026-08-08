@@ -1,6 +1,6 @@
 import { db, aiEmployees, knowledgeItems, goals, tasks } from "@beast/db";
 import { eq, and } from "drizzle-orm";
-import { getClient, getModelId } from "../models";
+import { complete } from "../provider";
 
 export interface GoalBreakdownInput {
   goalId: string;
@@ -26,9 +26,8 @@ export interface GoalBreakdownResult {
 }
 
 /**
- * Use LLM to break a company-level goal into department sub-goals
- * assigned to specific AI employees. Uses Sonnet for cost efficiency
- * (Opus reserved for actual strategy execution, not planning breakdowns).
+ * Use the deep tier to break a company-level goal into department
+ * sub-goals assigned to specific AI employees.
  */
 export async function generateGoalBreakdown(input: GoalBreakdownInput): Promise<GoalBreakdownResult> {
   // Load company's AI employees
@@ -57,14 +56,12 @@ export async function generateGoalBreakdown(input: GoalBreakdownInput): Promise<
     .map((e) => `- ${e.name} (${e.roleTitle}, ID: ${e.id})`)
     .join("\n");
 
-  const client = getClient();
-  const response = await client.messages.create({
-    model: getModelId("sonnet"),
-    max_tokens: 2048,
+  const raw = await complete({
+    tier: "deep",
+    purpose: "goal_breakdown",
+    maxTokens: 2048,
     system: `You are a strategic business planner. Break company goals into actionable department sub-goals that specific AI employees can work toward. Return JSON only, no markdown.`,
-    messages: [{
-      role: "user",
-      content: `Break this company goal into department sub-goals.
+    prompt: `Break this company goal into department sub-goals.
 
 **Goal:** ${input.goalTitle}
 ${input.goalDescription ? `**Description:** ${input.goalDescription}` : ""}
@@ -97,10 +94,8 @@ Rules:
 - Not every employee needs a sub-goal - only assign if relevant
 - 2-5 sub-goals is ideal
 - Each sub-goal should clearly contribute to the parent goal`,
-    }],
   });
 
-  const raw = response.content[0]?.type === "text" ? response.content[0].text : "{}";
   let parsed: { reasoning?: string; subGoals?: ProposedSubGoal[] };
   try {
     parsed = JSON.parse(raw.replace(/^```json?\s*/i, "").replace(/\s*```$/, ""));
@@ -151,7 +146,7 @@ export async function recalculateGoalProgress(goalId: string, companyId: string)
     if (linkedTasks.length === 0) return 0;
 
     const completed = linkedTasks.filter(
-      (t) => t.status === "approved" || t.status === "published",
+      (t) => t.status === "accepted" || t.status === "published",
     ).length;
 
     progress = Math.round((completed / linkedTasks.length) * 100);

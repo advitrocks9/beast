@@ -1,11 +1,13 @@
 import { z } from "zod";
-import { eq, and, gte, sql } from "drizzle-orm";
-import { companies, tasks } from "@beast/db";
-import { getStripe, PRICE_IDS, TIER_LIMITS } from "@/lib/stripe/client";
+import { eq } from "drizzle-orm";
+import { companies } from "@beast/db";
+import { env } from "@beast/shared/env";
+import { PAID_TIERS, TIER_LIMITS } from "@beast/shared";
+import { getStripe, PRICE_IDS } from "@/lib/stripe/client";
+import { readTier, tasksCreatedThisMonth, employeeCount } from "@/lib/entitlements";
 import { createTRPCRouter, protectedProcedure, assertNotDemo } from "../init";
 
 export const billingRouter = createTRPCRouter({
-  /** Get current subscription info for this company. */
   getSubscription: protectedProcedure.query(async ({ ctx }) => {
     const company = await ctx.db.query.companies.findFirst({
       where: eq(companies.id, ctx.companyId),
@@ -20,25 +22,45 @@ export const billingRouter = createTRPCRouter({
 
     if (!company) throw new Error("Company not found");
 
-    const limits = TIER_LIMITS[company.billingTier] ?? TIER_LIMITS.trial!;
+    const tier = readTier(company);
     const trialDaysRemaining = company.trialEndsAt
       ? Math.max(0, Math.ceil((company.trialEndsAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
       : null;
 
     return {
-      tier: company.billingTier,
+      tier,
       status: company.billingStatus,
       trialDaysRemaining,
-      limits,
-      hasPaymentMethod: !!company.stripeSubscriptionId,
+      limits: TIER_LIMITS[tier],
+      hasSubscription: !!company.stripeSubscriptionId,
     };
   }),
 
-  /** Create a Stripe Checkout session for subscription. */
+  /** Usage against the two enforced limits: monthly task creations, employee count. */
+  getUsage: protectedProcedure.query(async ({ ctx }) => {
+    const company = await ctx.db.query.companies.findFirst({
+      where: eq(companies.id, ctx.companyId),
+      columns: { billingTier: true },
+    });
+
+    if (!company) throw new Error("Company not found");
+
+    const tier = readTier(company);
+    const limits = TIER_LIMITS[tier];
+    const [tasksUsed, employeesUsed] = await Promise.all([
+      tasksCreatedThisMonth(ctx.db, ctx.companyId),
+      employeeCount(ctx.db, ctx.companyId),
+    ]);
+
+    return {
+      tier,
+      tasks: { used: tasksUsed, limit: limits.tasksPerMonth },
+      employees: { used: employeesUsed, limit: limits.employees },
+    };
+  }),
+
   createCheckout: protectedProcedure
-    .input(z.object({
-      tier: z.enum(["starter", "team", "business"]),
-    }))
+    .input(z.object({ tier: z.enum(PAID_TIERS) }))
     .mutation(async ({ ctx, input }) => {
       assertNotDemo("Starting a checkout");
       const stripe = getStripe();
@@ -78,14 +100,18 @@ export const billingRouter = createTRPCRouter({
           .where(eq(companies.id, ctx.companyId));
       }
 
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+      const appUrl = env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
+      // Metadata rides both objects: the session copy feeds
+      // checkout.session.completed, the subscription copy feeds every later
+      // subscription.* event.
       const session = await stripe.checkout.sessions.create({
         mode: "subscription",
         customer: customerId,
         line_items: [{ price: priceId, quantity: 1 }],
-        success_url: `${appUrl}/settings?billing=success`,
-        cancel_url: `${appUrl}/settings?billing=cancel`,
+        success_url: `${appUrl}/settings/billing?billing=success`,
+        cancel_url: `${appUrl}/settings/billing?billing=cancel`,
+        metadata: { companyId: ctx.companyId, tier: input.tier },
         subscription_data: {
           metadata: { companyId: ctx.companyId, tier: input.tier },
         },
@@ -94,7 +120,6 @@ export const billingRouter = createTRPCRouter({
       return { checkoutUrl: session.url };
     }),
 
-  /** Create a Stripe Customer Portal session for managing subscription. */
   createPortal: protectedProcedure.mutation(async ({ ctx }) => {
     assertNotDemo("Opening the billing portal");
     const stripe = getStripe();
@@ -107,43 +132,13 @@ export const billingRouter = createTRPCRouter({
       throw new Error("No billing account. Subscribe to a plan first.");
     }
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+    const appUrl = env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
     const session = await stripe.billingPortal.sessions.create({
       customer: company.stripeCustomerId,
-      return_url: `${appUrl}/settings`,
+      return_url: `${appUrl}/settings/billing`,
     });
 
     return { portalUrl: session.url };
-  }),
-
-  /** Get task usage for the current billing period. */
-  getUsage: protectedProcedure.query(async ({ ctx }) => {
-    const company = await ctx.db.query.companies.findFirst({
-      where: eq(companies.id, ctx.companyId),
-      columns: { billingTier: true },
-    });
-
-    const tier = company?.billingTier ?? "trial";
-    const limits = TIER_LIMITS[tier] ?? TIER_LIMITS.trial!;
-
-    // Count tasks created this calendar month
-    const startOfMonth = new Date();
-    startOfMonth.setDate(1);
-    startOfMonth.setHours(0, 0, 0, 0);
-
-    const [result] = await ctx.db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(tasks)
-      .where(and(
-        eq(tasks.companyId, ctx.companyId),
-        gte(tasks.createdAt, startOfMonth),
-      ));
-
-    return {
-      tasksThisMonth: result?.count ?? 0,
-      limit: limits.tasksPerMonth,
-      tier,
-    };
   }),
 });

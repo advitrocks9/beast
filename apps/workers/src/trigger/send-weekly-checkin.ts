@@ -11,6 +11,7 @@ import {
   activityLog,
 } from "@beast/db";
 import { and, desc, eq, gte, inArray, isNull, or } from "drizzle-orm";
+import { env } from "@beast/shared/env";
 import { renderWeeklyEmail, type WeeklyData } from "../email/weekly-template";
 
 /**
@@ -27,15 +28,14 @@ export const sendWeeklyCheckin = schedules.task({
   id: "send-weekly-checkin",
   cron: "0 9 * * 1",
   run: async () => {
-    const resendKey = process.env.RESEND_API_KEY;
+    const resendKey = env.RESEND_API_KEY;
     if (!resendKey) {
       return { skipped: true, reason: "RESEND_API_KEY not configured" };
     }
 
     const resend = new Resend(resendKey);
-    const appUrl =
-      process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-    const fromEmail = process.env.EMAIL_FROM ?? "Beast <updates@beast.app>";
+    const appUrl = env.APP_URL ?? env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+    const fromEmail = env.EMAIL_FROM ?? "Beast <updates@beast.app>";
 
     const activeCompanies = await db.query.companies.findMany({
       where: eq(companies.onboardingStatus, "complete"),
@@ -195,7 +195,7 @@ async function buildWeeklyData(args: {
     where: and(
       eq(deliverables.companyId, companyId),
       or(
-        eq(deliverables.status, "approved"),
+        eq(deliverables.status, "accepted"),
         eq(deliverables.status, "published"),
       ),
       gte(deliverables.updatedAt, since),
@@ -222,7 +222,7 @@ async function buildWeeklyData(args: {
   const waitingRows = await db.query.deliverables.findMany({
     where: and(
       eq(deliverables.companyId, companyId),
-      eq(deliverables.status, "review"),
+      eq(deliverables.status, "in_review"),
     ),
     columns: { id: true, title: true, aiEmployeeId: true },
     orderBy: [desc(deliverables.createdAt)],

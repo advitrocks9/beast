@@ -4,8 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useTRPC } from "@/trpc/client";
-import { GlassCard } from "@beast/ui";
-import { roleColor, statusMeta } from "@/lib/colors";
+import { Monogram } from "@/components/monogram";
 
 interface InlineCheckIn {
   id: string;
@@ -26,10 +25,10 @@ interface CheckInsInlineProps {
   employees: InlineEmployee[];
 }
 
-const RESPONSE_BUTTONS = [
-  { value: "used", label: "Used it", color: "#166534", bg: "#dcfce7" },
-  { value: "edited", label: "Edited it", color: "#92400e", bg: "#fef3c7" },
-  { value: "not_used", label: "Did not use it", color: "#991b1b", bg: "#fee2e2" },
+const RESPONSES = [
+  { value: "used", label: "Used it", cls: "border-state-accepted text-state-accepted hover:bg-state-accepted hover:text-white" },
+  { value: "edited", label: "Edited it", cls: "border-identity-deep text-identity-deep hover:bg-identity-deep hover:text-white" },
+  { value: "not_used", label: "Did not use it", cls: "border-state-failed text-state-failed hover:bg-state-failed hover:text-white" },
 ];
 
 export function CheckInsInline({ checkIns, employees }: CheckInsInlineProps) {
@@ -45,118 +44,84 @@ export function CheckInsInline({ checkIns, employees }: CheckInsInlineProps) {
   }
 
   return (
-    <section>
-      <div className="flex items-baseline justify-between mb-3">
-        <h2 className="heading-gradient text-lg font-semibold">Check-ins</h2>
-        <Link
-          href="/checkins"
-          className="text-xs font-medium text-text-secondary hover:text-foreground"
-        >
-          View all &rarr;
+    <section aria-label="Check-ins" className="panel p-4">
+      <div className="flex items-baseline justify-between">
+        <h2 className="text-[15px] font-semibold">Check-ins</h2>
+        <Link href="/checkins" className="spec-label transition-colors hover:text-ink">
+          View all
         </Link>
       </div>
 
-      <div className="space-y-2">
+      <ul className="mt-1">
         {visible.map((c) => {
           const emp = employeeById.get(c.aiEmployeeId);
-          const roleHex = roleColor(emp?.roleType);
           const scheduledLabel = formatScheduled(c.scheduledFor);
           const isOverdue =
-            c.scheduledFor !== null &&
-            new Date(c.scheduledFor).getTime() < Date.now();
+            c.scheduledFor !== null && new Date(c.scheduledFor).getTime() < Date.now();
 
           return (
-            <GlassCard key={c.id} hoverable={false} className="p-4">
-              <div className="flex items-start gap-3">
-                <span
-                  className="mt-1 h-2 w-2 shrink-0 rounded-full"
-                  style={{ backgroundColor: roleHex }}
-                  aria-hidden
-                />
+            <li key={c.id} className="hairline-b py-3 last:border-b-0 last:pb-1">
+              <div className="flex items-start gap-2.5">
+                <Monogram name={emp?.name ?? "?"} roleType={emp?.roleType} size="sm" />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">
-                    {c.deliverableTitle ?? "Check-in"}
+                  <p className="text-[13.5px] leading-snug font-medium">
+                    Did you use {emp?.name ? `${emp.name}'s` : "this"} draft
+                    {c.deliverableTitle ? `, “${c.deliverableTitle}”` : ""}?
                   </p>
-                  <div className="mt-0.5 flex flex-wrap items-center gap-x-3 text-xs text-text-muted">
-                    {emp && <span>{emp.name}</span>}
-                    {c.deliverableType && (
-                      <span>{c.deliverableType.replace(/_/g, " ")}</span>
-                    )}
-                    <span
-                      style={{
-                        color: isOverdue ? statusMeta("pending").fg : undefined,
-                      }}
-                    >
+                  <p className="spec mt-0.5 text-[10px] text-ink-muted">
+                    {c.deliverableType ? `${c.deliverableType.replace(/_/g, " ")} · ` : ""}
+                    <span className={isOverdue ? "text-identity-deep" : undefined}>
                       {scheduledLabel}
                     </span>
-                  </div>
-                  <p className="mt-2 text-sm text-text-secondary">
-                    Did you end up using {emp?.name ? `${emp.name}'s` : "this"} draft?
                   </p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {RESPONSE_BUTTONS.map((btn) => (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {RESPONSES.map((btn) => (
                       <button
                         key={btn.value}
                         onClick={() => {
                           setDismissed((prev) => ({ ...prev, [c.id]: btn.value }));
-                          acknowledge.mutate({
-                            checkInId: c.id,
-                            response: btn.value,
-                          });
+                          acknowledge.mutate({ checkInId: c.id, response: btn.value });
                         }}
                         disabled={acknowledge.isPending}
-                        className="rounded-full border px-3 py-1 text-xs font-medium transition-colors hover:opacity-90"
-                        style={{
-                          borderColor: btn.color,
-                          color: btn.color,
-                          backgroundColor: btn.bg,
-                        }}
+                        className={`rounded-[2px] border bg-bg px-2.5 py-1 text-[12px] font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-50 ${btn.cls}`}
                       >
                         {btn.label}
                       </button>
                     ))}
                     <Link
                       href={`/checkins/${c.id}`}
-                      className="rounded-full border border-gray-200 px-3 py-1 text-xs font-medium text-text-secondary hover:bg-gray-50"
+                      className="rounded-[2px] border border-hairline px-2.5 py-1 text-[12px] font-medium text-ink-secondary transition-colors duration-150 hover:border-ink hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
                     >
                       Add note
                     </Link>
                   </div>
                 </div>
               </div>
-            </GlassCard>
+            </li>
           );
         })}
+      </ul>
 
-        {Object.keys(dismissed).length > 0 && (
-          <p className="px-1 text-[11px] text-text-muted">
-            {Object.keys(dismissed).length} answered just now. Refresh to update
-            the count.
-          </p>
-        )}
-      </div>
+      {Object.keys(dismissed).length > 0 && (
+        <p className="spec mt-2 text-[10px] text-ink-muted">
+          {Object.keys(dismissed).length} answered. The ledger records it.
+        </p>
+      )}
     </section>
   );
 }
 
 function formatScheduled(raw: string | null): string {
-  if (!raw) return "Unscheduled";
+  if (!raw) return "unscheduled";
   const d = new Date(raw);
-  const now = new Date();
-  const diff = d.getTime() - now.getTime();
+  const diff = d.getTime() - Date.now();
   const dayMs = 24 * 60 * 60 * 1000;
-  if (diff < -dayMs) {
-    const days = Math.round(-diff / dayMs);
-    return `${days}d overdue`;
-  }
-  if (diff < 0) return "Overdue today";
+  if (diff < -dayMs) return `${Math.round(-diff / dayMs)}d overdue`;
+  if (diff < 0) return "overdue today";
   if (diff < dayMs) {
     const hours = Math.round(diff / (60 * 60 * 1000));
-    if (hours <= 1) return "Due in under an hour";
-    return `Due in ${hours}h`;
+    return hours <= 1 ? "due within the hour" : `due in ${hours}h`;
   }
-  if (diff < 7 * dayMs) {
-    return `Due ${d.toLocaleDateString("en-US", { weekday: "long" })}`;
-  }
-  return `Due ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+  if (diff < 7 * dayMs) return `due ${d.toLocaleDateString("en-US", { weekday: "long" })}`;
+  return `due ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
 }

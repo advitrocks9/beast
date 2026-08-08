@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTRPC } from "@/trpc/client";
-import { GlassCard } from "@beast/ui";
 import { Plus, Trash2, FileText, Globe, Upload, Pencil } from "lucide-react";
 import { KNOWLEDGE_CATEGORIES, type KnowledgeCategory } from "@beast/shared";
-import { statusMeta } from "@/lib/colors";
+import { cn } from "@/lib/utils";
+import { StateChip } from "@/components/state-chip";
 
 const CRAWL_INFLIGHT_TTL_MS = 90_000;
 
@@ -28,14 +28,8 @@ const SOURCE_LABEL: Record<string, string> = {
   feedback_learned: "Feedback",
 };
 
-// Source has no dedicated namespace in the color module, so map each kind to the
-// nearest on-system status palette to keep a distinct, AA-safe chip.
-const SOURCE_STATUS: Record<string, string> = {
-  interview: "queued",
-  document: "in_progress",
-  url_crawl: "completed",
-  feedback_learned: "pending",
-};
+const INPUT_CLASS =
+  "mt-1.5 block w-full border border-hairline bg-bg px-3 py-2 text-[13.5px] text-ink outline-none placeholder:text-ink-muted focus-visible:border-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink";
 
 type FilterValue = "all" | KnowledgeCategory;
 
@@ -58,7 +52,7 @@ export default function KnowledgePage() {
     refetchInterval: crawlsInFlight.length > 0 ? 5000 : false,
   });
 
-  const data = items.data ?? [];
+  const data = useMemo(() => items.data ?? [], [items.data]);
 
   // Drop selection for ids that no longer appear in data (filter switch
   // or background re-fetch removed them) so the action bar count stays
@@ -177,124 +171,119 @@ export default function KnowledgePage() {
   }
 
   return (
-    <div className="space-y-6">
-      <header>
-        <h1 className="font-(--font-display) text-2xl font-bold tracking-tight">
-          Knowledge base
-        </h1>
-        <p className="mt-1 text-sm text-text-secondary">
-          What your AI employees know about the company. Add notes, upload
-          documents, or crawl a URL. Everything here is searched at task time.
+    <div className="mx-auto max-w-4xl">
+      <header className="rule-b pb-4">
+        <h1 className="display text-3xl">Knowledge</h1>
+        <p className="spec mt-1.5 text-ink-muted">
+          the company library · searched at task time · {data.length} item
+          {data.length === 1 ? "" : "s"} on file
         </p>
       </header>
 
-      <AddKnowledgeBlock
-        onCreated={() => {
-          queryClient.invalidateQueries({
-            queryKey: trpc.knowledge.list.queryOptions({}).queryKey,
-          });
-          queryClient.invalidateQueries({
-            queryKey: trpc.knowledge.listFiles.queryOptions().queryKey,
-          });
-        }}
-        onCrawlQueued={registerInFlightCrawl}
-      />
+      <div className="mt-5 space-y-6">
+        <AddKnowledgeBlock
+          onCreated={() => {
+            queryClient.invalidateQueries({
+              queryKey: trpc.knowledge.list.queryOptions({}).queryKey,
+            });
+            queryClient.invalidateQueries({
+              queryKey: trpc.knowledge.listFiles.queryOptions().queryKey,
+            });
+          }}
+          onCrawlQueued={registerInFlightCrawl}
+        />
 
-      <CrawlsInFlightSection rows={crawlsInFlight} />
+        <CrawlsInFlightSection rows={crawlsInFlight} />
 
-      <UploadedFilesSection />
+        <UploadedFilesSection />
 
-      <section>
-        <div className="flex flex-wrap items-center gap-2 mb-4">
-          <FilterChip
-            active={filter === "all"}
-            onClick={() => setFilter("all")}
-          >
-            All
-            {data.length > 0 && (
-              <span className="ml-1.5 text-text-muted">{data.length}</span>
-            )}
-          </FilterChip>
-          {KNOWLEDGE_CATEGORIES.map((cat) => (
-            <FilterChip
-              key={cat}
-              active={filter === cat}
-              onClick={() => setFilter(cat)}
-            >
-              {CATEGORY_LABEL[cat]}
+        <section aria-label="Library">
+          <div className="rule-t flex flex-wrap items-center gap-1.5 pt-2.5">
+            <FilterChip active={filter === "all"} onClick={() => setFilter("all")}>
+              All{data.length > 0 && filter === "all" ? ` ${data.length}` : ""}
             </FilterChip>
-          ))}
-        </div>
-
-        {items.isLoading && (
-          <p className="text-xs text-text-muted">Loading...</p>
-        )}
-
-        {!items.isLoading && data.length === 0 && (
-          <GlassCard hoverable={false} className="p-8 text-center">
-            <p className="text-sm text-text-muted">
-              {filter === "all"
-                ? "No knowledge yet. Add a note, upload a document, or crawl your homepage to seed the agents."
-                : `No items in ${CATEGORY_LABEL[filter as KnowledgeCategory]}.`}
-            </p>
-          </GlassCard>
-        )}
-
-        {selected.size > 0 && (
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5">
-            <p className="text-xs font-medium text-red-900">
-              {selected.size} {selected.size === 1 ? "item" : "items"} selected
-            </p>
-            <div className="flex flex-wrap items-center gap-2">
-              <select
-                value={bulkCategory}
-                onChange={(e) => setBulkCategory(e.target.value as KnowledgeCategory | "")}
-                disabled={bulkUpdate.isPending}
-                aria-label="Move selected items to category"
-                className="rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-foreground hover:bg-gray-50 disabled:opacity-50"
-              >
-                <option value="">Move to category...</option>
-                {KNOWLEDGE_CATEGORIES.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {CATEGORY_LABEL[cat]}
-                  </option>
-                ))}
-              </select>
-              <button
-                onClick={handleBulkRecategorise}
-                disabled={bulkUpdate.isPending || !bulkCategory}
-                className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-foreground hover:bg-gray-50 disabled:opacity-50"
-              >
-                {bulkUpdate.isPending ? "Moving..." : "Apply"}
-              </button>
-              <button
-                onClick={() => setSelected(new Set())}
-                className="text-xs font-medium text-red-700 hover:underline"
-              >
-                Clear
-              </button>
-              <button
-                onClick={handleBulkDelete}
-                disabled={bulkDelete.isPending}
-                className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
-              >
-                {bulkDelete.isPending ? "Deleting..." : `Delete ${selected.size}`}
-              </button>
-            </div>
+            {KNOWLEDGE_CATEGORIES.map((cat) => (
+              <FilterChip key={cat} active={filter === cat} onClick={() => setFilter(cat)}>
+                {CATEGORY_LABEL[cat]}
+              </FilterChip>
+            ))}
           </div>
-        )}
 
-        <div className="space-y-3">
-          {data.map((item) => (
-            <KnowledgeItemRow
-              key={item.id}
-              item={item}
-              isSelected={selected.has(item.id)}
-              onToggleSelect={() => toggleSelect(item.id)}
-            />
-          ))}
-        </div>
-      </section>
+          {items.isLoading && (
+            <div className="mt-3 space-y-3">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="hairline-b pb-3 last:border-b-0">
+                  <div className="h-4 w-2/3 bg-panel" />
+                  <div className="mt-2 h-3.5 w-full bg-panel" />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {!items.isLoading && data.length === 0 && (
+            <p className="mt-3 max-w-lg text-[13px] leading-snug text-ink-muted">
+              {filter === "all"
+                ? "The library is empty. Write a note, upload a document, or crawl the homepage: everything here is retrieved by the roster at task time."
+                : `Nothing filed under ${CATEGORY_LABEL[filter as KnowledgeCategory]}.`}
+            </p>
+          )}
+
+          {selected.size > 0 && (
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border border-ink bg-panel px-4 py-2.5">
+              <p className="spec text-ink">
+                {selected.size} selected
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={bulkCategory}
+                  onChange={(e) => setBulkCategory(e.target.value as KnowledgeCategory | "")}
+                  disabled={bulkUpdate.isPending}
+                  aria-label="Move selected items to category"
+                  className="border border-hairline bg-bg px-2.5 py-1.5 text-[12.5px] text-ink outline-none focus-visible:border-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-50"
+                >
+                  <option value="">Move to category…</option>
+                  {KNOWLEDGE_CATEGORIES.map((cat) => (
+                    <option key={cat} value={cat}>
+                      {CATEGORY_LABEL[cat]}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={handleBulkRecategorise}
+                  disabled={bulkUpdate.isPending || !bulkCategory}
+                  className="btn-ghost px-3 py-1.5 text-[12.5px] disabled:opacity-50"
+                >
+                  {bulkUpdate.isPending ? "Moving…" : "Apply"}
+                </button>
+                <button
+                  onClick={() => setSelected(new Set())}
+                  className="spec text-ink-muted underline underline-offset-2 hover:text-ink"
+                >
+                  Clear
+                </button>
+                <button
+                  onClick={handleBulkDelete}
+                  disabled={bulkDelete.isPending}
+                  className="bg-state-failed px-3 py-1.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-state-failed/90 disabled:opacity-50"
+                >
+                  {bulkDelete.isPending ? "Deleting…" : `Delete ${selected.size}`}
+                </button>
+              </div>
+            </div>
+          )}
+
+          <ul className="mt-1">
+            {data.map((item) => (
+              <KnowledgeItemRow
+                key={item.id}
+                item={item}
+                isSelected={selected.has(item.id)}
+                onToggleSelect={() => toggleSelect(item.id)}
+              />
+            ))}
+          </ul>
+        </section>
+      </div>
     </div>
   );
 }
@@ -341,145 +330,126 @@ function KnowledgeItemRow({
     },
   });
 
-  const source = statusMeta(SOURCE_STATUS[item.sourceType]);
   const sourceLabel = SOURCE_LABEL[item.sourceType] ?? item.sourceType;
 
   if (editing) {
     return (
-      <GlassCard hoverable={false} className="p-4 space-y-3">
-        <div>
-          <label className="block text-xs font-medium text-text-secondary mb-1.5">
-            Category
+      <li className="hairline-b py-3.5 last:border-b-0">
+        <div className="panel-tinted space-y-3 p-4">
+          <label className="block">
+            <span className="spec-label">Category</span>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className={INPUT_CLASS}
+            >
+              {KNOWLEDGE_CATEGORIES.map((cat) => (
+                <option key={cat} value={cat}>
+                  {CATEGORY_LABEL[cat]}
+                </option>
+              ))}
+            </select>
           </label>
-          <select
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
-          >
-            {KNOWLEDGE_CATEGORIES.map((cat) => (
-              <option key={cat} value={cat}>
-                {CATEGORY_LABEL[cat]}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-text-secondary mb-1.5">
-            Title
+          <label className="block">
+            <span className="spec-label">Title</span>
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className={INPUT_CLASS}
+            />
           </label>
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-text-secondary mb-1.5">
-            Content
+          <label className="block">
+            <span className="spec-label">Content</span>
+            <textarea
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              rows={6}
+              className={`${INPUT_CLASS} resize-none`}
+            />
+            <span className="spec mt-1 block text-ink-muted">
+              Edits update the title, body, and category. Linked embeddings stay untouched until
+              the next ingest run touches the same item.
+            </span>
           </label>
-          <textarea
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            rows={6}
-            className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand resize-none"
-          />
-          <p className="mt-1 text-[11px] text-text-muted">
-            Edits update the title, body, and category. Linked embeddings stay
-            untouched until the next ingest worker run touches the same item.
-          </p>
+          <div className="flex items-center justify-end gap-2">
+            <button
+              onClick={() => {
+                setTitle(item.title);
+                setContent(item.content);
+                setCategory(item.category);
+                setEditing(false);
+              }}
+              disabled={update.isPending}
+              className="btn-ghost disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => {
+                if (title.trim().length < 3 || content.trim().length < 5) return;
+                update.mutate({
+                  id: item.id,
+                  title: title.trim(),
+                  content: content.trim(),
+                  category,
+                });
+              }}
+              disabled={update.isPending || title.trim().length < 3 || content.trim().length < 5}
+              className="btn-ink disabled:opacity-50"
+            >
+              {update.isPending ? "Saving…" : "Save changes"}
+            </button>
+          </div>
+          {update.error && (
+            <p className="text-[13px] text-state-failed">{update.error.message}</p>
+          )}
         </div>
-        <div className="flex items-center justify-end gap-2">
-          <button
-            onClick={() => {
-              setTitle(item.title);
-              setContent(item.content);
-              setCategory(item.category);
-              setEditing(false);
-            }}
-            disabled={update.isPending}
-            className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-text-secondary hover:bg-gray-50 disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={() => {
-              if (title.trim().length < 3 || content.trim().length < 5) return;
-              update.mutate({
-                id: item.id,
-                title: title.trim(),
-                content: content.trim(),
-                category,
-              });
-            }}
-            disabled={
-              update.isPending ||
-              title.trim().length < 3 ||
-              content.trim().length < 5
-            }
-            className="rounded-xl bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
-          >
-            {update.isPending ? "Saving..." : "Save changes"}
-          </button>
-        </div>
-        {update.error && (
-          <p className="text-xs text-error">{update.error.message}</p>
-        )}
-      </GlassCard>
+      </li>
     );
   }
 
   return (
-    <GlassCard hoverable={false} className="p-4">
+    <li className="hairline-b py-3.5 last:border-b-0">
       <div className="flex items-start gap-3">
         <input
           type="checkbox"
           checked={isSelected}
           onChange={onToggleSelect}
           aria-label={`Select ${item.title}`}
-          className="mt-1 h-4 w-4 shrink-0 rounded border-gray-300 text-red-600 focus:ring-red-500 cursor-pointer"
+          className="mt-1 h-3.5 w-3.5 shrink-0 cursor-pointer appearance-none border border-hairline bg-bg checked:border-ink checked:bg-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
         />
-        <div className="flex-1 min-w-0">
-          <div className="flex flex-wrap items-center gap-2 mb-1">
-            <span
-              className="rounded-full px-2 py-0.5 text-[10px] font-medium"
-              style={{ backgroundColor: source.bg, color: source.fg }}
-            >
-              {sourceLabel}
-            </span>
-            <span className="text-[10px] uppercase tracking-wider text-text-muted">
-              {CATEGORY_LABEL[item.category as KnowledgeCategory] ?? item.category}
-            </span>
-          </div>
-          <p className="text-sm font-medium">{item.title}</p>
-          <p className="text-xs text-text-secondary mt-1 line-clamp-3 whitespace-pre-wrap">
+        <div className="min-w-0 flex-1">
+          <p className="spec-label flex flex-wrap items-center gap-x-2">
+            <span>{CATEGORY_LABEL[item.category as KnowledgeCategory] ?? item.category}</span>
+            <span aria-hidden>·</span>
+            <span>via {sourceLabel.toLowerCase()}</span>
+          </p>
+          <p className="mt-1 text-[14px] leading-snug font-semibold">{item.title}</p>
+          <p className="mt-1 line-clamp-3 text-[13px] leading-snug whitespace-pre-wrap text-ink-secondary">
             {item.content}
           </p>
         </div>
         <button
           onClick={() => setEditing(true)}
-          className="flex h-7 w-7 items-center justify-center rounded-lg text-text-muted hover:bg-gray-100 hover:text-text shrink-0"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[2px] text-ink-muted transition-colors hover:bg-panel hover:text-ink"
           aria-label={`Edit ${item.title}`}
         >
-          <Pencil size={14} />
+          <Pencil size={14} strokeWidth={1.5} />
         </button>
         <button
           onClick={() => {
-            if (
-              confirm(
-                `Delete "${item.title}"? Linked embeddings will also be removed.`,
-              )
-            ) {
+            if (confirm(`Delete "${item.title}"? Linked embeddings will also be removed.`)) {
               remove.mutate({ id: item.id });
             }
           }}
           disabled={remove.isPending}
-          className="flex h-7 w-7 items-center justify-center rounded-lg text-text-muted hover:bg-[oklch(0.97_0.05_25)] hover:text-error shrink-0"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[2px] text-ink-muted transition-colors hover:bg-panel hover:text-state-failed disabled:opacity-50"
           aria-label={`Delete ${item.title}`}
         >
-          <Trash2 size={14} />
+          <Trash2 size={14} strokeWidth={1.5} />
         </button>
       </div>
-    </GlassCard>
+    </li>
   );
 }
 
@@ -493,45 +463,35 @@ function safeHostname(input: string): string | null {
 
 function CrawlsInFlightSection({ rows }: { rows: Array<{ url: string; queuedAt: number }> }) {
   if (rows.length === 0) return null;
-  const crawling = statusMeta("in_progress");
   return (
-    <section>
-      <div className="flex items-baseline justify-between mb-3">
-        <h2 className="text-sm font-semibold">Crawls in flight</h2>
-        <p className="text-[11px] text-text-muted">
-          Auto-clears once the page lands in the list (about a minute).
-        </p>
+    <section aria-label="Crawls in flight">
+      <div className="rule-t flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 pt-2.5">
+        <h2 className="text-[15px] font-semibold">Crawls in flight</h2>
+        <span className="spec-label">clears once the page lands, about a minute</span>
       </div>
-      <GlassCard hoverable={false} className="divide-y divide-[oklch(0.8_0.01_260/0.1)]">
+      <ul className="mt-1">
         {rows.map((row) => {
           const elapsedSeconds = Math.max(0, Math.round((Date.now() - row.queuedAt) / 1000));
           return (
-            <div key={row.url} className="flex items-center gap-3 px-4 py-3">
-              <Globe size={16} className="text-text-muted shrink-0" />
+            <li key={row.url} className="hairline-b flex items-center gap-3 py-2.5 last:border-b-0">
+              <Globe size={16} strokeWidth={1.5} className="shrink-0 text-ink-muted" />
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{row.url}</p>
-                <p className="text-[11px] text-text-muted">
-                  queued {elapsedSeconds}s ago
-                </p>
+                <p className="truncate text-[13.5px] font-medium">{row.url}</p>
+                <p className="spec mt-0.5 text-ink-muted">queued {elapsedSeconds}s ago</p>
               </div>
-              <span
-                className="rounded-full px-2.5 py-0.5 text-[10px] font-medium shrink-0"
-                style={{ backgroundColor: crawling.bg, color: crawling.fg }}
-              >
-                Crawling
-              </span>
-            </div>
+              <StateChip status="running" label="Crawling" />
+            </li>
           );
         })}
-      </GlassCard>
+      </ul>
     </section>
   );
 }
 
 const FILE_STATUS: Record<string, { label: string; status: string }> = {
   pending: { label: "Queued", status: "queued" },
-  processing: { label: "Processing", status: "in_progress" },
-  complete: { label: "Indexed", status: "completed" },
+  processing: { label: "Processing", status: "running" },
+  complete: { label: "Indexed", status: "accepted" },
   failed: { label: "Failed", status: "failed" },
 };
 
@@ -562,24 +522,20 @@ function UploadedFilesSection() {
   if (rows.length === 0) return null;
 
   return (
-    <section>
-      <div className="flex items-baseline justify-between mb-3">
-        <h2 className="text-sm font-semibold">Uploaded files</h2>
-        <p className="text-[11px] text-text-muted">
-          Polls every 5s while a file is still processing.
-        </p>
+    <section aria-label="Uploaded files">
+      <div className="rule-t flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 pt-2.5">
+        <h2 className="text-[15px] font-semibold">Uploaded files</h2>
+        <span className="spec-label">checked every 5s while processing</span>
       </div>
-      <GlassCard hoverable={false} className="divide-y divide-[oklch(0.8_0.01_260/0.1)]">
+      <ul className="mt-1">
         {rows.map((file) => {
-          const entry =
-            FILE_STATUS[file.processingStatus] ?? FILE_STATUS.pending!;
-          const meta = statusMeta(entry.status);
+          const entry = FILE_STATUS[file.processingStatus] ?? FILE_STATUS.pending!;
           return (
-            <div key={file.id} className="flex items-center gap-3 px-4 py-3">
-              <FileText size={16} className="text-text-muted shrink-0" />
+            <li key={file.id} className="hairline-b flex items-center gap-3 py-2.5 last:border-b-0">
+              <FileText size={16} strokeWidth={1.5} className="shrink-0 text-ink-muted" />
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{file.filename}</p>
-                <p className="text-[11px] text-text-muted">
+                <p className="truncate text-[13.5px] font-medium">{file.filename}</p>
+                <p className="spec mt-0.5 text-ink-muted">
                   {formatBytes(file.sizeBytes)}
                   {file.pageCount ? ` · ${file.pageCount} pages` : ""}
                   {" · "}
@@ -591,28 +547,27 @@ function UploadedFilesSection() {
                   })}
                 </p>
               </div>
-              <span
-                className="rounded-full px-2.5 py-0.5 text-[10px] font-medium shrink-0"
-                style={{ backgroundColor: meta.bg, color: meta.fg }}
-              >
-                {entry.label}
-              </span>
+              <StateChip status={entry.status} label={entry.label} />
               <button
                 onClick={() => {
-                  if (confirm(`Remove ${file.filename}? Indexed chunks stay until you delete the related knowledge entry.`)) {
+                  if (
+                    confirm(
+                      `Remove ${file.filename}? Indexed chunks stay until you delete the related knowledge entry.`,
+                    )
+                  ) {
                     remove.mutate({ fileId: file.id });
                   }
                 }}
                 disabled={remove.isPending}
-                className="flex h-7 w-7 items-center justify-center rounded-lg text-text-muted hover:bg-[oklch(0.97_0.05_25)] hover:text-error shrink-0"
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[2px] text-ink-muted transition-colors hover:bg-panel hover:text-state-failed disabled:opacity-50"
                 aria-label={`Remove ${file.filename}`}
               >
-                <Trash2 size={14} />
+                <Trash2 size={14} strokeWidth={1.5} />
               </button>
-            </div>
+            </li>
           );
         })}
-      </GlassCard>
+      </ul>
     </section>
   );
 }
@@ -636,11 +591,13 @@ function FilterChip({
   return (
     <button
       onClick={onClick}
-      className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+      aria-pressed={active}
+      className={cn(
+        "chip cursor-pointer transition-colors duration-150",
         active
-          ? "border-black bg-black text-white"
-          : "border-gray-200 bg-white text-text-secondary hover:border-text-secondary"
-      }`}
+          ? "border-ink bg-ink text-white"
+          : "border-hairline bg-transparent text-ink-secondary hover:border-ink hover:text-ink",
+      )}
     >
       {children}
     </button>
@@ -663,33 +620,33 @@ function AddKnowledgeBlock({
     return (
       <button
         onClick={() => setOpen(true)}
-        className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-[oklch(0.8_0.01_260/0.4)] bg-white px-4 py-3 text-sm font-medium text-text-secondary hover:border-brand hover:text-brand"
+        className="flex w-full items-center justify-center gap-2 border border-dashed border-hairline bg-bg px-4 py-3 text-[13.5px] font-medium text-ink-secondary transition-colors hover:border-ink hover:text-ink"
       >
-        <Plus size={14} />
-        Add knowledge
+        <Plus size={16} strokeWidth={1.5} />
+        Add to the library
       </button>
     );
   }
 
   return (
-    <GlassCard hoverable={false} className="p-5 space-y-4">
-      <div className="grid grid-cols-3 gap-2">
+    <div className="panel space-y-4 p-5">
+      <div role="radiogroup" aria-label="Source" className="grid grid-cols-3 gap-1.5">
         <ModeButton
           active={mode === "note"}
           onClick={() => setMode("note")}
-          icon={<FileText size={14} />}
+          icon={<FileText size={14} strokeWidth={1.5} />}
           label="Write a note"
         />
         <ModeButton
           active={mode === "url"}
           onClick={() => setMode("url")}
-          icon={<Globe size={14} />}
+          icon={<Globe size={14} strokeWidth={1.5} />}
           label="Crawl a URL"
         />
         <ModeButton
           active={mode === "file"}
           onClick={() => setMode("file")}
-          icon={<Upload size={14} />}
+          icon={<Upload size={14} strokeWidth={1.5} />}
           label="Upload a file"
         />
       </div>
@@ -722,11 +679,11 @@ function AddKnowledgeBlock({
 
       <button
         onClick={() => setOpen(false)}
-        className="text-xs text-text-muted hover:text-text-secondary"
+        className="spec text-ink-muted underline underline-offset-2 transition-colors hover:text-ink"
       >
         Cancel
       </button>
-    </GlassCard>
+    </div>
   );
 }
 
@@ -743,12 +700,15 @@ function ModeButton({
 }) {
   return (
     <button
+      role="radio"
+      aria-checked={active}
       onClick={onClick}
-      className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-xs font-medium transition-colors ${
+      className={cn(
+        "flex items-center justify-center gap-2 border px-3 py-2 text-[12.5px] font-medium transition-colors duration-150",
         active
-          ? "border-black bg-black text-white"
-          : "border-gray-200 bg-white text-text-secondary hover:border-text-secondary"
-      }`}
+          ? "border-ink bg-ink text-white"
+          : "border-hairline bg-bg text-ink-secondary hover:border-ink hover:text-ink",
+      )}
     >
       {icon}
       {label}
@@ -783,14 +743,12 @@ function NoteForm({ onDone }: { onDone: () => void }) {
 
   return (
     <div className="space-y-3">
-      <div>
-        <label className="block text-xs font-medium text-text-secondary mb-1.5">
-          Category
-        </label>
+      <label className="block">
+        <span className="spec-label">Category</span>
         <select
           value={category}
           onChange={(e) => setCategory(e.target.value as KnowledgeCategory)}
-          className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
+          className={INPUT_CLASS}
         >
           {KNOWLEDGE_CATEGORIES.map((cat) => (
             <option key={cat} value={cat}>
@@ -798,46 +756,36 @@ function NoteForm({ onDone }: { onDone: () => void }) {
             </option>
           ))}
         </select>
-      </div>
-      <div>
-        <label className="block text-xs font-medium text-text-secondary mb-1.5">
-          Title
-        </label>
+      </label>
+      <label className="block">
+        <span className="spec-label">Title</span>
         <input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="e.g. Tone of voice for customer-facing copy"
-          className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
+          className={INPUT_CLASS}
         />
-      </div>
-      <div>
-        <label className="block text-xs font-medium text-text-secondary mb-1.5">
-          Content
-        </label>
+      </label>
+      <label className="block">
+        <span className="spec-label">Content</span>
         <textarea
           value={content}
           onChange={(e) => setContent(e.target.value)}
           rows={5}
-          placeholder="Write what the agent should know. Plain prose works fine."
-          className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand resize-none"
+          placeholder="Write what the roster should know. Plain prose works fine."
+          className={`${INPUT_CLASS} resize-none`}
         />
-      </div>
+      </label>
       <div className="flex justify-end">
         <button
           onClick={handleSave}
-          disabled={
-            create.isPending ||
-            title.trim().length < 3 ||
-            content.trim().length < 5
-          }
-          className="rounded-xl bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+          disabled={create.isPending || title.trim().length < 3 || content.trim().length < 5}
+          className="btn-ink disabled:opacity-50"
         >
-          {create.isPending ? "Saving..." : "Save note"}
+          {create.isPending ? "Saving…" : "File the note"}
         </button>
       </div>
-      {create.error && (
-        <p className="text-xs text-error">{create.error.message}</p>
-      )}
+      {create.error && <p className="text-[13px] text-state-failed">{create.error.message}</p>}
     </div>
   );
 }
@@ -878,33 +826,28 @@ function UrlForm({
 
   return (
     <div className="space-y-3">
-      <div>
-        <label className="block text-xs font-medium text-text-secondary mb-1.5">
-          URL
-        </label>
+      <label className="block">
+        <span className="spec-label">URL</span>
         <input
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           placeholder="https://your-company.com/about"
-          className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
+          className={INPUT_CLASS}
         />
-        <p className="mt-1.5 text-[11px] text-text-muted">
-          The crawler runs in the background. The page becomes searchable in
-          about a minute.
-        </p>
-      </div>
+        <span className="spec mt-1.5 block text-ink-muted">
+          The crawler runs in the background; the page becomes searchable in about a minute.
+        </span>
+      </label>
       <div className="flex justify-end">
         <button
           onClick={handleCrawl}
           disabled={crawl.isPending || url.trim().length < 8}
-          className="rounded-xl bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+          className="btn-ink disabled:opacity-50"
         >
-          {crawl.isPending ? "Queueing..." : "Queue crawl"}
+          {crawl.isPending ? "Queueing…" : "Queue the crawl"}
         </button>
       </div>
-      {crawl.error && (
-        <p className="text-xs text-error">{crawl.error.message}</p>
-      )}
+      {crawl.error && <p className="text-[13px] text-state-failed">{crawl.error.message}</p>}
     </div>
   );
 }
@@ -915,12 +858,8 @@ function FileForm({ onDone }: { onDone: () => void }) {
   const [uploading, setUploading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const requestUpload = useMutation(
-    trpc.knowledge.uploadFile.mutationOptions(),
-  );
-  const triggerProcess = useMutation(
-    trpc.knowledge.processFile.mutationOptions(),
-  );
+  const requestUpload = useMutation(trpc.knowledge.uploadFile.mutationOptions());
+  const triggerProcess = useMutation(trpc.knowledge.processFile.mutationOptions());
 
   async function handleUpload() {
     if (!file) return;
@@ -953,31 +892,28 @@ function FileForm({ onDone }: { onDone: () => void }) {
 
   return (
     <div className="space-y-3">
-      <div>
-        <label className="block text-xs font-medium text-text-secondary mb-1.5">
-          File
-        </label>
+      <label className="block">
+        <span className="spec-label">File</span>
         <input
           type="file"
           accept=".pdf,.txt,.md,.docx"
           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          className="block w-full text-sm text-text-secondary file:mr-3 file:rounded-xl file:border-0 file:bg-black file:px-4 file:py-2 file:text-xs file:font-medium file:text-white hover:file:bg-gray-800"
+          className="mt-1.5 block w-full text-[13px] text-ink-secondary file:mr-3 file:border-0 file:bg-ink file:px-4 file:py-2 file:text-[12.5px] file:font-semibold file:text-white hover:file:bg-[#2C2C29] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
         />
-        <p className="mt-1.5 text-[11px] text-text-muted">
-          PDF, txt, md, or docx. The processor extracts text and embeds it for
-          retrieval.
-        </p>
-      </div>
+        <span className="spec mt-1.5 block text-ink-muted">
+          PDF, txt, md, or docx. Text is extracted and embedded for retrieval.
+        </span>
+      </label>
       <div className="flex justify-end">
         <button
           onClick={handleUpload}
           disabled={!file || uploading}
-          className="rounded-xl bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+          className="btn-ink disabled:opacity-50"
         >
-          {uploading ? "Uploading..." : "Upload and process"}
+          {uploading ? "Uploading…" : "Upload and process"}
         </button>
       </div>
-      {errorMsg && <p className="text-xs text-error">{errorMsg}</p>}
+      {errorMsg && <p className="text-[13px] text-state-failed">{errorMsg}</p>}
     </div>
   );
 }

@@ -4,7 +4,6 @@ import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { GlassCard } from "@beast/ui";
 
 export default function SignInPage() {
   return (
@@ -78,115 +77,124 @@ function SignInForm() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-bg-warm px-6 py-16">
-      <div className="w-full max-w-md">
-        <div className="mb-6 text-center">
-          <p className="text-xs font-medium uppercase tracking-wider text-text-secondary">
-            Beast
-          </p>
-          <h1 className="mt-2 font-(--font-display) text-3xl font-bold tracking-tight">
-            Welcome back
-          </h1>
-          <p className="mt-2 text-sm text-text-secondary">
-            Sign in to your AI employees.
-          </p>
+    <main className="flex min-h-screen items-center justify-center bg-bg px-6 py-16">
+      <div className="w-full max-w-sm">
+        <div className="rule-b flex items-baseline justify-between pb-3">
+          <span className="display-caps text-xl">Beast</span>
+          <span className="spec-label">Manager sign-in</span>
         </div>
 
+        <h1 className="display mt-8 text-3xl">Back to the office.</h1>
+        <p className="mt-2 text-sm text-ink-secondary">
+          Sign in to review what your company shipped.
+        </p>
+
         {message && (
-          <div className="mb-4 rounded-xl bg-blue-50 px-4 py-3 text-center text-sm text-blue-800">
+          <p className="mt-5 border border-emp-alex/40 bg-emp-alex/5 px-3.5 py-2.5 text-sm text-ink">
             {message}
-          </div>
+          </p>
         )}
 
         {urlError && (
-          <div className="mb-4 rounded-xl bg-red-50 px-4 py-3 text-center text-sm text-red-700">
+          <p className="mt-5 border border-state-failed/40 bg-state-failed/5 px-3.5 py-2.5 text-sm text-state-failed">
             {urlError === "auth_callback_failed"
               ? "Authentication failed. Please try again."
               : urlError}
-          </div>
+          </p>
         )}
 
-        <GlassCard hoverable={false} className="p-7">
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label
-                htmlFor="email"
-                className="block text-sm font-medium text-text-secondary"
-              >
-                Email
-              </label>
-              <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                autoComplete="email"
-                placeholder="you@yourcompany.com"
-                className="mt-1.5 block w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-black focus:ring-1 focus:ring-black"
-              />
-            </div>
+        <form onSubmit={handleSubmit} className="mt-7 space-y-5">
+          <Field
+            id="email"
+            label="Email"
+            type="email"
+            value={email}
+            onChange={setEmail}
+            autoComplete="email"
+            placeholder="you@yourcompany.com"
+          />
+          <Field
+            id="password"
+            label="Password"
+            type="password"
+            value={password}
+            onChange={setPassword}
+            autoComplete="current-password"
+          />
 
-            <div>
-              <label
-                htmlFor="password"
-                className="block text-sm font-medium text-text-secondary"
-              >
-                Password
-              </label>
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                autoComplete="current-password"
-                className="mt-1.5 block w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-black focus:ring-1 focus:ring-black"
-              />
-            </div>
-
-            {error && (
-              <div className="space-y-2">
-                <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-                  {error}
-                </p>
-                {isUnconfirmed && (
-                  <button
-                    type="button"
-                    onClick={handleResendConfirmation}
-                    disabled={resending}
-                    className="text-sm font-medium text-black underline disabled:opacity-50"
-                  >
-                    {resending ? "Confirming..." : "Confirm my email and try again"}
-                  </button>
-                )}
-              </div>
-            )}
-
-            {resent && (
-              <p className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">
-                Email confirmed. Try signing in again.
+          {error && (
+            <div className="space-y-2">
+              <p className="border border-state-failed/40 bg-state-failed/5 px-3.5 py-2.5 text-sm text-state-failed">
+                {error}
               </p>
-            )}
+              {isUnconfirmed && (
+                <button
+                  type="button"
+                  onClick={handleResendConfirmation}
+                  disabled={resending}
+                  className="text-sm font-semibold text-ink underline underline-offset-2 disabled:opacity-50"
+                >
+                  {resending ? "Confirming..." : "Confirm my email and try again"}
+                </button>
+              )}
+            </div>
+          )}
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full rounded-xl bg-black px-4 py-3 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
-            >
-              {loading ? "Signing in..." : "Sign in"}
-            </button>
-          </form>
-        </GlassCard>
+          {resent && (
+            <p className="border border-state-accepted/40 bg-state-accepted/5 px-3.5 py-2.5 text-sm text-state-accepted">
+              Email confirmed. Try signing in again.
+            </p>
+          )}
 
-        <p className="mt-6 text-center text-sm text-text-secondary">
-          No account yet?{" "}
-          <Link href="/sign-up" className="font-medium text-black underline">
-            Hire your first AI employee
+          <button type="submit" disabled={loading} className="btn-ink w-full disabled:opacity-50">
+            {loading ? "Signing in..." : "Sign in"}
+          </button>
+        </form>
+
+        <p className="hairline-t mt-8 pt-4 text-sm text-ink-secondary">
+          No company yet?{" "}
+          <Link href="/sign-up" className="font-semibold text-ink underline underline-offset-2">
+            Found one
           </Link>
         </p>
       </div>
     </main>
+  );
+}
+
+function Field({
+  id,
+  label,
+  type,
+  value,
+  onChange,
+  autoComplete,
+  placeholder,
+}: {
+  id: string;
+  label: string;
+  type: string;
+  value: string;
+  onChange: (v: string) => void;
+  autoComplete: string;
+  placeholder?: string;
+}) {
+  return (
+    <div>
+      <label htmlFor={id} className="spec-label block">
+        {label}
+      </label>
+      <input
+        id={id}
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        required
+        autoComplete={autoComplete}
+        placeholder={placeholder}
+        className="mt-1.5 block w-full border border-hairline bg-bg px-3.5 py-2.5 text-sm text-ink outline-none placeholder:text-ink-muted focus-visible:border-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+      />
+    </div>
   );
 }
 

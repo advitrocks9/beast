@@ -1,22 +1,21 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
+import { env } from "@beast/shared/env";
 import * as schema from "./schema";
 
 type Drizzle = ReturnType<typeof drizzle<typeof schema>>;
 
-let cached: Drizzle | null = null;
+// Dev HMR re-evaluates this module per compilation; a module-level cache leaks
+// one pool per rebuild until postgres hits max_connections.
+const globalCache = globalThis as { __beastDb?: Drizzle };
 
 function getDb(): Drizzle {
-  if (cached) return cached;
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) {
-    throw new Error("DATABASE_URL environment variable is required");
-  }
+  if (globalCache.__beastDb) return globalCache.__beastDb;
   // prepare: false keeps this compatible with a pgbouncer transaction-mode
   // pooler (the right choice for serverless), which is the connection a hosted
   // deploy should use. Harmless on a direct/session connection too.
-  cached = drizzle(postgres(connectionString, { prepare: false }), { schema });
-  return cached;
+  globalCache.__beastDb = drizzle(postgres(env.DATABASE_URL, { prepare: false }), { schema });
+  return globalCache.__beastDb;
 }
 
 // Lazy proxy: postgres connection is created on first property access, not at

@@ -1,5 +1,6 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { env, requireEnv } from "@beast/shared/env";
 import { DEMO_MODE } from "@/lib/demo";
 
 const PUBLIC_PREFIXES = [
@@ -8,8 +9,6 @@ const PUBLIC_PREFIXES = [
   "/auth/callback",
   "/pricing",
   "/api/auth/auto-confirm",
-  "/share/", // public deliverable share route
-  "/vs/", // public marketing comparison pages (e.g. /vs/sintra)
 ];
 // Exact-match public paths. Listed separately so "/" does not accidentally
 // match every route via startsWith.
@@ -21,8 +20,6 @@ const PUBLIC_EXACT = [
   "/twitter-image",
   "/favicon.ico",
 ];
-// Routes that require auth but not a company record
-const AUTH_ONLY_ROUTES = ["/onboarding"];
 
 export async function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
@@ -39,15 +36,16 @@ export async function proxy(request: NextRequest) {
   }
 
   // No Supabase env (a bare clone): skip auth so marketing pages still render.
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+  const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!supabaseUrl) {
     return NextResponse.next({ request });
   }
 
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl,
+    requireEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
     {
       cookies: {
         getAll() {

@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { GlassCard } from "@beast/ui";
 import { useTRPC } from "@/trpc/client";
+import { DEMO_MODE } from "@/lib/demo";
 import { roleMeta } from "@/lib/colors";
 
 function formatAction(action: string): string {
@@ -57,8 +57,8 @@ export function AutonomySuggestionBanner() {
   const active = total > 0 ? items[Math.min(activeIdx, total - 1)] : null;
 
   useEffect(() => {
-    if (active && active.state === "queued") {
-      void markShown.mutateAsync({ suggestionId: active.id });
+    if (!DEMO_MODE && active && active.state === "queued") {
+      markShown.mutate({ suggestionId: active.id });
     }
     // We only want to fire once per active id; deliberate dep choice.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -134,7 +134,7 @@ export function AutonomySuggestionBanner() {
 
   return (
     <section aria-label="Trust promotion suggestion">
-      <GlassCard hoverable={false} className="p-5">
+      <div className="panel p-5">
         <div className="flex items-start gap-3">
           <span
             className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
@@ -142,34 +142,34 @@ export function AutonomySuggestionBanner() {
             aria-hidden
           />
           <div className="min-w-0 flex-1">
-            <div className="flex items-baseline justify-between gap-3">
-              <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: role.text }}>
+            <div className="rule-b flex items-baseline justify-between gap-3 pb-2">
+              <p className="spec-label" style={{ color: role.text }}>
                 {active.employeeName} earned trust
               </p>
               <div className="flex items-center gap-3">
                 {counter && (
-                  <span className="text-xs text-text-muted">{counter}</span>
+                  <span className="spec text-ink-muted">{counter}</span>
                 )}
                 <button
                   type="button"
                   onClick={handleDismiss}
                   aria-label="Dismiss suggestion"
                   disabled={pending}
-                  className="text-xs text-text-muted hover:text-foreground disabled:opacity-50"
+                  className="spec-label transition-colors hover:text-ink disabled:opacity-50"
                 >
                   Hide
                 </button>
               </div>
             </div>
             <p
-              className="mt-2 text-sm text-foreground"
+              className="mt-2.5 text-sm text-ink"
               id={`autonomy-${active.id}-sentence`}
             >
               {sentence}
             </p>
             {safety && (
               <p
-                className="mt-2 text-xs text-text-secondary"
+                className="mt-2 text-xs text-ink-secondary"
                 id={`autonomy-${active.id}-safety`}
               >
                 {safety}
@@ -177,14 +177,14 @@ export function AutonomySuggestionBanner() {
             )}
 
             {error && (
-              <p className="mt-2 text-xs text-[oklch(0.55_0.18_30)]">{error}</p>
+              <p className="mt-2 text-xs text-destructive">{error}</p>
             )}
 
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <button
                 type="button"
                 onClick={() => setPanelOpen((v) => !v)}
-                className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-foreground hover:bg-gray-50"
+                className="btn-ghost px-3 py-1.5 text-[12px]"
               >
                 {panelOpen ? "Hide last 8" : "See last 8"}
               </button>
@@ -193,7 +193,7 @@ export function AutonomySuggestionBanner() {
                 onClick={handleSnooze}
                 disabled={pending}
                 aria-describedby={`autonomy-${active.id}-sentence`}
-                className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-foreground hover:bg-gray-50 disabled:opacity-50"
+                className="btn-ghost px-3 py-1.5 text-[12px] disabled:opacity-50"
               >
                 Snooze 14 days
               </button>
@@ -202,7 +202,7 @@ export function AutonomySuggestionBanner() {
                 onClick={handleAccept}
                 disabled={pending}
                 aria-describedby={`autonomy-${active.id}-safety`}
-                className="rounded-lg bg-black px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+                className="btn-ink px-3 py-1.5 text-[12px] disabled:opacity-50"
               >
                 Let {active.employeeName} {active.action === "publishSocial" ? "publish" : active.action === "sendEmail" ? "send" : "reach out"}
               </button>
@@ -210,7 +210,7 @@ export function AutonomySuggestionBanner() {
                 <button
                   type="button"
                   onClick={() => setActiveIdx((i) => (i + 1) % total)}
-                  className="ml-auto text-xs text-text-muted hover:text-foreground"
+                  className="ml-auto spec-label transition-colors hover:text-ink"
                 >
                   Next suggestion &rarr;
                 </button>
@@ -222,7 +222,7 @@ export function AutonomySuggestionBanner() {
             )}
           </div>
         </div>
-      </GlassCard>
+      </div>
     </section>
   );
 }
@@ -238,19 +238,19 @@ function LastEightInline({
 }) {
   if (loading) {
     return (
-      <p className="mt-4 text-xs text-text-muted">Loading last 8...</p>
+      <p className="mt-4 text-xs text-ink-muted">Loading last 8...</p>
     );
   }
   if (rows.length === 0) {
     return (
-      <p className="mt-4 text-xs text-text-muted">
+      <p className="mt-4 text-xs text-ink-muted">
         No approved deliverables found yet.
       </p>
     );
   }
   return (
-    <div className="mt-4 rounded-lg border border-gray-100 bg-[oklch(0.99_0.002_260)] p-3">
-      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+    <div className="panel-tinted mt-4 p-3">
+      <p className="spec-label mb-2">
         These set the streak
       </p>
       <ul className="space-y-2">
@@ -258,17 +258,17 @@ function LastEightInline({
           <li key={r.id} className="flex items-center justify-between gap-3 text-xs">
             <a
               href={`/review/${r.id}`}
-              className="min-w-0 flex-1 truncate text-foreground hover:underline"
+              className="min-w-0 flex-1 truncate text-ink hover:underline"
               title={r.title}
             >
               {r.title}
             </a>
-            <span className="shrink-0 text-text-muted">
+            <span className="shrink-0 text-ink-muted">
               {r.deliverableType}
             </span>
             {r.version === 1 && (
               <span
-                className="shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium"
+                className="shrink-0 rounded-[2px] px-1.5 py-0.5 text-[10px] font-medium"
                 style={{ background: role.tint, color: role.text }}
               >
                 first read

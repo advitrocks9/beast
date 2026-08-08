@@ -1,14 +1,10 @@
 name: Deploy Workers (Trigger.dev)
 
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
-    paths:
-      - "apps/workers/**"
-      - "packages/ai/**"
-      - "packages/db/**"
-      - "packages/shared/**"
-      - "pnpm-lock.yaml"
   workflow_dispatch:
 
 concurrency:
@@ -24,6 +20,7 @@ env:
 
 jobs:
   deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     name: Deploy harness + workers to Trigger.dev (PROD)
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -31,13 +28,12 @@ jobs:
       TRIGGER_ACCESS_TOKEN: ${{ secrets.TRIGGER_ACCESS_TOKEN }}
 
     steps:
-      - name: Guard on TRIGGER_ACCESS_TOKEN
+      # Trigger.dev is optional product infra; skip cleanly until it is provisioned.
+      - name: Check TRIGGER_ACCESS_TOKEN
         id: guard
         run: |
           if [ -z "${TRIGGER_ACCESS_TOKEN}" ]; then
-            echo "::warning::TRIGGER_ACCESS_TOKEN secret not set. Skipping deploy."
-            echo "Push a Personal Access Token from https://cloud.trigger.dev/account/personal-access-tokens"
-            echo "to repo secrets as TRIGGER_ACCESS_TOKEN to enable this workflow."
+            echo "::notice::TRIGGER_ACCESS_TOKEN not set; workers deploy skipped."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
@@ -47,6 +43,7 @@ jobs:
         if: steps.guard.outputs.skip == 'false'
         with:
           persist-credentials: false
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - uses: pnpm/action-setup@v4
         if: steps.guard.outputs.skip == 'false'

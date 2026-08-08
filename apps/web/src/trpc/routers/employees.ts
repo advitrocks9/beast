@@ -1,7 +1,8 @@
 import { z } from "zod";
-import { eq, and, inArray } from "drizzle-orm";
-import { aiEmployees, functions, activityLog, companies } from "@beast/db";
-import { getPersona, getEmployeeName, getRoleTitle, upsertProceduralRule } from "@beast/ai";
+import { eq, and } from "drizzle-orm";
+import { aiEmployees, activityLog, companies } from "@beast/db";
+import { getPersona, getEmployeeName, getRoleTitle, seedFounderRule } from "@beast/ai";
+import { assertWithinEmployeeLimit } from "@/lib/entitlements";
 import { createTRPCRouter, protectedProcedure } from "../init";
 
 const DEFAULT_AUTONOMY = {
@@ -48,10 +49,11 @@ export const employeesRouter = createTRPCRouter({
   hire: protectedProcedure
     .input(z.object({
       roleType: z.enum(["marketing", "sales", "support"]),
-      functionIds: z.array(z.string().uuid()),
       initialFocus: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
+      await assertWithinEmployeeLimit(ctx.db, ctx.companyId);
+
       const company = await ctx.db.query.companies.findFirst({
         where: eq(companies.id, ctx.companyId),
         columns: { name: true },
@@ -59,11 +61,6 @@ export const employeesRouter = createTRPCRouter({
 
       const systemPrompt = getPersona(input.roleType, company?.name ?? "your company");
 
-      // Atomic so a failure between the employee insert and the function
-      // link can't leave an employee on /employees that isn't attached to
-      // any function the founder selected. The hire form is the only entry
-      // point for function selection, so an unlinked employee can't be
-      // healed without DB surgery.
       const employee = await ctx.db.transaction(async (tx) => {
         const [created] = await tx.insert(aiEmployees).values({
           companyId: ctx.companyId,
@@ -76,18 +73,6 @@ export const employeesRouter = createTRPCRouter({
           checkInFrequency: "daily",
           status: "idle",
         }).returning();
-
-        if (created && input.functionIds.length > 0) {
-          await tx
-            .update(functions)
-            .set({ aiEmployeeId: created.id })
-            .where(
-              and(
-                inArray(functions.id, input.functionIds),
-                eq(functions.companyId, ctx.companyId),
-              ),
-            );
-        }
 
         if (created) {
           await tx.insert(activityLog).values({
@@ -111,16 +96,14 @@ export const employeesRouter = createTRPCRouter({
       if (employee && input.initialFocus && input.initialFocus.trim().length >= 10) {
         const focus = input.initialFocus.trim().slice(0, 800);
         try {
-          await upsertProceduralRule({
+          await seedFounderRule({
             agentId: employee.id,
             tenantId: ctx.companyId,
             ruleType: "style_rule",
             title: `Founder hiring brief`,
             description: focus,
             taskScope: ["all"],
-            sourceEpisodes: [],
-            signalCount: 1,
-            signalWeight: 2.5,
+            weight: 2.5,
           });
         } catch (err) {
           console.error("[hire] initialFocus rule seed failed", err);

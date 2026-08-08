@@ -2,7 +2,7 @@ import { db, tasks, deliverables, aiEmployees, companies, activityLog } from "@b
 import { eq, and } from "drizzle-orm";
 import type { TaskPlan, PlanStep, AdvanceResult } from "./types";
 
-type StepStatus = "pending" | "working" | "review" | "approved" | "failed";
+type StepStatus = "running" | "in_review" | "accepted" | "halted";
 
 /** Payload that callers use to trigger the execute-task job. */
 export interface SpawnPayload {
@@ -20,16 +20,7 @@ export interface SpawnPayload {
   };
 }
 
-/**
- * Core chain orchestrator. Stateless - called from multiple sites:
- * 1. tasks.approvePlan (initial kickoff)
- * 2. execute-task worker (after non-gated child completes)
- * 3. deliverables.approve (after gated child is approved)
- *
- * Determines the next action for a multi-step chain.
- * Does NOT call Trigger.dev directly - returns a SpawnPayload
- * that the caller uses to trigger the execute-task job.
- */
+// Stateless; spawns via the injected trigger so it stays importable outside apps/workers.
 export async function advanceChain(
   parentTaskId: string,
   triggerTask: (payload: SpawnPayload) => Promise<{ id: string }>,
@@ -42,7 +33,7 @@ export async function advanceChain(
     return { action: "no_plan" };
   }
 
-  const plan = parent.plan as unknown as TaskPlan;
+  const plan = parent.plan as TaskPlan;
   if (!plan.steps?.length) {
     return { action: "no_plan" };
   }
@@ -57,14 +48,14 @@ export async function advanceChain(
     if (!stepId) continue;
 
     let status: StepStatus;
-    if (child.status === "cancelled") {
-      status = "failed";
-    } else if (child.status === "approved" || child.status === "published") {
-      status = "approved";
-    } else if (child.status === "review" || child.status === "revision") {
-      status = "review";
+    if (child.status === "cancelled" || child.status === "failed" || child.status === "timed_out") {
+      status = "halted";
+    } else if (child.status === "accepted" || child.status === "published") {
+      status = "accepted";
+    } else if (child.status === "in_review" || child.status === "revising") {
+      status = "in_review";
     } else {
-      status = "working";
+      status = "running";
     }
 
     stepStatuses.set(stepId, { status, taskId: child.id });
@@ -72,13 +63,16 @@ export async function advanceChain(
 
   for (const step of plan.steps) {
     const info = stepStatuses.get(step.stepId);
-    if (info?.status === "failed") {
-      // Atomic: cancel parent + emit activity row so the founder sees
-      // why their multi-step campaign stopped instead of finding it
-      // silently flipped to "cancelled" on /dashboard/tasks.
+    if (info?.status === "halted") {
+      // Atomic: halt parent + emit activity row so the founder sees why
+      // their multi-step campaign stopped. The parent mirrors the child's
+      // terminal kind: a founder-cancelled child cancels the chain, a
+      // crashed or timed-out child fails it.
+      const haltedChild = children.find((c) => c.id === info.taskId);
+      const parentStatus = haltedChild?.status === "cancelled" ? "cancelled" : "failed";
       await db.transaction(async (tx) => {
         await tx.update(tasks).set({
-          status: "cancelled",
+          status: parentStatus,
           completedAt: new Date(),
         }).where(eq(tasks.id, parentTaskId));
 
@@ -100,14 +94,14 @@ export async function advanceChain(
 
   for (const step of plan.steps) {
     const info = stepStatuses.get(step.stepId);
-    if (info?.status === "working") {
+    if (info?.status === "running") {
       return { action: "already_running", stepId: step.stepId };
     }
   }
 
   for (const step of plan.steps) {
     const info = stepStatuses.get(step.stepId);
-    if (info?.status === "review" && step.humanGate) {
+    if (info?.status === "in_review" && step.humanGate) {
       return { action: "waiting_gate", stepId: step.stepId };
     }
   }
@@ -118,7 +112,7 @@ export async function advanceChain(
 
     const depsReady = step.dependsOn.every((depId) => {
       const dep = stepStatuses.get(depId);
-      return dep?.status === "approved";
+      return dep?.status === "accepted";
     });
 
     if (depsReady) {
@@ -128,14 +122,14 @@ export async function advanceChain(
   }
 
   if (!nextStep) {
-    const allApproved = plan.steps.every((step) => {
+    const allAccepted = plan.steps.every((step) => {
       const info = stepStatuses.get(step.stepId);
-      return info?.status === "approved";
+      return info?.status === "accepted";
     });
 
-    if (allApproved) {
+    if (allAccepted) {
       await db.update(tasks).set({
-        status: "approved",
+        status: "accepted",
         completedAt: new Date(),
       }).where(eq(tasks.id, parentTaskId));
       return { action: "chain_complete" };
@@ -192,8 +186,8 @@ export async function advanceChain(
     stepTaskMap: { ...plan.stepTaskMap, [nextStep.stepId]: child.id },
   };
   await db.update(tasks).set({
-    plan: updatedPlan as unknown as Record<string, unknown>,
-    status: "working",
+    plan: updatedPlan,
+    status: "running",
   }).where(eq(tasks.id, parentTaskId));
 
   const handle = await triggerTask({
@@ -213,7 +207,7 @@ export async function advanceChain(
 
   await db.update(tasks).set({
     triggerRunId: handle.id,
-    status: "working",
+    status: "running",
     startedAt: new Date(),
   }).where(eq(tasks.id, child.id));
 

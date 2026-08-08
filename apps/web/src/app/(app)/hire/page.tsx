@@ -3,11 +3,11 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { db } from "@beast/db";
 import { companies, aiEmployees } from "@beast/db";
-import { GlassCard } from "@beast/ui";
-import { roleColor } from "@/lib/colors";
+import { roleMeta } from "@/lib/colors";
+import { Monogram } from "@/components/monogram";
 import { HireButton } from "./_components/hire-button";
 
-interface RoleCard {
+interface RoleApplication {
   roleType: "marketing" | "sales" | "support";
   name: string;
   roleTitle: string;
@@ -15,7 +15,7 @@ interface RoleCard {
   willHandle: string[];
 }
 
-const ROLE_CARDS: RoleCard[] = [
+const ROLE_APPLICATIONS: RoleApplication[] = [
   {
     roleType: "marketing",
     name: "Alex",
@@ -39,6 +39,10 @@ const ROLE_CARDS: RoleCard[] = [
   },
 ];
 
+export const metadata = {
+  title: "Hire - Beast",
+};
+
 export default async function HirePage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -50,75 +54,119 @@ export default async function HirePage() {
 
   const existing = await db.query.aiEmployees.findMany({
     where: eq(aiEmployees.companyId, company!.id),
-    columns: { id: true, name: true, roleType: true },
+    columns: { id: true, name: true, roleType: true, roleTitle: true },
   });
 
   const existingByRole = new Map(existing.map((e) => [e.roleType, e]));
+  const rosterFull = ROLE_APPLICATIONS.every((a) => existingByRole.has(a.roleType));
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <div>
-        <h1 className="font-(--font-display) text-2xl font-bold tracking-tight">Hire an AI employee</h1>
-        <p className="mt-1 text-sm text-text-secondary">
-          Three roles cover the most common SMB workloads. Hire the ones you need; you can always adjust autonomy and check-ins later from each desk.
+    <div className="mx-auto max-w-5xl">
+      <header className="rule-b pb-4">
+        <h1 className="display text-3xl">Hire</h1>
+        <p className="spec mt-1.5 text-ink-muted">
+          {existingByRole.size} of 3 role applications filled
         </p>
-      </div>
+      </header>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        {ROLE_CARDS.map((card) => {
-          const already = existingByRole.get(card.roleType);
-          const color = roleColor(card.roleType);
-          return (
-            <GlassCard key={card.roleType} hoverable={false} className="p-5 flex flex-col">
-              <div className="flex items-start gap-3 mb-3">
-                <div
-                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-white text-lg font-bold"
-                  style={{ backgroundColor: color }}
-                >
-                  {card.name[0]}
-                </div>
-                <div>
-                  <p className="text-base font-semibold">{card.name}</p>
-                  <p className="text-xs text-text-secondary">{card.roleTitle}</p>
-                </div>
-              </div>
-
-              <p className="text-sm text-text leading-relaxed mb-4">{card.blurb}</p>
-
-              <p className="text-[11px] font-medium uppercase tracking-wider text-text-muted mb-2">
-                Will handle
-              </p>
-              <ul className="space-y-1 text-xs text-text-secondary mb-5">
-                {card.willHandle.map((item) => (
-                  <li key={item} className="flex items-start gap-2">
-                    <span
-                      className="mt-1.5 inline-block h-1 w-1 rounded-full shrink-0"
-                      style={{ backgroundColor: color }}
-                    />
-                    {item}
-                  </li>
-                ))}
-              </ul>
-
-              <div className="mt-auto">
-                {already ? (
+      {rosterFull ? (
+        <section aria-label="Roster complete" className="panel-tinted mt-5 p-5">
+          <p className="spec-label">Roster complete</p>
+          <h2 className="mt-2 text-lg font-bold">All three roles are filled.</h2>
+          <p className="mt-1.5 max-w-2xl text-[13.5px] leading-relaxed text-ink-secondary">
+            The company does not grow by headcount. A role is configuration: tune autonomy,
+            check-in cadence, and focus from each desk, and the manual&apos;s standing rules carry the
+            rest forward.
+          </p>
+          <ul className="mt-4">
+            {ROLE_APPLICATIONS.map((app) => {
+              const emp = existingByRole.get(app.roleType)!;
+              return (
+                <li key={app.roleType} className="hairline-b last:border-b-0">
                   <Link
-                    href={`/employees/${already.id}`}
-                    className="block rounded-xl border border-[oklch(0.85_0.01_260/0.4)] bg-white px-4 py-2 text-center text-sm font-medium text-text-secondary hover:border-text hover:text-text"
+                    href={`/employees/${emp.id}`}
+                    className="flex items-center gap-3 py-2.5 transition-colors hover:bg-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
                   >
-                    Open {already.name}&rsquo;s desk
+                    <Monogram name={emp.name} roleType={app.roleType} size="sm" />
+                    <span className="min-w-0 flex-1 truncate text-[13.5px] font-medium">
+                      {emp.name} · {emp.roleTitle}
+                    </span>
+                    <span className="spec-label shrink-0">Open desk</span>
                   </Link>
-                ) : (
-                  <HireButton roleType={card.roleType} hex={color} />
-                )}
-              </div>
-            </GlassCard>
-          );
-        })}
-      </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : (
+        <div className="mt-1">
+          {ROLE_APPLICATIONS.map((app, i) => {
+            const hired = existingByRole.get(app.roleType);
+            const role = roleMeta(app.roleType);
+            return (
+              <section
+                key={app.roleType}
+                aria-label={`${app.name} application`}
+                className="rule-t mt-4 pt-4 pb-5 first:mt-5"
+              >
+                <div className="grid gap-4 md:grid-cols-[auto_1fr_240px] md:gap-6">
+                  <span className="flex shrink-0 flex-col items-center gap-1">
+                    <Monogram name={app.name} roleType={app.roleType} size="xl" />
+                    <span className="spec text-ink-muted">{role.solid}</span>
+                  </span>
 
-      <p className="text-center text-xs text-text-muted">
-        Need a role we do not list? Functions outside marketing, sales, and support stay on the human side for now.
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-baseline gap-x-2.5">
+                      <h2 className="display text-2xl">{app.name}</h2>
+                      <span className="spec text-ink-muted">
+                        {String(i + 1).padStart(2, "0")} / {app.roleTitle}
+                      </span>
+                    </div>
+                    <p className="mt-1.5 text-[13.5px] leading-relaxed text-ink-secondary">
+                      {app.blurb}
+                    </p>
+                    <p className="spec-label mt-3">Will handle</p>
+                    <ul className="mt-1.5 grid gap-x-4 gap-y-1 sm:grid-cols-2">
+                      {app.willHandle.map((item) => (
+                        <li
+                          key={item}
+                          className="flex items-baseline gap-2 text-[12.5px] text-ink-secondary"
+                        >
+                          <span
+                            aria-hidden
+                            className="inline-block h-1.5 w-1.5 shrink-0"
+                            style={{ backgroundColor: role.solid }}
+                          />
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="md:pt-1">
+                    {hired ? (
+                      <div className="space-y-2">
+                        <Link
+                          href={`/employees/${hired.id}`}
+                          className="btn-ghost w-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+                        >
+                          Open {hired.name}&apos;s desk
+                        </Link>
+                        <p className="spec-label text-center">On the roster</p>
+                      </div>
+                    ) : (
+                      <HireButton roleType={app.roleType} name={app.name} hex={role.solid} />
+                    )}
+                  </div>
+                </div>
+              </section>
+            );
+          })}
+        </div>
+      )}
+
+      <p className="hairline-t mt-6 pt-3 spec-label">
+        Marketing, sales, support. Functions outside these stay on the human side for now.
       </p>
     </div>
   );

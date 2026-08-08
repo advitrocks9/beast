@@ -4,8 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTRPC } from "@/trpc/client";
-import { GlassCard } from "@beast/ui";
-import { roleColor } from "@/lib/colors";
+import { Monogram } from "@/components/monogram";
 
 interface TaskCommentsProps {
   taskId: string;
@@ -14,6 +13,16 @@ interface TaskCommentsProps {
 }
 
 const MIN_COMMENT_CHARS = 2;
+const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink";
+
+function stamp(iso: string | Date): string {
+  return new Date(iso).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
 
 export function TaskComments({ taskId, employeeName, employeeRoleType }: TaskCommentsProps) {
   const trpc = useTRPC();
@@ -45,7 +54,6 @@ export function TaskComments({ taskId, employeeName, employeeRoleType }: TaskCom
   });
 
   const items = comments.data ?? [];
-  const roleHex = roleColor(employeeRoleType);
   const hasFounderComment = items.some((c) => c.role === "user");
 
   function handleSubmit(e: React.FormEvent) {
@@ -62,55 +70,44 @@ export function TaskComments({ taskId, employeeName, employeeRoleType }: TaskCom
   }, [post.error]);
 
   return (
-    <section>
-      <h2 className="text-sm font-semibold mb-2">
-        Comments
-        {items.length > 0 && (
-          <span className="ml-2 text-xs font-normal text-text-muted">
-            ({items.length})
-          </span>
-        )}
-      </h2>
+    <section aria-label="Comments" className="mt-5">
+      <div className="rule-t flex items-baseline justify-between pt-2.5">
+        <h2 className="text-[15px] font-semibold">Comments</h2>
+        {items.length > 0 && <span className="spec text-ink-muted">{items.length}</span>}
+      </div>
 
       {items.length > 0 && (
-        <div className="space-y-2 mb-3">
+        <ul className="mt-1">
           {items.map((c) => (
-            <GlassCard key={c.id} hoverable={false} className="p-3">
-              <div className="flex items-start gap-3">
+            <li key={c.id} className="hairline-b flex gap-3 py-3 last:border-b-0">
+              {c.role === "assistant" ? (
+                <Monogram name={employeeName} roleType={employeeRoleType} size="sm" />
+              ) : (
                 <span
-                  className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white"
-                  style={{
-                    backgroundColor: c.role === "assistant" ? roleHex : "#111827",
-                  }}
+                  aria-hidden
+                  className="inline-flex h-6 w-6 shrink-0 select-none items-center justify-center rounded-[2px] bg-ink font-mono text-[10px] uppercase text-white"
                 >
-                  {c.role === "assistant" ? employeeName[0] : "Y"}
+                  Yo
                 </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="text-xs font-medium">
-                      {c.role === "assistant" ? employeeName : "You"}
-                    </p>
-                    <span className="text-[10px] text-text-muted">
-                      {new Date(c.createdAt).toLocaleString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                        hour: "numeric",
-                        minute: "2-digit",
-                      })}
-                    </span>
-                  </div>
-                  <p className="mt-1 whitespace-pre-wrap text-sm text-text leading-relaxed">
-                    {c.content}
-                  </p>
-                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="flex flex-wrap items-baseline gap-x-2">
+                  <span className="text-[13px] font-semibold">
+                    {c.role === "assistant" ? employeeName : "You"}
+                  </span>
+                  <span className="spec text-ink-muted">{stamp(c.createdAt)}</span>
+                </p>
+                <p className="mt-1 whitespace-pre-wrap text-[13.5px] leading-relaxed text-ink-secondary">
+                  {c.content}
+                </p>
               </div>
-            </GlassCard>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
 
-      <form onSubmit={handleSubmit}>
-        <GlassCard hoverable={false} className="p-3">
+      <form onSubmit={handleSubmit} className="mt-3">
+        <div className="rounded-[2px] border border-hairline bg-bg p-3 transition-colors focus-within:border-ink">
           <textarea
             ref={inputRef}
             value={draft}
@@ -121,9 +118,9 @@ export function TaskComments({ taskId, employeeName, employeeRoleType }: TaskCom
                 handleSubmit(e);
               }
             }}
-            placeholder={`Comment for ${employeeName}. Course-correct, add context, or note feedback. The next run reads it.`}
+            placeholder={`Comment for ${employeeName}. Course-correct or add context; the next run reads it.`}
             rows={2}
-            className="w-full resize-none bg-transparent text-sm outline-none placeholder:text-text-muted"
+            className="w-full resize-none bg-transparent text-[13.5px] outline-none placeholder:text-ink-muted"
             style={{ maxHeight: "200px" }}
             onInput={(e) => {
               const target = e.target as HTMLTextAreaElement;
@@ -131,42 +128,34 @@ export function TaskComments({ taskId, employeeName, employeeRoleType }: TaskCom
               target.style.height = `${target.scrollHeight}px`;
             }}
           />
-          <div className="mt-2 flex items-center justify-between">
-            <p className="text-[11px] text-text-muted">
-              Cmd+Enter to send. Comments are kept on the task forever.
-            </p>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+            <p className="spec-label">cmd+enter to send · kept on the ticket</p>
             <button
               type="submit"
               disabled={draft.trim().length < MIN_COMMENT_CHARS || post.isPending}
-              className="rounded-full bg-black px-4 py-1.5 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-30"
+              className={`btn-ink disabled:opacity-40 ${FOCUS}`}
             >
               {post.isPending ? "Posting..." : "Post comment"}
             </button>
           </div>
-        </GlassCard>
-        {post.error && (
-          <p className="mt-2 text-xs text-error">{post.error.message}</p>
-        )}
+        </div>
+        {post.error && <p className="spec mt-2 text-state-failed">{post.error.message}</p>}
       </form>
 
       {hasFounderComment && (
-        <div className="mt-3 flex items-center justify-end gap-2">
-          <p className="text-[11px] text-text-muted">
-            Run again with your latest comment as guidance.
-          </p>
+        <div className="hairline-t mt-3 flex flex-wrap items-center justify-between gap-2 pt-2.5">
+          <p className="spec-label">The next run reads your latest comment.</p>
           <button
             type="button"
             onClick={() => rerun.mutate({ taskId })}
             disabled={rerun.isPending}
-            className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-text-secondary hover:border-text-secondary hover:text-text disabled:opacity-50"
+            className={`btn-ghost disabled:opacity-50 ${FOCUS}`}
           >
-            {rerun.isPending ? "Spawning..." : "Re-run with this guidance"}
+            {rerun.isPending ? "Commissioning..." : "Re-run with this guidance"}
           </button>
         </div>
       )}
-      {rerun.error && (
-        <p className="mt-2 text-xs text-error">{rerun.error.message}</p>
-      )}
+      {rerun.error && <p className="spec mt-2 text-state-failed">{rerun.error.message}</p>}
     </section>
   );
 }

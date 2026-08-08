@@ -1,62 +1,22 @@
-/**
- * AG-UI event types streamed from agent tasks to the frontend.
- * These map to the AgentEvent union in @beast/ai but are defined
- * here so the frontend can consume them without importing @beast/ai.
- */
-export interface AGUITextDelta {
-  type: "TEXT_MESSAGE_CONTENT";
-  delta: string;
+export type RunStreamKind = "live" | "replay" | "simulated";
+
+export interface RunScratchpadItem {
+  id: string;
+  description: string;
+  status: "pending" | "in_progress" | "done" | "blocked";
 }
 
-export interface AGUIToolCallStart {
-  type: "TOOL_CALL_START";
-  toolName: string;
-  toolCallId: string;
-}
+export type AgentRunEvent =
+  | { type: "run_start"; taskId: string; agentName: string; provider?: string }
+  | { type: "text_delta"; text: string }
+  | { type: "tool_call_start"; toolName: string; toolCallId: string }
+  | { type: "tool_call_end"; toolName: string; toolCallId: string; result: string }
+  | { type: "scratchpad_update"; items: RunScratchpadItem[] }
+  | { type: "iteration"; number: number; totalTokens: number }
+  | { type: "error"; message: string; recoverable: boolean }
+  | { type: "run_end"; output: string; iterations: number; durationMs: number };
 
-export interface AGUIToolCallResult {
-  type: "TOOL_CALL_RESULT";
-  toolCallId: string;
-  toolName: string;
-  result: string;
+export interface RunStreamEvent {
+  kind: RunStreamKind;
+  event: AgentRunEvent;
 }
-
-export interface AGUIScratchpadUpdate {
-  type: "SCRATCHPAD_UPDATE";
-  items: { id: string; description: string; status: string }[];
-}
-
-export interface AGUIIteration {
-  type: "ITERATION";
-  number: number;
-  totalTokens: number;
-}
-
-export interface AGUITaskComplete {
-  type: "TASK_COMPLETE";
-  output: string;
-  iterations: number;
-  durationMs: number;
-}
-
-export interface AGUITaskError {
-  type: "TASK_ERROR";
-  error: string;
-  recoverable: boolean;
-}
-
-export interface AGUIRunStart {
-  type: "RUN_START";
-  taskId: string;
-  agentName: string;
-}
-
-export type AGUIEvent =
-  | AGUITextDelta
-  | AGUIToolCallStart
-  | AGUIToolCallResult
-  | AGUIScratchpadUpdate
-  | AGUIIteration
-  | AGUITaskComplete
-  | AGUITaskError
-  | AGUIRunStart;

@@ -2,6 +2,7 @@ import { postTweet } from "./twitter";
 import { createPost as createLinkedInPost, getUserUrn } from "./linkedin";
 import { createPost as createWordPressPost } from "./wordpress";
 import { decryptToken } from "@beast/shared";
+import { requireEnv } from "@beast/shared/env";
 
 export { buildOAuthUrl as buildTwitterOAuthUrl, exchangeOAuthToken as exchangeTwitterToken } from "./twitter";
 export { buildAuthUrl as buildLinkedInAuthUrl, exchangeCode as exchangeLinkedInCode, refreshAccessToken as refreshLinkedInToken, getUserUrn } from "./linkedin";
@@ -39,8 +40,8 @@ export async function publishToPlatform(
   switch (platform) {
     case "twitter": {
       const text = extractText(deliverable);
-      const consumerKey = process.env.TWITTER_API_KEY!;
-      const consumerSecret = process.env.TWITTER_API_SECRET!;
+      const consumerKey = requireEnv("TWITTER_API_KEY");
+      const consumerSecret = requireEnv("TWITTER_API_SECRET");
       // OAuth 1.0a token secret is encrypted at rest in metadata.
       // accessTokenSecretEnc (base64 of the AES-GCM blob); fall back to a legacy
       // plaintext accessTokenSecret for rows minted before encryption.

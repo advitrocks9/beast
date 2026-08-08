@@ -2,6 +2,7 @@ import { task } from "@trigger.dev/sdk";
 import { db, connectors } from "@beast/db";
 import { eq, and } from "drizzle-orm";
 import { decryptToken } from "@beast/shared";
+import { env } from "@beast/shared/env";
 import {
   postSlackMessage,
   formatTaskCompletion,
@@ -87,7 +88,7 @@ export const slackNotifyJob = task({
       return { skipped: true, reason: "No channel ID in connector metadata" };
     }
 
-    const appUrl = process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+    const appUrl = env.APP_URL ?? env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
     const message = formatMessage(payload, appUrl);
 
     const result = await postSlackMessage({

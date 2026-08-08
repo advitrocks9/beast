@@ -1,8 +1,4 @@
-// Shared activity-feed helpers used by both the dashboard ActivityFeed
-// client component and the per-employee /employees/[id] server-rendered
-// recent activity card. New actionTypes added in this session
-// (deliverable_rejected / task_cancelled / goal_completed / etc.) need
-// coverage in both places; centralising avoids the drift.
+// Single source for activity phrasing; every surface rendering activity_log rows uses it.
 
 /**
  * actionTypes that should not appear in any user-facing activity feed:
@@ -183,7 +179,7 @@ export function formatActivityPhrase(actionType: string, detail: Record<string, 
       const failedStepName = pickString(detail, "failedStepName");
       const what = taskTitle ? `"${truncateReason(taskTitle, 60)}"` : "a multi-step task";
       const where = failedStepName ? ` at step "${truncateReason(failedStepName, 60)}"` : "";
-      return `had ${what} stop${where}. The chain was cancelled.`;
+      return `had ${what} stop${where}. The chain did not finish.`;
     }
     default:
       return actionType.replace(/_/g, " ") + ".";

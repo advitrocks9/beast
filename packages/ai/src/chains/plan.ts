@@ -1,4 +1,4 @@
-import { getClient, getModelId } from "../models";
+import { complete } from "../provider";
 import type { TaskPlan, PlanStep } from "./types";
 
 interface AvailableSkill {
@@ -9,7 +9,7 @@ interface AvailableSkill {
 
 /**
  * Generate a multi-step execution plan from a user's objective.
- * Uses Claude Sonnet to break the objective into sequential steps,
+ * Uses the deep tier to break the objective into sequential steps,
  * each mapped to an available skill.
  *
  * Gate policy: only the final step has humanGate=true by default.
@@ -21,15 +21,14 @@ export async function generatePlan(input: {
   availableSkills: AvailableSkill[];
   employeesByRole?: Record<string, { id: string; name: string }>;
 }): Promise<TaskPlan> {
-  const client = getClient();
-
   const skillList = input.availableSkills
     .map((s) => `- ${s.id} (${s.employeeType}): ${s.name}`)
     .join("\n");
 
-  const completion = await client.messages.create({
-    model: getModelId("sonnet"),
-    max_tokens: 2048,
+  const raw = await complete({
+    tier: "deep",
+    purpose: "plan",
+    maxTokens: 2048,
     system: `You are a task planning agent for ${input.companyName}. Break down objectives into sequential steps.
 
 Rules:
@@ -39,9 +38,7 @@ Rules:
 - Each step's brief should describe what that specific step needs to produce
 - Assign each step to the role that matches the skill's employee type
 - Return valid JSON matching the schema exactly`,
-    messages: [{
-      role: "user",
-      content: `Objective: ${input.objective}
+    prompt: `Objective: ${input.objective}
 
 Context from brief: ${JSON.stringify(input.brief).slice(0, 1000)}
 
@@ -69,10 +66,8 @@ Return a JSON plan:
     }
   ]
 }`,
-    }],
   });
 
-  const raw = completion.content[0]?.type === "text" ? completion.content[0].text : "{}";
   const cleaned = raw.replace(/^```json?\s*/i, "").replace(/\s*```$/, "");
   const parsed = JSON.parse(cleaned) as { steps: PlanStep[] };
 

@@ -47,18 +47,6 @@ const CATEGORY_REVISIT_LABEL: Record<string, string> = {
 // state-machine threshold.
 const CHIPS_HIDE_AT_SCORE = 60;
 
-function TypingIndicator() {
-  return (
-    <div className="flex items-center gap-1 px-4 py-3">
-      <div className="flex gap-1">
-        <span className="h-2 w-2 animate-bounce rounded-full bg-text-muted [animation-delay:0ms]" />
-        <span className="h-2 w-2 animate-bounce rounded-full bg-text-muted [animation-delay:150ms]" />
-        <span className="h-2 w-2 animate-bounce rounded-full bg-text-muted [animation-delay:300ms]" />
-      </div>
-    </div>
-  );
-}
-
 export function InterviewChat({
   companyName,
   initialProgress,
@@ -69,7 +57,7 @@ export function InterviewChat({
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
-      content: `Hey! I'm going to help you set up Beast for ${companyName}. The more I know about your company, the better your AI employees will perform.\n\nLet's start simple - what does ${companyName} do?`,
+      content: `This interview seeds the company file for ${companyName}. The more it holds, the better your employees work.\n\nStart simple: what does ${companyName} do?`,
     },
   ]);
   const [input, setInput] = useState("");
@@ -84,28 +72,19 @@ export function InterviewChat({
 
   const sendMessage = useMutation(trpc.onboarding.sendMessage.mutationOptions());
   const skipCategory = useMutation(trpc.onboarding.skipCategory.mutationOptions());
-  const trackChip = useMutation(trpc.events.track.mutationOptions());
 
-  // Auto-scroll to bottom on new messages
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, isTyping]);
 
-  // Focus input on mount
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
 
-  // Fire onboarding_chip_shown once per category, when the chip group becomes
-  // visible. The ref tracks the last category we already reported, so a stale
-  // re-render does not double-count.
-  const lastShownCategoryRef = useRef<string | null>(null);
-
-  // Founder taps a filled category in the sidebar -> push a synthetic user
-  // message asking to revisit it. Keyed off revisitTrigger.nonce so the same
-  // category can be revisited multiple times in one session.
+  // Sidebar amend taps push a synthetic user message; keyed off nonce so the
+  // same category can be revisited repeatedly in one session.
   const lastRevisitNonceRef = useRef<number | null>(null);
   useEffect(() => {
     if (!revisitTrigger) return;
@@ -130,7 +109,7 @@ export function InterviewChat({
         } catch {
           setMessages((p) => [
             ...p,
-            { role: "assistant", content: "Sorry, I had trouble processing that. Could you try again?" },
+            { role: "assistant", content: "That did not go through. Say it again?" },
           ]);
         } finally {
           setIsTyping(false);
@@ -165,17 +144,13 @@ export function InterviewChat({
       setContextScore(result.progress.contextScore);
       setNextCategory(result.progress.nextUnfilledCategory ?? null);
 
-      // If context score >= 40, show option to continue
       if (result.progress.contextScore >= 40) {
         onReadyToContinue();
       }
     } catch {
       setMessages((prev) => [
         ...prev,
-        {
-          role: "assistant",
-          content: "Sorry, I had trouble processing that. Could you try again?",
-        },
+        { role: "assistant", content: "That did not go through. Say it again?" },
       ]);
     } finally {
       setIsTyping(false);
@@ -189,25 +164,17 @@ export function InterviewChat({
     }
   }
 
-  function handleChipPick(body: string, label: string, index: number) {
+  function handleChipPick(body: string) {
     setInput(body);
     inputRef.current?.focus();
-    trackChip.mutate({
-      eventName: "onboarding_chip_tapped",
-      properties: { category: nextCategory, label, index, contextScore },
-    });
   }
 
-  async function handleChipSkip(category: string, label: string, index: number) {
+  async function handleChipSkip(category: string) {
     try {
       await skipCategory.mutateAsync({ category });
     } catch {
       // Best-effort skip; silent failure does not block the UX.
     }
-    trackChip.mutate({
-      eventName: "onboarding_chip_skipped",
-      properties: { category, label, index, contextScore },
-    });
     setNextCategory((current) => (current === category ? null : current));
   }
 
@@ -220,74 +187,64 @@ export function InterviewChat({
     lastMessage?.role === "assistant" &&
     nextCategory !== null;
 
-  useEffect(() => {
-    if (!showChips || !nextCategory) return;
-    if (lastShownCategoryRef.current === nextCategory) return;
-    lastShownCategoryRef.current = nextCategory;
-    trackChip.mutate({
-      eventName: "onboarding_chip_shown",
-      properties: { category: nextCategory, contextScore },
-    });
-  }, [showChips, nextCategory, contextScore, trackChip]);
-
   return (
-    <div className="flex h-full flex-col">
-      {/* Messages */}
+    <div className="flex h-full min-h-0 flex-col">
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 py-4">
-        <div className="mx-auto max-w-2xl space-y-4">
-          {messages.map((msg, i) => {
-            const isLast = i === messages.length - 1;
-            return (
-            <div
-              key={i}
-              className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}
-            >
-              <div
-                className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
-                  msg.role === "user"
-                    ? "bg-black text-white"
-                    : "bg-[oklch(0.97_0.005_260/0.6)] text-text"
-                }`}
-              >
-                {msg.content.split("\n").map((line, j) => (
-                  <p key={j} className={j > 0 ? "mt-2" : ""}>
-                    {line}
+        <div className="mx-auto max-w-2xl">
+          <p className="spec-label hairline-b pb-2">Interview record · transcribed live</p>
+          <ol>
+            {messages.map((msg, i) => {
+              const isLast = i === messages.length - 1;
+              return (
+                <li key={i} className="hairline-b py-3 last:border-b-0">
+                  <p className="spec-label">
+                    {msg.role === "user" ? "Founder" : "Interviewer"}
                   </p>
-                ))}
-              </div>
-              {isLast && msg.role === "assistant" && showChips && (
-                <SuggestionChips
-                  category={nextCategory}
-                  onPick={handleChipPick}
-                  onSkip={handleChipSkip}
-                />
-              )}
-            </div>
-            );
-          })}
+                  <div className="mt-1 text-[13.5px] leading-relaxed text-ink">
+                    {msg.content.split("\n").map((line, j) => (
+                      <p key={j} className={j > 0 ? "mt-2" : ""}>
+                        {line}
+                      </p>
+                    ))}
+                  </div>
+                  {isLast && msg.role === "assistant" && showChips && (
+                    <SuggestionChips
+                      category={nextCategory}
+                      onPick={handleChipPick}
+                      onSkip={handleChipSkip}
+                    />
+                  )}
+                </li>
+              );
+            })}
+          </ol>
           {isTyping && (
-            <div className="flex justify-start">
-              <div className="rounded-2xl bg-[oklch(0.97_0.005_260/0.6)]">
-                <TypingIndicator />
+            <div className="py-3" aria-label="Interviewer is writing" role="status">
+              <p className="spec-label">Interviewer</p>
+              <div className="mt-2 space-y-1.5" aria-hidden>
+                <div className="h-3 w-2/3 bg-panel" />
+                <div className="h-3 w-1/2 bg-panel" />
               </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* Input */}
-      <div className="border-t border-[oklch(0.8_0.01_260/0.15)] px-6 py-4">
+      <div className="hairline-t px-6 py-4">
         <form onSubmit={handleSubmit} className="mx-auto max-w-2xl">
-          <div className="flex items-end gap-3 rounded-2xl border border-[oklch(0.8_0.01_260/0.15)] bg-white px-4 py-3 shadow-[0_1px_2px_oklch(0.3_0.02_260/0.04)]">
+          <label htmlFor="interview-answer" className="spec-label block">
+            Your answer
+          </label>
+          <div className="mt-1.5 flex items-end gap-2.5">
             <textarea
+              id="interview-answer"
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Tell me about your company..."
+              placeholder="What the company does, who buys it, how it talks…"
               rows={1}
-              className="flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-text-muted"
-              style={{ maxHeight: "120px" }}
+              className="max-h-[120px] flex-1 resize-none border border-hairline bg-bg px-3.5 py-2.5 text-sm text-ink outline-none placeholder:text-ink-muted focus-visible:border-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
               onInput={(e) => {
                 const target = e.target as HTMLTextAreaElement;
                 target.style.height = "auto";
@@ -297,17 +254,12 @@ export function InterviewChat({
             <button
               type="submit"
               disabled={!input.trim() || sendMessage.isPending}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-black text-white transition-opacity disabled:opacity-30"
+              className="btn-ink shrink-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:pointer-events-none disabled:opacity-50"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="22" y1="2" x2="11" y2="13" />
-                <polygon points="22 2 15 22 11 13 2 9 22 2" />
-              </svg>
+              Send
             </button>
           </div>
-          <p className="mt-2 text-center text-xs text-text-muted">
-            Press Enter to send, Shift+Enter for new line
-          </p>
+          <p className="spec-label mt-2">Enter sends · Shift+Enter for a new line</p>
         </form>
       </div>
     </div>

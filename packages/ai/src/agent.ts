@@ -1,17 +1,21 @@
-import type Anthropic from "@anthropic-ai/sdk";
 import type { Citation } from "@beast/shared";
 import type {
   AgentConfig,
   AgentTask,
   AgentEventHandler,
-  AppliedRule,
+  ActiveRule,
   RetrievedMemory,
   RunResult,
   ToolCallTrace,
-  ModelTier,
 } from "./types";
-import { getClient, getModelId, getMaxTokens, selectModel } from "./models";
-import { assembleContext } from "./context";
+import {
+  resolveProvider,
+  type ProviderBlock,
+  type ProviderMessage,
+  type RunProvider,
+  type RunToolDef,
+} from "./provider";
+import { assembleContext, estimateTokens } from "./context";
 import { ToolRegistry } from "./tools";
 import { Scratchpad } from "./scratchpad";
 import { AgentEventEmitter } from "./streaming";
@@ -19,11 +23,11 @@ import { AgentEventEmitter } from "./streaming";
 const DEFAULT_MAX_ITERATIONS = 50;
 const DEFAULT_MAX_DURATION_MS = 60 * 60 * 1000; // 60 min
 
-const PROGRESS_TOOL: Anthropic.Tool = {
+const PROGRESS_TOOL: RunToolDef = {
   name: "update_progress",
   description:
     "Mark a scratchpad step in_progress, done, or blocked as you work, so the progress list stays accurate. Use the step id (#N) shown in the scratchpad.",
-  input_schema: {
+  inputSchema: {
     type: "object",
     properties: {
       stepId: { type: "string", description: "Step id from the scratchpad, without the # prefix" },
@@ -41,10 +45,12 @@ export interface RunOptions {
     episodic: RetrievedMemory[];
     semantic: RetrievedMemory[];
     procedural: RetrievedMemory[];
-    appliedRules?: AppliedRule[];
+    appliedRules?: ActiveRule[];
   };
   planSteps?: string[];
   onEvent?: AgentEventHandler;
+  /** Overrides env resolution; the runner passes the stub here on quota degrade. */
+  provider?: RunProvider;
 }
 
 export async function run(opts: RunOptions): Promise<RunResult> {
@@ -56,12 +62,12 @@ export async function run(opts: RunOptions): Promise<RunResult> {
     planSteps,
     onEvent,
   } = opts;
-  const appliedRules: AppliedRule[] = memories.appliedRules ?? [];
+  const appliedRules: ActiveRule[] = memories.appliedRules ?? [];
 
   const maxIterations = config.maxIterations ?? DEFAULT_MAX_ITERATIONS;
   const maxDurationMs = config.maxDurationMs ?? DEFAULT_MAX_DURATION_MS;
-  const model: ModelTier = config.model ?? selectModel(task.taskType);
-  const client = getClient();
+  const tier = config.tier ?? "standard";
+  const provider = opts.provider ?? resolveProvider();
   const emitter = new AgentEventEmitter();
   if (onEvent) emitter.on(onEvent);
 
@@ -72,7 +78,6 @@ export async function run(opts: RunOptions): Promise<RunResult> {
     scratchpad.init(task.acceptanceCriteria);
   }
 
-  // Assemble initial context
   const ctx = assembleContext({
     config,
     task,
@@ -82,12 +87,12 @@ export async function run(opts: RunOptions): Promise<RunResult> {
     scratchpad: scratchpad.getItems(),
   });
 
-  const messages: Anthropic.MessageParam[] = [...ctx.messages];
-  const baseTools = tools.getAnthropicTools();
-  const anthropicTools =
-    scratchpad.getItems().length > 0 ? [...baseTools, PROGRESS_TOOL] : baseTools;
+  const messages: ProviderMessage[] = [...ctx.messages];
+  const baseTools = tools.getToolDefs();
+  const runTools = scratchpad.getItems().length > 0 ? [...baseTools, PROGRESS_TOOL] : baseTools;
   const toolCallLog: ToolCallTrace[] = [];
   const citationsById = new Map<string, Citation>();
+  // Providers stream deltas without usage payloads, so token counts are ~4 chars/token estimates.
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
   const startTime = Date.now();
@@ -109,37 +114,45 @@ export async function run(opts: RunOptions): Promise<RunResult> {
     });
   }
 
-  emitter.emit({ type: "run_start", taskId: task.taskId, agentName: config.name });
+  emitter.emit({
+    type: "run_start",
+    taskId: task.taskId,
+    agentName: config.name,
+    provider: provider.name,
+  });
 
   let loopErrorEmitted = false;
   let lastIteration = 0;
   for (let iteration = 1; iteration <= maxIterations; iteration++) {
     lastIteration = iteration;
-    // Timeout check
     if (Date.now() - startTime > maxDurationMs) {
       loopErrorEmitted = true;
       emitter.emit({ type: "error", message: "Max duration exceeded", recoverable: false });
       break;
     }
 
-    // Call Claude with streaming
-    const stream = client.messages.stream({
-      model: getModelId(model),
-      max_tokens: getMaxTokens(model),
+    let text = "";
+    const toolCalls: Array<{ id: string; name: string; input: unknown }> = [];
+    let stopReason: "tool_use" | "end_turn" | "max_tokens" = "end_turn";
+
+    for await (const event of provider.stream({
+      tier,
       system: ctx.systemPrompt,
       messages,
-      tools: anthropicTools.length > 0 ? anthropicTools : undefined,
-    });
+      tools: runTools,
+    })) {
+      if (event.type === "text_delta") {
+        text += event.text;
+        emitter.emit({ type: "text_delta", text: event.text });
+      } else if (event.type === "tool_call") {
+        toolCalls.push({ id: event.id, name: event.name, input: event.input });
+      } else {
+        stopReason = event.stopReason;
+      }
+    }
 
-    // Stream text deltas to the event handler
-    stream.on("text", (text) => {
-      emitter.emit({ type: "text_delta", text });
-    });
-
-    const response = await stream.finalMessage();
-
-    totalInputTokens += response.usage.input_tokens;
-    totalOutputTokens += response.usage.output_tokens;
+    totalInputTokens += estimateTokens(ctx.systemPrompt) + estimateTokens(JSON.stringify(messages));
+    totalOutputTokens += estimateTokens(text) + estimateTokens(JSON.stringify(toolCalls));
 
     emitter.emit({
       type: "iteration",
@@ -147,135 +160,104 @@ export async function run(opts: RunOptions): Promise<RunResult> {
       totalTokens: totalInputTokens + totalOutputTokens,
     });
 
-    // Append assistant response to conversation
-    messages.push({ role: "assistant", content: response.content });
+    const assistantBlocks: ProviderBlock[] = [];
+    if (text) assistantBlocks.push({ type: "text", text });
+    for (const call of toolCalls) {
+      assistantBlocks.push({ type: "tool_call", id: call.id, name: call.name, input: call.input });
+    }
+    messages.push({
+      role: "assistant",
+      content: assistantBlocks.length > 0 ? assistantBlocks : [{ type: "text", text: "" }],
+    });
 
-    // If the model is done (end_turn or max_tokens), we're finished
-    if (response.stop_reason === "end_turn" || response.stop_reason === "max_tokens") {
-      const output = extractText(response.content);
-
+    if (stopReason === "end_turn" || stopReason === "max_tokens") {
       const durationMs = Date.now() - startTime;
-      emitter.emit({
-        type: "run_end",
-        output,
-        iterations: iteration,
-        durationMs,
-      });
+      emitter.emit({ type: "run_end", output: text, iterations: iteration, durationMs });
 
       return {
-        output,
+        output: text,
         iterations: iteration,
         durationMs,
         tokensUsed: { input: totalInputTokens, output: totalOutputTokens },
         toolCalls: toolCallLog,
         appliedRules,
-        citations: filterCitationsToBody(output, citationsById),
+        citations: filterCitationsToBody(text, citationsById),
       };
     }
 
-    // Handle tool calls
-    if (response.stop_reason === "tool_use") {
-      const toolUseBlocks = response.content.filter(
-        (block): block is Anthropic.ToolUseBlock => block.type === "tool_use",
-      );
-
-      // Defensive: if the model signals tool_use but emits no tool_use
-      // blocks (mixed-content edge case), pushing { content: [] } would
-      // be rejected by the API on the next turn. Treat as a recoverable
-      // error and exit so the partial output still surfaces to the
-      // founder via the post-loop block.
-      if (toolUseBlocks.length === 0) {
-        loopErrorEmitted = true;
-        emitter.emit({
-          type: "error",
-          message: "tool_use stop without any tool_use blocks",
-          recoverable: true,
-        });
-        break;
-      }
-
-      const toolResults: Anthropic.ToolResultBlockParam[] = [];
-
-      for (const toolUse of toolUseBlocks) {
-        if (toolUse.name === "update_progress") {
-          const { stepId, status } = toolUse.input as { stepId?: string; status?: string };
-          const id = stepId?.replace(/^#/, "");
-          if (id && status === "in_progress") scratchpad.start(id);
-          else if (id && status === "done") scratchpad.complete(id);
-          else if (id && status === "blocked") scratchpad.block(id);
-          toolResults.push({
-            type: "tool_result",
-            tool_use_id: toolUse.id,
-            content: "Progress updated.",
-          });
-          continue;
-        }
-
-        emitter.emit({
-          type: "tool_call_start",
-          toolName: toolUse.name,
-          toolCallId: toolUse.id,
-        });
-
-        const startedAt = new Date().toISOString();
-        const toolInput = toolUse.input as Record<string, unknown>;
-
-        const { result, citations, durationMs } = await tools.dispatch(toolUse.name, toolInput);
-
-        for (const c of citations) {
-          if (!citationsById.has(c.id)) citationsById.set(c.id, c);
-        }
-
-        toolCallLog.push({
-          toolCallId: toolUse.id,
-          name: toolUse.name,
-          inputSummary: summarizeToolInput(toolUse.name, toolInput),
-          resultSummary: summarizeToolResult(result),
-          durationMs,
-          startedAt,
-        });
-
-        emitter.emit({
-          type: "tool_call_end",
-          toolName: toolUse.name,
-          toolCallId: toolUse.id,
-          result: result.length > 200 ? result.slice(0, 200) + "..." : result,
-        });
-
-        toolResults.push({
-          type: "tool_result",
-          tool_use_id: toolUse.id,
-          content: result,
-        });
-      }
-
-      // Append tool results
-      messages.push({ role: "user", content: toolResults });
-
-      // Update scratchpad and inject it so the model stays oriented
-      emitter.emit({ type: "scratchpad_update", items: scratchpad.getItems() });
-
-      // Inject scratchpad state as a plain text block alongside the tool_results.
-      // Earlier code pushed this as a synthetic tool_result with tool_use_id "scratchpad",
-      // which the Anthropic API rejects (every tool_result must reference a real tool_use
-      // from the prior assistant turn). Plain text in the same user message is safe.
-      const scratchpadText = scratchpad.render();
-      if (scratchpadText) {
-        const lastIdx = messages.length - 1;
-        const lastMsg = messages[lastIdx]!;
-        if (Array.isArray(lastMsg.content)) {
-          (lastMsg.content as Array<Anthropic.ToolResultBlockParam | Anthropic.TextBlockParam>).push({
-            type: "text",
-            text: `<scratchpad>\n## Current Progress\n${scratchpadText}\n</scratchpad>`,
-          });
-        }
-      }
+    // A tool_use stop with no tool calls would make the next request invalid
+    // (a tool_result must answer a real tool call). Recoverable exit so the
+    // partial output still surfaces via the post-loop block.
+    if (toolCalls.length === 0) {
+      loopErrorEmitted = true;
+      emitter.emit({
+        type: "error",
+        message: "tool_use stop without any tool calls",
+        recoverable: true,
+      });
+      break;
     }
+
+    const resultBlocks: ProviderBlock[] = [];
+
+    for (const call of toolCalls) {
+      if (call.name === "update_progress") {
+        const { stepId, status } = call.input as { stepId?: string; status?: string };
+        const id = stepId?.replace(/^#/, "");
+        if (id && status === "in_progress") scratchpad.start(id);
+        else if (id && status === "done") scratchpad.complete(id);
+        else if (id && status === "blocked") scratchpad.block(id);
+        resultBlocks.push({ type: "tool_result", toolCallId: call.id, content: "Progress updated." });
+        continue;
+      }
+
+      emitter.emit({ type: "tool_call_start", toolName: call.name, toolCallId: call.id });
+
+      const startedAt = new Date().toISOString();
+      const toolInput = call.input as Record<string, unknown>;
+
+      const { result, citations, durationMs } = await tools.dispatch(call.name, toolInput);
+
+      for (const c of citations) {
+        if (!citationsById.has(c.id)) citationsById.set(c.id, c);
+      }
+
+      toolCallLog.push({
+        toolCallId: call.id,
+        name: call.name,
+        inputSummary: summarizeToolInput(call.name, toolInput),
+        resultSummary: summarizeToolResult(result),
+        durationMs,
+        startedAt,
+      });
+
+      emitter.emit({
+        type: "tool_call_end",
+        toolName: call.name,
+        toolCallId: call.id,
+        result: result.length > 200 ? result.slice(0, 200) + "..." : result,
+      });
+
+      resultBlocks.push({ type: "tool_result", toolCallId: call.id, content: result });
+    }
+
+    emitter.emit({ type: "scratchpad_update", items: scratchpad.getItems() });
+
+    // Scratchpad state rides as a plain text block alongside the tool results;
+    // a synthetic tool_result would be rejected upstream.
+    const scratchpadText = scratchpad.render();
+    if (scratchpadText) {
+      resultBlocks.push({
+        type: "text",
+        text: `<scratchpad>\n## Current Progress\n${scratchpadText}\n</scratchpad>`,
+      });
+    }
+
+    messages.push({ role: "user", content: resultBlocks });
   }
 
-  // Exited the loop without an end_turn / max_tokens response. Either the
-  // run hit the iteration cap or the timeout check tripped and broke out
-  // already (in which case the timeout error has already been emitted).
+  // Exited the loop without an end_turn / max_tokens stop. Either the run hit
+  // the iteration cap or the timeout/no-tool-call check broke out already.
   const output = extractTextFromMessages(messages);
   const durationMs = Date.now() - startTime;
 
@@ -312,11 +294,7 @@ function filterCitationsToBody(body: string, all: Map<string, Citation>): Citati
   return Array.from(all.values()).filter((c) => referenced.has(c.id));
 }
 
-/**
- * Build a human-readable 200-char summary of a tool's input args. Tool-name-aware:
- * web_search emits its query, web_fetch emits its URL. Falls back to a JSON dump
- * for unknown tools. Used by the reasoning trail UI.
- */
+// Tool-name-aware 200-char input summary for the reasoning trail UI.
 function summarizeToolInput(name: string, input: Record<string, unknown>): string {
   const trim = (s: string): string => (s.length > 200 ? s.slice(0, 197) + "..." : s);
   if (name === "web_search" && typeof input.query === "string") return trim(input.query);
@@ -336,26 +314,15 @@ function summarizeToolResult(result: string): string {
   return flat.length > 300 ? flat.slice(0, 297) + "..." : flat;
 }
 
-function extractText(content: Anthropic.ContentBlock[]): string {
-  return content
-    .filter((block): block is Anthropic.TextBlock => block.type === "text")
-    .map((block) => block.text)
-    .join("\n");
-}
-
-function extractTextFromMessages(messages: Anthropic.MessageParam[]): string {
+function extractTextFromMessages(messages: ProviderMessage[]): string {
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i]!;
-    if (msg.role === "assistant" && typeof msg.content === "string") {
-      return msg.content;
-    }
-    if (msg.role === "assistant" && Array.isArray(msg.content)) {
-      const text = msg.content
-        .filter((b): b is Anthropic.TextBlock => (b as Anthropic.TextBlock).type === "text")
-        .map((b) => (b as Anthropic.TextBlock).text)
-        .join("\n");
-      if (text) return text;
-    }
+    if (msg.role !== "assistant") continue;
+    const text = msg.content
+      .filter((b): b is Extract<ProviderBlock, { type: "text" }> => b.type === "text")
+      .map((b) => b.text)
+      .join("\n");
+    if (text) return text;
   }
   return "";
 }

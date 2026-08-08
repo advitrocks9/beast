@@ -1,8 +1,8 @@
 import { db } from "@beast/db";
 import { proceduralMemories, activityLog } from "@beast/db";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, or, isNull, sql } from "drizzle-orm";
 import { embed } from "./embeddings";
-import type { AppliedRule, RetrievedMemory } from "../types";
+import type { ActiveRule, RetrievedMemory } from "../types";
 
 /**
  * Load current procedural rules for an agent, optionally filtered by task scope.
@@ -18,11 +18,16 @@ export async function retrieveProceduralMemories(
   tenantId: string,
   taskType?: string,
   topK = 30,
+
+  demoSessionId?: string | null,
 ): Promise<RetrievedMemory[]> {
   const conditions = [
     eq(proceduralMemories.agentId, agentId),
     eq(proceduralMemories.tenantId, tenantId),
     eq(proceduralMemories.isCurrent, true),
+    demoSessionId
+      ? or(isNull(proceduralMemories.demoSessionId), eq(proceduralMemories.demoSessionId, demoSessionId))!
+      : isNull(proceduralMemories.demoSessionId),
   ];
 
   const results = await db.query.proceduralMemories.findMany({
@@ -64,20 +69,24 @@ export async function retrieveProceduralMemories(
 
 /**
  * Same query as retrieveProceduralMemories but returns the rule metadata
- * needed for the "Alex remembered" panel. the current build treats every
- * loaded rule as applied; per-rule attribution from the output text is a
+ * needed for the "Alex remembered" panel. These are the rules injected
+ * into the run's context; per-rule attribution from the output text is a
  * v1 concern.
  */
-export async function retrieveAppliedRules(
+export async function retrieveActiveRules(
   agentId: string,
   tenantId: string,
   taskType?: string,
   topK = 30,
-): Promise<AppliedRule[]> {
+  demoSessionId?: string | null,
+): Promise<ActiveRule[]> {
   const conditions = [
     eq(proceduralMemories.agentId, agentId),
     eq(proceduralMemories.tenantId, tenantId),
     eq(proceduralMemories.isCurrent, true),
+    demoSessionId
+      ? or(isNull(proceduralMemories.demoSessionId), eq(proceduralMemories.demoSessionId, demoSessionId))!
+      : isNull(proceduralMemories.demoSessionId),
   ];
 
   const rows = await db.query.proceduralMemories.findMany({
@@ -89,6 +98,7 @@ export async function retrieveAppliedRules(
       taskScope: true,
       sourceEpisodes: true,
       signalWeight: true,
+      confidence: true,
       createdAt: true,
     },
     orderBy: (pm, { desc }) => [desc(pm.signalWeight)],
@@ -108,7 +118,7 @@ export async function retrieveAppliedRules(
     extractedFromDeliverableId: r.sourceEpisodes?.[0] ?? "",
     extractedFromTitle: "",
     extractedAt: r.createdAt.toISOString(),
-    confidence: r.signalWeight ?? 1.0,
+    confidence: r.confidence,
   }));
 }
 
@@ -134,6 +144,8 @@ export async function upsertProceduralRule(input: {
   parentId?: string;
   signalCount?: number;
   signalWeight?: number;
+  confidence: number;
+  demoSessionId?: string | null;
 }): Promise<string> {
   const vector = await embed(`${input.title} ${input.description}`);
 
@@ -168,7 +180,9 @@ export async function upsertProceduralRule(input: {
         sourceEpisodes: input.sourceEpisodes ?? [],
         signalCount: input.signalCount ?? 1,
         signalWeight: input.signalWeight ?? 1.0,
+        confidence: input.confidence,
         embedding: vector,
+        demoSessionId: input.demoSessionId ?? null,
       })
       .returning({ id: proceduralMemories.id });
 

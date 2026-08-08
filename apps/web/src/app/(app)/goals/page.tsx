@@ -1,16 +1,20 @@
-import Link from "next/link";
 import { eq } from "drizzle-orm";
 import { createClient } from "@/lib/supabase/server";
 import { db } from "@beast/db";
 import { companies, goals, aiEmployees } from "@beast/db";
-import { GlassCard } from "@beast/ui";
+import { Monogram } from "@/components/monogram";
 import { EditGoalButton } from "./_components/edit-goal-button";
 import { AddGoalButton } from "./_components/add-goal-button";
 import { ProgressSlider } from "./_components/progress-slider";
-import { statusMeta, roleColor, roleMeta } from "@/lib/colors";
 
 export const metadata = {
   title: "Goals - Beast",
+};
+
+const STATUS_CHIP: Record<string, { label: string; style: React.CSSProperties }> = {
+  active: { label: "Active", style: { borderColor: "var(--color-ink)", color: "var(--color-ink)" } },
+  paused: { label: "Paused", style: { borderColor: "var(--color-ink-muted)", color: "var(--color-ink-muted)" } },
+  completed: { label: "Met", style: { backgroundColor: "var(--color-state-accepted)", color: "#fff" } },
 };
 
 export default async function GoalsIndexPage() {
@@ -49,44 +53,28 @@ export default async function GoalsIndexPage() {
   const activeCount = topLevel.filter((g) => g.status === "active").length;
 
   return (
-    <div className="space-y-8">
-      <div className="flex items-baseline justify-between">
+    <div className="mx-auto max-w-4xl">
+      <header className="rule-b flex flex-wrap items-end justify-between gap-3 pb-4">
         <div>
-          <h1 className="font-(--font-display) text-3xl font-bold tracking-tight">
-            Your goals
-          </h1>
-          <p className="mt-2 text-sm text-text-secondary">
+          <h1 className="display text-3xl">Goals</h1>
+          <p className="spec mt-1.5 text-ink-muted">
             {topLevel.length === 0
-              ? "You have not set any goals yet."
-              : `${activeCount} active, ${topLevel.length} total. Sub-goals nested per top-level goal.`}
-            {archivedCount > 0 && (
-              <span className="ml-2 text-text-muted">
-                ({archivedCount} archived hidden)
-              </span>
-            )}
+              ? "no targets set"
+              : `${activeCount} active · ${topLevel.length} target${topLevel.length === 1 ? "" : "s"}`}
+            {archivedCount > 0 && ` · ${archivedCount} archived hidden`}
           </p>
         </div>
-        {topLevel.length > 0 && <AddGoalButton variant="header" />}
-      </div>
+        {topLevel.length > 0 && <AddGoalButton />}
+      </header>
 
       {topLevel.length === 0 ? (
         <EmptyState />
       ) : (
-        <div className="space-y-5">
+        <div className="mt-5 space-y-7">
           {topLevel.map((goal) => {
             const subs = subGoalsByParent.get(goal.id) ?? [];
-            const owner = goal.aiEmployeeId
-              ? employeeById.get(goal.aiEmployeeId)
-              : undefined;
-            return (
-              <GoalCard
-                key={goal.id}
-                goal={goal}
-                subs={subs}
-                owner={owner}
-                employeeById={employeeById}
-              />
-            );
+            const owner = goal.aiEmployeeId ? employeeById.get(goal.aiEmployeeId) : undefined;
+            return <GoalSection key={goal.id} goal={goal} subs={subs} owner={owner} employeeById={employeeById} />;
           })}
         </div>
       )}
@@ -103,10 +91,6 @@ interface GoalRow {
   status: string;
   progressPct: number;
   aiEmployeeId: string | null;
-  parentGoalId: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-  companyId: string;
 }
 
 interface EmployeeRef {
@@ -115,7 +99,16 @@ interface EmployeeRef {
   roleType: string;
 }
 
-function GoalCard({
+function GoalStatusChip({ status }: { status: string }) {
+  const chip = STATUS_CHIP[status] ?? STATUS_CHIP.paused!;
+  return (
+    <span className="chip" style={chip.style}>
+      {chip.label}
+    </span>
+  );
+}
+
+function GoalSection({
   goal,
   subs,
   owner,
@@ -126,147 +119,94 @@ function GoalCard({
   owner: EmployeeRef | undefined;
   employeeById: Map<string, EmployeeRef>;
 }) {
-  const status = statusMeta(goal.status);
-  const progressColor = goal.progressPct >= 75 ? "#15803D" : "#0F766E";
-
   return (
-    <GlassCard hoverable={false} className="p-6">
-      <div className="flex items-start justify-between gap-4">
+    <section aria-label={goal.title} className="rule-t pt-3">
+      <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-3">
-            <h2 className="font-(--font-display) text-xl font-bold tracking-tight">
-              {goal.title}
-            </h2>
-            <span
-              className="rounded-full px-2.5 py-0.5 text-xs font-medium"
-              style={{ backgroundColor: status.bg, color: status.fg }}
-            >
-              {status.label}
-            </span>
-            <EditGoalButton
-              goal={{
-                id: goal.id,
-                title: goal.title,
-                description: goal.description,
-                targetMetric: goal.targetMetric,
-                targetDate: goal.targetDate,
-                status: goal.status,
-              }}
-            />
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h2 className="text-[17px] leading-tight font-semibold">{goal.title}</h2>
+            <GoalStatusChip status={goal.status} />
           </div>
           {goal.description && (
-            <p className="mt-2 text-sm text-text-secondary">{goal.description}</p>
+            <p className="mt-1.5 text-[13px] leading-snug text-ink-secondary">{goal.description}</p>
           )}
-          <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-text-muted">
-            {goal.targetMetric && (
-              <span>
-                <span className="font-medium text-text-secondary">Target:</span>{" "}
-                {goal.targetMetric}
-              </span>
-            )}
-            {goal.targetDate && (
-              <span>
-                <span className="font-medium text-text-secondary">By:</span>{" "}
-                {formatGoalDate(goal.targetDate)}
-              </span>
-            )}
+          <p className="spec mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-ink-muted">
+            {goal.targetMetric && <span>target {goal.targetMetric}</span>}
+            {goal.targetMetric && goal.targetDate && <span aria-hidden>·</span>}
+            {goal.targetDate && <span>by {formatGoalDate(goal.targetDate)}</span>}
             {owner && (
-              <span className="flex items-center gap-1.5">
-                <span
-                  className="h-2 w-2 rounded-full"
-                  style={{ backgroundColor: roleColor(owner.roleType) }}
-                />
-                <span className="font-medium text-text-secondary">Owner:</span>{" "}
-                {owner.name}
-              </span>
+              <>
+                {(goal.targetMetric || goal.targetDate) && <span aria-hidden>·</span>}
+                <span className="inline-flex items-center gap-1.5">
+                  <Monogram name={owner.name} roleType={owner.roleType} size="sm" className="h-4 w-4 text-[8px]" />
+                  {owner.name}
+                </span>
+              </>
             )}
-          </div>
-        </div>
-        <div className="text-right">
-          <p className="font-(--font-display) text-2xl font-bold tracking-tight" style={{ color: progressColor }}>
-            {goal.progressPct}%
           </p>
-          <p className="text-xs text-text-muted">progress</p>
         </div>
+        <EditGoalButton
+          goal={{
+            id: goal.id,
+            title: goal.title,
+            description: goal.description,
+            targetMetric: goal.targetMetric,
+            targetDate: goal.targetDate,
+            status: goal.status,
+          }}
+        />
       </div>
 
-      <div className="mt-4">
+      <div className="mt-3">
         <ProgressSlider goalId={goal.id} initialPct={goal.progressPct} />
       </div>
 
       {subs.length > 0 && (
-        <div className="mt-5 border-t border-gray-100 pt-4">
-          <p className="mb-3 text-xs font-medium uppercase tracking-wider text-text-muted">
-            Sub-goals
-          </p>
-          <div className="space-y-3">
+        <div className="mt-4">
+          <p className="spec-label">Sub-goals</p>
+          <ul className="mt-1">
             {subs.map((sub) => {
-              const subOwner = sub.aiEmployeeId
-                ? employeeById.get(sub.aiEmployeeId)
-                : undefined;
-              const subProgressColor =
-                sub.progressPct >= 75 ? "#15803D" : "#0F766E";
+              const subOwner = sub.aiEmployeeId ? employeeById.get(sub.aiEmployeeId) : undefined;
               return (
-                <div
-                  key={sub.id}
-                  className="rounded-lg border border-gray-100 bg-white p-3"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-medium">{sub.title}</p>
-                    <span
-                      className="text-xs font-medium"
-                      style={{ color: subProgressColor }}
-                    >
-                      {sub.progressPct}%
-                    </span>
+                <li key={sub.id} className="hairline-t py-2.5 first:border-t-0">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <p className="min-w-0 text-[13.5px] font-medium">{sub.title}</p>
+                    {subOwner && <span className="spec shrink-0 text-ink-muted">{subOwner.name}</span>}
                   </div>
                   {sub.targetMetric && (
-                    <p className="mt-1 text-xs text-text-secondary">
-                      {sub.targetMetric}
-                    </p>
+                    <p className="spec mt-0.5 text-ink-muted">target {sub.targetMetric}</p>
                   )}
-                  <div className="mt-2">
+                  <div className="mt-1.5">
                     <ProgressSlider goalId={sub.id} initialPct={sub.progressPct} size="compact" />
-                    {subOwner && (
-                      <p
-                        className="mt-1 text-[11px]"
-                        style={{ color: roleMeta(subOwner.roleType).text }}
-                      >
-                        {subOwner.name}
-                      </p>
-                    )}
                   </div>
-                </div>
+                </li>
               );
             })}
-          </div>
+          </ul>
         </div>
       )}
-    </GlassCard>
+    </section>
   );
 }
 
 function EmptyState() {
   return (
-    <GlassCard hoverable={false} className="p-10 text-center">
-      <h2 className="font-(--font-display) text-xl font-bold tracking-tight">
-        Set your first goal.
-      </h2>
-      <p className="mx-auto mt-3 max-w-md text-sm text-text-secondary mb-6">
-        Goals tell your AI employees what to work on. Add one in 30 seconds, or
-        run the 90-second interview from /onboarding to capture three at once.
+    <div className="panel-tinted mt-5 p-8">
+      <h2 className="text-[17px] font-semibold">Set the first target.</h2>
+      <p className="mt-2 max-w-md text-[13px] leading-snug text-ink-secondary">
+        Goals are the targets your roster works against: jobs get briefed toward them and progress
+        is reviewed like everything else. Add one, or run the 90-second interview from /onboarding
+        to capture three at once.
       </p>
-      <AddGoalButton variant="block" />
-    </GlassCard>
+      <div className="mt-4">
+        <AddGoalButton first />
+      </div>
+    </div>
   );
 }
 
 function formatGoalDate(raw: string | Date): string {
   const d = raw instanceof Date ? raw : new Date(raw);
   if (Number.isNaN(d.getTime())) return String(raw);
-  return d.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
