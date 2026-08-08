@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useTRPC } from "@/trpc/client";
 
@@ -18,7 +18,6 @@ const DELIVERABLE_TYPE_LABEL: Record<string, string> = {
 };
 
 interface CheckInModalProps {
-  open: boolean;
   scheduledFor: string | null;
   deliverableType: string;
   checkInId?: string | null;
@@ -27,7 +26,6 @@ interface CheckInModalProps {
 }
 
 export function CheckInModal({
-  open,
   scheduledFor,
   deliverableType,
   checkInId,
@@ -36,19 +34,10 @@ export function CheckInModal({
 }: CheckInModalProps) {
   const [editReminderOpen, setEditReminderOpen] = useState(false);
   const [currentScheduled, setCurrentScheduled] = useState<string | null>(scheduledFor);
-  const [pickerValue, setPickerValue] = useState<string>("");
+  const [pickerValue, setPickerValue] = useState<string>(() => toLocalInputValue(scheduledFor));
   const [pickerError, setPickerError] = useState<string | null>(null);
   const trpc = useTRPC();
   const reschedule = useMutation(trpc.checkIns.reschedule.mutationOptions());
-
-  useEffect(() => {
-    if (open) {
-      setEditReminderOpen(false);
-      setCurrentScheduled(scheduledFor);
-      setPickerValue(toLocalInputValue(scheduledFor));
-      setPickerError(null);
-    }
-  }, [open, scheduledFor]);
 
   async function handleReschedule() {
     if (!checkInId) {
@@ -69,8 +58,6 @@ export function CheckInModal({
       setPickerError(err instanceof Error ? err.message : "Could not save the new time.");
     }
   }
-
-  if (!open) return null;
 
   const typeLabel = DELIVERABLE_TYPE_LABEL[deliverableType] ?? "deliverable";
   const scheduled = currentScheduled ? new Date(currentScheduled) : null;

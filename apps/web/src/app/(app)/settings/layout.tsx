@@ -8,9 +8,8 @@ const SECTIONS = [
   { href: "/settings/profile", label: "Profile", n: "01" },
   { href: "/settings/team", label: "Team", n: "02" },
   { href: "/settings/billing", label: "Billing", n: "03" },
-  { href: "/settings/rules", label: "Rules", n: "04" },
-  { href: "/settings/connectors", label: "Connectors", n: "05" },
-  { href: "/settings/danger", label: "Danger", n: "06" },
+  { href: "/settings/connectors", label: "Connectors", n: "04" },
+  { href: "/settings/danger", label: "Danger", n: "05" },
 ] as const;
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {

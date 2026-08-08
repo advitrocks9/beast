@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTRPC } from "@/trpc/client";
 import { Plus, Trash2, FileText, Globe, Upload, Pencil } from "lucide-react";
@@ -52,7 +52,7 @@ export default function KnowledgePage() {
     refetchInterval: crawlsInFlight.length > 0 ? 5000 : false,
   });
 
-  const data = items.data ?? [];
+  const data = useMemo(() => items.data ?? [], [items.data]);
 
   // Drop selection for ids that no longer appear in data (filter switch
   // or background re-fetch removed them) so the action bar count stays

@@ -69,23 +69,28 @@ export default function SettingsConnectorsPage() {
   const [callbackBanner, setCallbackBanner] = useState<{
     kind: "success" | "error";
     text: string;
-  } | null>(null);
+  } | null>(() => {
+    if (connectedParam) {
+      const meta = PLATFORM_META[connectedParam as Platform];
+      return {
+        kind: "success",
+        text: meta ? `${meta.label} is connected.` : `${connectedParam} is connected.`,
+      };
+    }
+    if (errorParam) {
+      return {
+        kind: "error",
+        text: ERROR_COPY[errorParam] ?? decodeURIComponent(errorParam),
+      };
+    }
+    return null;
+  });
 
   useEffect(() => {
     if (!connectedParam && !errorParam) return;
     if (connectedParam) {
-      const meta = PLATFORM_META[connectedParam as Platform];
-      setCallbackBanner({
-        kind: "success",
-        text: meta ? `${meta.label} is connected.` : `${connectedParam} is connected.`,
-      });
       queryClient.invalidateQueries({
         queryKey: trpc.connectors.list.queryOptions().queryKey,
-      });
-    } else if (errorParam) {
-      setCallbackBanner({
-        kind: "error",
-        text: ERROR_COPY[errorParam] ?? decodeURIComponent(errorParam),
       });
     }
     router.replace("/settings/connectors");

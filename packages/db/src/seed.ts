@@ -901,8 +901,8 @@ async function seed(db: Db): Promise<void> {
     {
       id: dA1, taskId: tA1, employee: ALEX_ID, type: "email",
       title: "September subscriber newsletter",
-      status: "accepted", createdAt: days(-16), updatedAt: days(-16),
-      approvedAt: days(-16), approvalRationale: "Trimmed the subject and swapped the percent for dollars. Two named lots next time too, please.",
+      status: "accepted", createdAt: days(-16), updatedAt: hours(-16 * 24 + 5),
+      approvedAt: hours(-16 * 24 + 5), approvalRationale: "Trimmed the subject and swapped the percent for dollars. Two named lots next time too, please.",
       content: {
         body: a1Body,
         citations: [],
@@ -912,8 +912,8 @@ async function seed(db: Db): Promise<void> {
     {
       id: dA2, taskId: tA2, employee: ALEX_ID, type: "report",
       title: "Teardown: Trade Coffee subscriptions",
-      status: "accepted", createdAt: days(-12), updatedAt: days(-12),
-      approvedAt: days(-12), approvalRationale: "Good after the shipping fix. Every comparison from now on quotes the delivered price.",
+      status: "accepted", createdAt: days(-12), updatedAt: hours(-12 * 24 + 3),
+      approvedAt: hours(-12 * 24 + 3), approvalRationale: "Good after the shipping fix. Every comparison from now on quotes the delivered price.",
       content: {
         content: a2Body,
         citations: [
@@ -932,8 +932,8 @@ async function seed(db: Db): Promise<void> {
     {
       id: dA3, taskId: tA3, employee: SAM_ID, type: "custom",
       title: "Reply batch: roast-date questions",
-      status: "accepted", createdAt: days(-10), updatedAt: days(-10),
-      approvedAt: days(-10), approvalRationale: "Never promise a roast date earlier than Thursday. We roast Tuesday and ship Thursday; promising faster means shipping older coffee.",
+      status: "accepted", createdAt: days(-10), updatedAt: hours(-10 * 24 + 7),
+      approvedAt: hours(-10 * 24 + 7), approvalRationale: "Never promise a roast date earlier than Thursday. We roast Tuesday and ship Thursday; promising faster means shipping older coffee.",
       content: {
         response: a3Body,
         citations: [],
@@ -943,8 +943,8 @@ async function seed(db: Db): Promise<void> {
     {
       id: dA4, taskId: tA4, employee: JORDAN_ID, type: "email",
       title: "Outreach: Heart Roasters guest slot",
-      status: "accepted", createdAt: days(-12), updatedAt: days(-12),
-      approvedAt: days(-12), approvalRationale: "The Burnside opener is exactly right. Do this on every pitch.",
+      status: "accepted", createdAt: days(-12), updatedAt: hours(-12 * 24 + 3),
+      approvedAt: hours(-12 * 24 + 3), approvalRationale: "The Burnside opener is exactly right. Do this on every pitch.",
       content: {
         body: a4Body,
         citations: [],
@@ -955,7 +955,7 @@ async function seed(db: Db): Promise<void> {
       id: dA5, taskId: tA5, employee: ALEX_ID, type: "email",
       title: "Win-back email: lapsed Explorer subscribers",
       status: "accepted", createdAt: days(-8), updatedAt: days(-8),
-      approvedAt: days(-8), approvalRationale: "Warm without being needy. Send it.",
+      approvedAt: hours(-8 * 24 + 4), approvalRationale: "Warm without being needy. Send it.",
       content: {
         body: a5Body,
         citations: [],
@@ -969,7 +969,7 @@ async function seed(db: Db): Promise<void> {
       id: dPub, taskId: tPub, employee: ALEX_ID, type: "blog",
       title: "What 'washed process' actually means",
       status: "published", createdAt: days(-14), updatedAt: days(-14),
-      approvedAt: days(-14), publishedUrl: "https://www.northwindcoffee.test/blog/washed-process", publishedAt: days(-14),
+      approvedAt: hours(-14 * 24 + 4), publishedUrl: "https://www.northwindcoffee.test/blog/washed-process", publishedAt: days(-14),
       content: {
         content: pubBody,
         citations: [

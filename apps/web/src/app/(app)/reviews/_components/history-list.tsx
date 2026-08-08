@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { useTRPC } from "@/trpc/client";
@@ -102,7 +102,7 @@ export function HistoryList() {
     }),
   );
 
-  const items = history.data ?? [];
+  const items = useMemo(() => history.data ?? [], [history.data]);
 
   // A stale activeIndex after a filter swap or page turn would make Enter
   // open a row the founder is not looking at.

@@ -19,7 +19,7 @@ export function CheckoutButton({
   const checkout = useMutation(
     trpc.billing.createCheckout.mutationOptions({
       onSuccess: ({ checkoutUrl }) => {
-        if (checkoutUrl) window.location.href = checkoutUrl;
+        if (checkoutUrl) window.location.assign(checkoutUrl);
       },
     }),
   );
@@ -45,7 +45,7 @@ export function PortalButton({ disabled }: { disabled: boolean }) {
   const portal = useMutation(
     trpc.billing.createPortal.mutationOptions({
       onSuccess: ({ portalUrl }) => {
-        if (portalUrl) window.location.href = portalUrl;
+        if (portalUrl) window.location.assign(portalUrl);
       },
     }),
   );

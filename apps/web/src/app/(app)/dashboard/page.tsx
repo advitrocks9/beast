@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { headers } from "next/headers";
-import { eq, and, inArray, desc, gte, notInArray, isNull } from "drizzle-orm";
+import { eq, and, inArray, desc, notInArray, isNull } from "drizzle-orm";
 import { createClient } from "@/lib/supabase/server";
 import { DEMO_MODE, demoSessionIdFromHeaders } from "@/lib/demo";
 import { demoWhere, withDemoOverlay } from "@/lib/demo-overlay";

@@ -213,7 +213,9 @@ export function PendingList({ items }: { items: PendingItem[] }) {
                   </span>
                   <span className="spec-label mt-0.5 block truncate">
                     {d.deliverableType.replace(/_/g, " ")} · v{d.version}
-                    {d.taskTitle ? ` · ${d.taskTitle}` : ""}
+                    {d.taskTitle && d.taskTitle.toLowerCase() !== d.title.toLowerCase()
+                      ? ` · ${d.taskTitle}`
+                      : ""}
                   </span>
                 </span>
                 {d.isLive && <ProvenanceTag kind="live" />}

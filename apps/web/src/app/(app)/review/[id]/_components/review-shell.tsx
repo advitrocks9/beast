@@ -490,14 +490,15 @@ export function ReviewShell({
         )
       )}
 
-      <CheckInModal
-        open={checkInModalOpen}
-        scheduledFor={moment?.scheduledFor ?? null}
-        deliverableType={deliverable.deliverableType}
-        checkInId={moment?.checkInId}
-        employeeName={employeeName}
-        onDismiss={() => setCheckInModalOpen(false)}
-      />
+      {checkInModalOpen && (
+        <CheckInModal
+          scheduledFor={moment?.scheduledFor ?? null}
+          deliverableType={deliverable.deliverableType}
+          checkInId={moment?.checkInId}
+          employeeName={employeeName}
+          onDismiss={() => setCheckInModalOpen(false)}
+        />
+      )}
     </div>
   );
 }

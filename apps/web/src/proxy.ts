@@ -20,8 +20,6 @@ const PUBLIC_EXACT = [
   "/twitter-image",
   "/favicon.ico",
 ];
-// Routes that require auth but not a company record
-const AUTH_ONLY_ROUTES = ["/onboarding"];
 
 export async function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;

@@ -401,10 +401,6 @@ export const tasksRouter = createTRPCRouter({
 
       if (!task) throw new Error("Failed to create re-run task");
 
-      const objective = typeof originalBrief.objective === "string"
-        ? originalBrief.objective
-        : original.title;
-
       await dispatch(task.id);
 
       return { taskId: task.id };

@@ -217,7 +217,7 @@ export const onboardingRouter = createTRPCRouter({
 
       const completion = await runInterviewTurn(systemPrompt, messages, 1024);
 
-      let extractedItems: Array<{
+      const extractedItems: Array<{
         category: string;
         title: string;
         content: string;

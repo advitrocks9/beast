@@ -43,10 +43,16 @@ export function TasksList({ sections }: { sections: TaskSection[] }) {
   const [bulkError, setBulkError] = useState<string | null>(null);
   const itemRefs = useRef<Array<HTMLAnchorElement | null>>([]);
 
-  const visible = useMemo(
-    () => sections.map((s) => ({ ...s, open: !s.collapsed || historyOpen })),
-    [sections, historyOpen],
-  );
+  const visible = useMemo(() => {
+    const out: Array<TaskSection & { open: boolean; start: number }> = [];
+    let start = 0;
+    for (const s of sections) {
+      const open = !s.collapsed || historyOpen;
+      out.push({ ...s, open, start });
+      if (open) start += s.rows.length;
+    }
+    return out;
+  }, [sections, historyOpen]);
   const flat = useMemo(() => visible.flatMap((s) => (s.open ? s.rows : [])), [visible]);
   const [activeIndex, setActiveIndex] = useState<number>(flat.length > 0 ? 0 : -1);
 
@@ -139,8 +145,6 @@ export function TasksList({ sections }: { sections: TaskSection[] }) {
     router.refresh();
   }
 
-  let cursor = 0;
-
   return (
     <div className="mt-3">
       <div className="flex min-h-8 flex-wrap items-center justify-between gap-3">
@@ -178,9 +182,7 @@ export function TasksList({ sections }: { sections: TaskSection[] }) {
 
       <div className="mt-1 space-y-5">
         {visible.map((section) => {
-          const { open } = section;
-          const start = cursor;
-          if (open) cursor += section.rows.length;
+          const { open, start } = section;
           return (
             <section key={section.key} aria-label={section.title}>
               <div className="rule-t flex items-baseline justify-between pt-2.5">
