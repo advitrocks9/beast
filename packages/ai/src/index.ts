@@ -5,6 +5,7 @@ export {
   dispatchRun,
   subscribeToRun,
   isRunActiveInProcess,
+  setBackgroundScheduler,
 } from "./runner";
 export type {
   TriggerExecuteTask,

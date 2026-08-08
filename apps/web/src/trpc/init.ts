@@ -6,6 +6,13 @@ import { db } from "@beast/db";
 import { companies, demoSessions } from "@beast/db";
 import { eq } from "drizzle-orm";
 
+import { after } from "next/server";
+import { setBackgroundScheduler } from "@beast/ai";
+
+// In-process agent runs must outlive the serverless response.
+setBackgroundScheduler((work) => after(work));
+
+
 /**
  * Block a mutation that would spend money or call an external API. The public
  * demo runs read-only against seeded data, so these surface as a friendly

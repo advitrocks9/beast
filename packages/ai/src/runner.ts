@@ -34,6 +34,14 @@ export interface ReviewNotifyPayload {
   version: number;
 }
 
+// Serverless hosts freeze a function once its response is sent; the web app
+// injects waitUntil-style scheduling so in-process runs survive the response.
+let backgroundScheduler: ((work: Promise<unknown>) => void) | null = null;
+
+export function setBackgroundScheduler(schedule: (work: Promise<unknown>) => void): void {
+  backgroundScheduler = schedule;
+}
+
 export interface ExecuteTaskRunOptions {
   onEvent?: AgentEventHandler;
   /** Spawns chain children; defaults to an in-process dispatchRun. */
@@ -535,8 +543,9 @@ export async function dispatchRun(
 
   await db.update(tasks).set({ status: "running", startedAt: new Date() })
     .where(and(eq(tasks.id, taskId), inArray(tasks.status, ["queued", "failed", "timed_out"])));
-  void executeTaskRun(taskId).catch((err) => {
+  const run = executeTaskRun(taskId).catch((err) => {
     console.error(`[runner] in-process run for task ${taskId} crashed:`, err);
   });
+  backgroundScheduler?.(run);
   return { id: taskId, transport: "inline" };
 }

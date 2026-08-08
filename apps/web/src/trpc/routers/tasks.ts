@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { after } from "next/server";
 import { TRPCError } from "@trpc/server";
 import { eq, and, isNotNull, desc, inArray } from "drizzle-orm";
 import { tasks, aiEmployees, companies, goals, chatMessages, activityLog, demoSessions } from "@beast/db";
@@ -133,7 +134,7 @@ export const tasksRouter = createTRPCRouter({
         // In-process run; a settled run consumes the visitor's allowance with
         // the runner's real token count, or the canned estimate if it never
         // reached completion.
-        void executeTaskRun(task.id)
+        after(executeTaskRun(task.id)
           .then((result) =>
             recordRunUsage(
               sessionId,
@@ -145,7 +146,7 @@ export const tasksRouter = createTRPCRouter({
           .catch((err) => {
             console.error(`[demo] commissioned run for task ${task.id} crashed:`, err);
             return recordRunUsage(sessionId, job.estTokens);
-          });
+          }));
       } else {
         await dispatch(task.id);
       }
