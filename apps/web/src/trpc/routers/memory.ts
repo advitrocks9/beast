@@ -19,7 +19,10 @@ export const memoryRouter = createTRPCRouter({
       limit: z.number().int().min(1).max(100).default(50),
     }).default({}))
     .query(async ({ ctx, input }) => {
-      const conditions = [eq(episodicMemories.tenantId, ctx.companyId)];
+      const conditions = [
+        eq(episodicMemories.tenantId, ctx.companyId),
+        demoWhere(ctx.demo.sessionId).seedOrMine(episodicMemories.demoSessionId),
+      ];
       if (input.employeeId) {
         conditions.push(eq(episodicMemories.agentId, input.employeeId));
       }
@@ -34,6 +37,7 @@ export const memoryRouter = createTRPCRouter({
           salienceScore: true,
           taskId: true,
           isConsolidated: true,
+          demoSessionId: true,
         },
         orderBy: (m, { desc }) => [desc(m.occurredAt)],
         limit: input.limit,
@@ -93,6 +97,7 @@ export const memoryRouter = createTRPCRouter({
           eq(proceduralMemories.agentId, input.employeeId),
           eq(proceduralMemories.tenantId, ctx.companyId),
           eq(proceduralMemories.isCurrent, true),
+          demoWhere(ctx.demo.sessionId).seedOrMine(proceduralMemories.demoSessionId),
         ),
         columns: {
           id: true,
@@ -109,6 +114,7 @@ export const memoryRouter = createTRPCRouter({
           version: true,
           createdAt: true,
           sourceEpisodes: true,
+          demoSessionId: true,
         },
         orderBy: (pm, { desc }) => [desc(pm.signalWeight), desc(pm.createdAt)],
       });

@@ -40,12 +40,13 @@ export async function loadMemories(opts: {
   topKSemantic?: number;
   topKEpisodic?: number;
   topKProcedural?: number;
+  demoSessionId?: string | null;
 }): Promise<MemoryLoadResult> {
   const [episodic, semantic, procedural, activeRules] = await Promise.all([
     retrieveEpisodicMemories(opts.agentId, opts.tenantId, opts.query, opts.topKEpisodic ?? 5),
     retrieveSemanticMemories(opts.tenantId, opts.query, opts.topKSemantic ?? 8),
-    retrieveProceduralMemories(opts.agentId, opts.tenantId, opts.taskType, opts.topKProcedural ?? 30),
-    retrieveActiveRules(opts.agentId, opts.tenantId, opts.taskType, opts.topKProcedural ?? 30),
+    retrieveProceduralMemories(opts.agentId, opts.tenantId, opts.taskType, opts.topKProcedural ?? 30, opts.demoSessionId),
+    retrieveActiveRules(opts.agentId, opts.tenantId, opts.taskType, opts.topKProcedural ?? 30, opts.demoSessionId),
   ]);
 
   return { episodic, semantic, procedural, activeRules };

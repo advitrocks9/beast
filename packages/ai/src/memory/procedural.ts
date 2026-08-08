@@ -1,6 +1,6 @@
 import { db } from "@beast/db";
 import { proceduralMemories, activityLog } from "@beast/db";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, or, isNull, sql } from "drizzle-orm";
 import { embed } from "./embeddings";
 import type { ActiveRule, RetrievedMemory } from "../types";
 
@@ -18,11 +18,16 @@ export async function retrieveProceduralMemories(
   tenantId: string,
   taskType?: string,
   topK = 30,
+
+  demoSessionId?: string | null,
 ): Promise<RetrievedMemory[]> {
   const conditions = [
     eq(proceduralMemories.agentId, agentId),
     eq(proceduralMemories.tenantId, tenantId),
     eq(proceduralMemories.isCurrent, true),
+    demoSessionId
+      ? or(isNull(proceduralMemories.demoSessionId), eq(proceduralMemories.demoSessionId, demoSessionId))!
+      : isNull(proceduralMemories.demoSessionId),
   ];
 
   const results = await db.query.proceduralMemories.findMany({
@@ -73,11 +78,15 @@ export async function retrieveActiveRules(
   tenantId: string,
   taskType?: string,
   topK = 30,
+  demoSessionId?: string | null,
 ): Promise<ActiveRule[]> {
   const conditions = [
     eq(proceduralMemories.agentId, agentId),
     eq(proceduralMemories.tenantId, tenantId),
     eq(proceduralMemories.isCurrent, true),
+    demoSessionId
+      ? or(isNull(proceduralMemories.demoSessionId), eq(proceduralMemories.demoSessionId, demoSessionId))!
+      : isNull(proceduralMemories.demoSessionId),
   ];
 
   const rows = await db.query.proceduralMemories.findMany({
@@ -136,6 +145,7 @@ export async function upsertProceduralRule(input: {
   signalCount?: number;
   signalWeight?: number;
   confidence: number;
+  demoSessionId?: string | null;
 }): Promise<string> {
   const vector = await embed(`${input.title} ${input.description}`);
 
@@ -172,6 +182,7 @@ export async function upsertProceduralRule(input: {
         signalWeight: input.signalWeight ?? 1.0,
         confidence: input.confidence,
         embedding: vector,
+        demoSessionId: input.demoSessionId ?? null,
       })
       .returning({ id: proceduralMemories.id });
 

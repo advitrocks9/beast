@@ -260,6 +260,7 @@ export async function executeTaskRun(
       tenantId: ctx.task.companyId,
       query: `${ctx.task.title} ${ctx.objective}`,
       taskType: ctx.task.taskType,
+      demoSessionId: ctx.task.demoSessionId,
     });
 
     const config: AgentConfig = {

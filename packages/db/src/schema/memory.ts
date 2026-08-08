@@ -15,6 +15,7 @@ export const episodicMemories = pgTable(
     summary: text().notNull(),
     content: jsonb().notNull(),
     embedding: vector("embedding", { dimensions: 1536 }),
+    demoSessionId: uuid("demo_session_id").references(() => demoSessions.id, { onDelete: "cascade" }),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     taskId: uuid("task_id").references(() => tasks.id),
@@ -87,6 +88,7 @@ export const proceduralMemories = pgTable(
     deprecatedAt: timestamp("deprecated_at", { withTimezone: true }),
     deprecatedReason: text("deprecated_reason"),
     embedding: vector("embedding", { dimensions: 1536 }),
+    demoSessionId: uuid("demo_session_id").references(() => demoSessions.id, { onDelete: "cascade" }),
   },
   (table) => [
     index("idx_procedural_memories_agent_current").on(table.agentId, table.isCurrent, table.taskScope),

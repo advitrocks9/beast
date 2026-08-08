@@ -13,6 +13,7 @@ interface EpisodeInput {
   taskId?: string;
   sessionId?: string;
   salienceScore?: number;
+  demoSessionId?: string | null;
 }
 
 /**
@@ -65,6 +66,7 @@ export async function storeEpisode(input: EpisodeInput): Promise<string> {
       taskId: input.taskId,
       sessionId: input.sessionId,
       salienceScore: input.salienceScore ?? 0.5,
+      demoSessionId: input.demoSessionId ?? null,
     })
     .returning({ id: episodicMemories.id });
 

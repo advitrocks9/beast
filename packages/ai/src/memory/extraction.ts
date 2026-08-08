@@ -146,6 +146,35 @@ interface FeedbackInput {
  * 2. Chip → signal mapping (no LLM)
  * 3. Implicit preference extraction via LLM (CIPHER-style)
  */
+const SUBSTITUTION_MAX_WORDS = 3;
+
+const trimPunct = (s: string) => s.replace(/^[^\p{L}\p{N}$]+|[^\p{L}\p{N}$]+$/gu, "");
+
+/** Adjacent removed/added span pairs of <=3 words each are word substitutions:
+ * the one review edit a model is not needed to interpret. */
+export function substitutionPairs(diff: WordDiff): Array<{ removed: string; added: string }> {
+  const pairs: Array<{ removed: string; added: string }> = [];
+  for (let i = 0; i < diff.spans.length - 1; i++) {
+    const a = diff.spans[i]!;
+    const b = diff.spans[i + 1]!;
+    const pair =
+      a.type === "removed" && b.type === "added"
+        ? { removed: a.text, added: b.text }
+        : a.type === "added" && b.type === "removed"
+          ? { removed: b.text, added: a.text }
+          : null;
+    if (!pair) continue;
+    const removed = trimPunct(pair.removed.trim());
+    const added = trimPunct(pair.added.trim());
+    if (!removed || !added) continue;
+    if (removed.toLowerCase() === added.toLowerCase()) continue;
+    if (removed.split(/\s+/).length > SUBSTITUTION_MAX_WORDS) continue;
+    if (added.split(/\s+/).length > SUBSTITUTION_MAX_WORDS) continue;
+    pairs.push({ removed, added });
+  }
+  return pairs;
+}
+
 export async function extractFromFeedback(input: FeedbackInput): Promise<{
   episodeId: string;
   diff: WordDiff | null;
@@ -212,6 +241,7 @@ What implicit preference does this edit pattern reveal?`,
     },
     taskId: input.taskId,
     salienceScore: feedbackType === "edit" ? 0.8 : 0.6,
+    demoSessionId: input.demoSessionId ?? null,
   });
 
   const byId = new Map<string, CandidateResult>();
@@ -225,6 +255,40 @@ What implicit preference does this edit pattern reveal?`,
       title: `${signal.direction} for ${input.taskType}`,
       description: `Signal: ${signal.direction} (${signal.category})`,
       weight: signal.weight,
+      reviewId: input.reviewId,
+      episodeIds: [episodeId],
+      demoSessionId: input.demoSessionId,
+    });
+    byId.set(result.id, result);
+  }
+
+  for (const sub of diff ? substitutionPairs(diff).slice(0, 3) : []) {
+    const result = await accumulateSignal({
+      agentId: input.agentId,
+      tenantId: input.tenantId,
+      category: "style",
+      ruleType: "style_rule",
+      taskScope: [input.taskType],
+      title: `Use '${sub.added}', never '${sub.removed}'`,
+      description: `Learned from a review edit replacing '${sub.removed}' with '${sub.added}'.`,
+      weight: 0.5,
+      reviewId: input.reviewId,
+      episodeIds: [episodeId],
+      demoSessionId: input.demoSessionId,
+    });
+    byId.set(result.id, result);
+  }
+
+  if (inferredPreference.trim()) {
+    const result = await accumulateSignal({
+      agentId: input.agentId,
+      tenantId: input.tenantId,
+      category: "content",
+      ruleType: "style_rule",
+      taskScope: [input.taskType],
+      title: inferredPreference.trim().slice(0, 90),
+      description: `Inferred from a review edit on ${input.taskType}.`,
+      weight: 0.6,
       reviewId: input.reviewId,
       episodeIds: [episodeId],
       demoSessionId: input.demoSessionId,
@@ -378,6 +442,7 @@ async function promoteCandidate(
     signalCount: number;
     signalWeight: number;
     confidence: number;
+    demoSessionId: string | null;
   },
   examples?: { good?: string[]; bad?: string[] },
 ): Promise<string> {
@@ -393,6 +458,7 @@ async function promoteCandidate(
     signalCount: candidate.signalCount,
     signalWeight: candidate.signalWeight,
     confidence: candidate.confidence,
+    demoSessionId: candidate.demoSessionId,
   });
 
   await db
