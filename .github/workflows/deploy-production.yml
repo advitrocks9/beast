@@ -82,9 +82,11 @@ jobs:
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "Deployed: $url"
 
+      # Deployment URLs sit behind Vercel deployment protection (302 to SSO);
+      # only the production domain answers publicly.
       - name: Post-deploy health check
         run: |
-          url="${{ steps.deploy.outputs.url }}"
+          url="https://beast-demo.vercel.app"
           for i in $(seq 1 10); do
             code="$(curl -s -o /dev/null -w '%{http_code}' "$url/api/health")"
             [ "$code" = "200" ] && echo "healthy" && exit 0
