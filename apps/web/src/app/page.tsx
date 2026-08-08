@@ -82,7 +82,7 @@ export default async function Home() {
           <SplitRise
             as="h1"
             className="display text-[2.4rem] sm:text-5xl lg:text-[4.4rem]"
-            text="An autonomous AI company you manage."
+            text="An autonomous AI company you manage."
           />
           <RiseIn delay={0.35}>
           <p className="mt-5 max-w-xl text-[16px] leading-relaxed text-ink-secondary">

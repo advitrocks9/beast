@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { CircleHelp, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { statusMeta } from "@/lib/colors";
 import { Monogram } from "@/components/monogram";
@@ -114,10 +115,18 @@ export function Sidebar({ employees = [], reviewCount = 0, open = false, onClose
       </nav>
 
       <div className="border-t border-hairline px-2 py-2">
-        <NavItem href="/how-it-works" active={pathname === "/how-it-works"} n="?">
+        <NavItem
+          href="/how-it-works"
+          active={pathname === "/how-it-works"}
+          icon={<CircleHelp size={16} strokeWidth={1.5} className="mx-0.5 w-5 shrink-0" />}
+        >
           How it works
         </NavItem>
-        <NavItem href="/settings" active={pathname.startsWith("/settings")} n="&">
+        <NavItem
+          href="/settings"
+          active={pathname.startsWith("/settings")}
+          icon={<Settings size={16} strokeWidth={1.5} className="mx-0.5 w-5 shrink-0" />}
+        >
           Settings
         </NavItem>
       </div>

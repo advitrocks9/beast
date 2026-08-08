@@ -28,7 +28,7 @@ export function LandingSpecimen() {
   });
 
   return (
-    <div aria-label="Specimen: a job moving through the loop" className="flex flex-col gap-3">
+    <div aria-label="Specimen: a job moving through the loop" className="flex min-w-0 flex-col gap-3">
       <motion.div
         className="panel p-4"
         initial={reduced ? { opacity: 0 } : { opacity: 0, y: 14 }}
@@ -54,7 +54,7 @@ export function LandingSpecimen() {
             <motion.li key={row.t} className="flex gap-3" {...line(i)}>
               <span className="shrink-0 text-ink-muted">{row.t}</span>
               <span className="min-w-[72px] shrink-0 font-semibold text-ink">{row.step}</span>
-              <span className="truncate">{row.detail}</span>
+              <span className="min-w-0 flex-1 truncate">{row.detail}</span>
             </motion.li>
           ))}
         </ol>

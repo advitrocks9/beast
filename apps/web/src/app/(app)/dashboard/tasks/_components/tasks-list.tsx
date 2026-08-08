@@ -147,8 +147,8 @@ export function TasksList({ sections }: { sections: TaskSection[] }) {
 
   return (
     <div className="mt-3">
-      <div className="flex min-h-8 flex-wrap items-center justify-between gap-3">
-        <p className="spec-label hidden sm:block">
+      <div className="hidden min-h-8 flex-wrap items-center justify-between gap-3 sm:flex">
+        <p className="spec-label">
           <Kbd>J</Kbd>/<Kbd>K</Kbd> walk · <Kbd>X</Kbd> select · <Kbd>Enter</Kbd> open
         </p>
         {selected.size > 0 && (

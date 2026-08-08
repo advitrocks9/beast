@@ -29,7 +29,8 @@ export function SplitRise({
   return (
     <MotionTag className={className} aria-label={text} initial="hidden" animate="show">
       {words.map((word, i) => (
-        <span key={i} className="inline-block overflow-hidden pb-[0.08em] align-bottom">
+        <span key={i}>
+          <span className="inline-block overflow-hidden pb-[0.08em] align-bottom">
           <motion.span
             aria-hidden
             className="inline-block"
@@ -43,8 +44,9 @@ export function SplitRise({
             }}
           >
             {word}
-            {i < words.length - 1 ? " " : ""}
           </motion.span>
+          </span>
+          {i < words.length - 1 ? " " : ""}
         </span>
       ))}
     </MotionTag>

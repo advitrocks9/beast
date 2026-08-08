@@ -96,7 +96,7 @@ export function RunBoard({ task }: { task: RunBoardTask | null }) {
         <div className="flex min-w-0 items-center gap-2.5">
           <Monogram name={task.employeeName} roleType={task.roleType} size="sm" />
           <div className="min-w-0">
-            <p className="truncate text-[14px] leading-tight font-semibold">{task.title}</p>
+            <p className="line-clamp-2 text-[14px] leading-tight font-semibold sm:line-clamp-1">{task.title}</p>
             <p className="spec-label mt-0.5">{task.employeeName} · production record</p>
           </div>
         </div>
