@@ -2,19 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  LayoutGrid,
-  Stamp,
-  ListTodo,
-  Repeat,
-  Users,
-  Target,
-  Archive,
-  BookOpen,
-  Settings,
-  Plus,
-  CircleHelp,
-} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { statusMeta } from "@/lib/colors";
 import { Monogram } from "@/components/monogram";
@@ -33,8 +20,29 @@ interface SidebarProps {
   onClose?: () => void;
 }
 
+const OPERATIONS = [
+  { href: "/dashboard", label: "The Office", exact: true },
+  { href: "/reviews", label: "Review", match: ["/reviews", "/review/"] },
+  { href: "/dashboard/tasks", label: "Jobs" },
+  { href: "/dashboard/recurring", label: "Recurring" },
+];
+
+const COMPANY = [
+  { href: "/employees", label: "Roster", exact: true },
+  { href: "/memory", label: "Memory" },
+  { href: "/knowledge", label: "Knowledge" },
+  { href: "/goals", label: "Goals" },
+];
+
 export function Sidebar({ employees = [], reviewCount = 0, open = false, onClose }: SidebarProps) {
   const pathname = usePathname();
+
+  const isActive = (item: { href: string; exact?: boolean; match?: string[] }) => {
+    if (item.match) return item.match.some((m) => pathname === m || pathname.startsWith(m));
+    return item.exact ? pathname === item.href : pathname.startsWith(item.href);
+  };
+
+  let index = 0;
 
   return (
     <aside
@@ -54,45 +62,29 @@ export function Sidebar({ employees = [], reviewCount = 0, open = false, onClose
 
       <nav className="flex-1 overflow-y-auto px-2 py-3">
         <SectionLabel>Operations</SectionLabel>
-        <NavItem href="/dashboard" icon={<LayoutGrid size={16} strokeWidth={1.5} />} active={pathname === "/dashboard"}>
-          The Office
-        </NavItem>
-        <NavItem
-          href="/reviews"
-          icon={<Stamp size={16} strokeWidth={1.5} />}
-          active={pathname === "/reviews" || pathname.startsWith("/review/")}
-          badge={reviewCount}
-        >
-          Review
-        </NavItem>
-        <NavItem
-          href="/dashboard/tasks"
-          icon={<ListTodo size={16} strokeWidth={1.5} />}
-          active={pathname.startsWith("/dashboard/tasks")}
-        >
-          Jobs
-        </NavItem>
-        <NavItem
-          href="/dashboard/recurring"
-          icon={<Repeat size={16} strokeWidth={1.5} />}
-          active={pathname.startsWith("/dashboard/recurring")}
-        >
-          Recurring
-        </NavItem>
+        {OPERATIONS.map((item) => (
+          <NavItem
+            key={item.href}
+            href={item.href}
+            n={String(++index).padStart(2, "0")}
+            active={isActive(item)}
+            badge={item.href === "/reviews" ? reviewCount : undefined}
+          >
+            {item.label}
+          </NavItem>
+        ))}
 
         <SectionLabel className="mt-5">Company</SectionLabel>
-        <NavItem href="/employees" icon={<Users size={16} strokeWidth={1.5} />} active={pathname === "/employees"}>
-          Roster
-        </NavItem>
-        <NavItem href="/memory" icon={<Archive size={16} strokeWidth={1.5} />} active={pathname.startsWith("/memory")}>
-          Memory
-        </NavItem>
-        <NavItem href="/knowledge" icon={<BookOpen size={16} strokeWidth={1.5} />} active={pathname.startsWith("/knowledge")}>
-          Knowledge
-        </NavItem>
-        <NavItem href="/goals" icon={<Target size={16} strokeWidth={1.5} />} active={pathname === "/goals"}>
-          Goals
-        </NavItem>
+        {COMPANY.map((item) => (
+          <NavItem
+            key={item.href}
+            href={item.href}
+            n={String(++index).padStart(2, "0")}
+            active={isActive(item)}
+          >
+            {item.label}
+          </NavItem>
+        ))}
 
         <SectionLabel className="mt-5">Roster</SectionLabel>
         {employees.map((emp) => {
@@ -116,20 +108,16 @@ export function Sidebar({ employees = [], reviewCount = 0, open = false, onClose
             </NavItem>
           );
         })}
-        <NavItem href="/hire" icon={<Plus size={16} strokeWidth={1.5} />} active={pathname === "/hire"}>
+        <NavItem href="/hire" active={pathname === "/hire"} n="+">
           Hire
         </NavItem>
       </nav>
 
       <div className="border-t border-hairline px-2 py-2">
-        <NavItem
-          href="/how-it-works"
-          icon={<CircleHelp size={16} strokeWidth={1.5} />}
-          active={pathname === "/how-it-works"}
-        >
+        <NavItem href="/how-it-works" active={pathname === "/how-it-works"} n="?">
           How it works
         </NavItem>
-        <NavItem href="/settings" icon={<Settings size={16} strokeWidth={1.5} />} active={pathname.startsWith("/settings")}>
+        <NavItem href="/settings" active={pathname.startsWith("/settings")} n="&">
           Settings
         </NavItem>
       </div>
@@ -143,13 +131,15 @@ function SectionLabel({ children, className }: { children: React.ReactNode; clas
 
 function NavItem({
   href,
+  n,
   icon,
   active,
   badge,
   children,
 }: {
   href: string;
-  icon: React.ReactNode;
+  n?: string;
+  icon?: React.ReactNode;
   active: boolean;
   badge?: number;
   children: React.ReactNode;
@@ -165,7 +155,14 @@ function NavItem({
           : "text-ink-secondary hover:bg-panel hover:text-ink",
       )}
     >
-      {icon}
+      {icon ?? (
+        <span
+          aria-hidden
+          className={cn("spec w-5 text-center", active ? "text-ink" : "text-ink-muted")}
+        >
+          {n}
+        </span>
+      )}
       <span className="flex-1">{children}</span>
       {badge !== undefined && badge > 0 && (
         <span className="spec bg-ink px-1.5 py-0.5 text-[10px] text-white">{badge}</span>
