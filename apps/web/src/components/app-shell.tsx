@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Sidebar } from "./sidebar";
 import { TopNav } from "./top-nav";
 import { DemoBanner } from "./demo-banner";
+import { SmoothScrollPane } from "./motion/smooth-scroll";
 
 interface SidebarEmployee {
   id: string;
@@ -41,9 +42,9 @@ export function AppShell({ employees, reviewCount, demoMode, children }: AppShel
         )}
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <TopNav onMenu={() => setNavOpen(true)} demoMode={demoMode} />
-          <main className="flex-1 overflow-x-hidden overflow-y-auto px-6 py-6 md:px-8">
+          <SmoothScrollPane className="flex-1 overflow-x-hidden overflow-y-auto px-6 py-6 md:px-8">
             {children}
-          </main>
+          </SmoothScrollPane>
         </div>
       </div>
     </div>

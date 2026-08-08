@@ -177,8 +177,8 @@ export function ChatPanel({ employeeName, employeeId, open, onClose }: ChatPanel
   if (!open) return null;
 
   return (
-    <div className="fixed inset-y-0 right-0 z-50 flex w-[380px] flex-col border-l border-[oklch(0.8_0.01_260/0.15)] bg-white shadow-lg">
-      <div className="flex items-center justify-between border-b border-[oklch(0.8_0.01_260/0.1)] px-4 py-3">
+    <div className="fixed inset-y-0 right-0 z-50 flex w-[380px] flex-col border-l border-hairline bg-bg">
+      <div className="flex items-center justify-between border-b border-hairline px-4 py-3">
         <div>
           <p className="text-sm font-semibold">Chat with {employeeName}</p>
           <p className="text-xs text-ink-muted">Tell me what you want done. I will pick it up immediately.</p>
@@ -238,7 +238,7 @@ export function ChatPanel({ employeeName, employeeId, open, onClose }: ChatPanel
         )}
 
         {activeTaskId && runEvents.data && runEvents.data.length > 0 && (
-          <div className="rounded-2xl border border-[oklch(0.85_0.01_260/0.4)] bg-[oklch(0.97_0.005_260/0.4)] px-3.5 py-2.5 text-xs">
+          <div className="rounded-[2px] border border-hairline bg-panel px-3.5 py-2.5 text-xs">
             <p className="font-medium text-ink-secondary mb-1.5">Activity</p>
             <ul className="space-y-1">
               {runEvents.data.slice(-6).map((e) => (
@@ -251,8 +251,8 @@ export function ChatPanel({ employeeName, employeeId, open, onClose }: ChatPanel
         )}
       </div>
 
-      <form onSubmit={handleSubmit} className="border-t border-[oklch(0.8_0.01_260/0.1)] px-4 py-3">
-        <div className="flex items-end gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2">
+      <form onSubmit={handleSubmit} className="border-t border-hairline px-4 py-3">
+        <div className="flex items-end gap-2 rounded-[2px] border border-hairline bg-bg px-3 py-2">
           <textarea
             ref={inputRef}
             value={input}
@@ -273,7 +273,7 @@ export function ChatPanel({ employeeName, employeeId, open, onClose }: ChatPanel
           <button
             type="submit"
             disabled={!input.trim() || createTask.isPending}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-black text-white disabled:opacity-30"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[2px] bg-ink text-white transition-colors hover:bg-[#2C2C29] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-30"
             aria-label="Send"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

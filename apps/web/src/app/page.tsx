@@ -9,6 +9,7 @@ import { DEMO_MODE } from "@/lib/demo";
 import { LandingSpecimen } from "@/components/landing-specimen";
 import { SplitRise } from "@/components/motion/split-rise";
 import { RiseIn } from "@/components/motion/rise-in";
+import { SmoothScrollRoot } from "@/components/motion/smooth-scroll";
 
 export const metadata = {
   title: "Beast - an autonomous AI company you manage",
@@ -51,6 +52,7 @@ export default async function Home() {
   const appHref = DEMO_MODE ? "/dashboard" : "/sign-up";
 
   return (
+    <SmoothScrollRoot>
     <main className="mx-auto max-w-6xl px-6">
       <header className="rule-b flex h-16 items-center justify-between">
         <span className="display-caps text-xl">Beast</span>
@@ -148,5 +150,6 @@ export default async function Home() {
         </a>
       </footer>
     </main>
+    </SmoothScrollRoot>
   );
 }
