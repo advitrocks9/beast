@@ -17,14 +17,12 @@ export function CountUp({
   const ref = useRef<HTMLSpanElement>(null);
   const inView = useInView(ref, { once: true, margin: "-40px" });
   const reduced = useReducedMotion();
-  const [display, setDisplay] = useState(reduced ? value : 0);
+  // Rests at the true value until the flourish actually runs, so captures,
+  // printing, and never-scrolled panels stay honest.
+  const [display, setDisplay] = useState(value);
 
   useEffect(() => {
-    if (!inView) return;
-    if (reduced) {
-      setDisplay(value);
-      return;
-    }
+    if (!inView || reduced) return;
     let frame: number;
     const start = performance.now();
     const tick = (now: number) => {
