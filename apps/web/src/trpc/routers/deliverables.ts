@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { eq, and, or, inArray } from "drizzle-orm";
-import { db, deliverables, deliverableVersions, tasks, checkIns, companies } from "@beast/db";
+import { eq, and, or, inArray, count } from "drizzle-orm";
+import { db, deliverables, deliverableVersions, tasks, checkIns, companies, proceduralMemories } from "@beast/db";
 import {
   extractFromTaskCompletion,
   extractFromFeedback,
@@ -107,6 +107,21 @@ function nextMonday9amInTz(tz: string, now: Date = new Date()): Date {
 }
 
 const triggerExecuteTask = (payload: SpawnPayload) => triggerTask("execute-task", payload);
+
+/** Amendment ordinal for a just-promoted rule: rows are append-only, so the
+ * tenant's total row count is the number the manual stamps on it. */
+async function manualRuleNumberFor(
+  database: typeof db,
+  tenantId: string,
+  candidates: CandidateResult[],
+): Promise<number | null> {
+  if (!candidates.some((c) => c.promotedRuleId)) return null;
+  const [row] = await database
+    .select({ value: count() })
+    .from(proceduralMemories)
+    .where(eq(proceduralMemories.tenantId, tenantId));
+  return row?.value ?? null;
+}
 
 /** The one run-dispatch seam: Trigger.dev when configured, in-process otherwise. */
 const dispatch = (taskId: string) => dispatchRun(taskId, { trigger: triggerExecuteTask });
@@ -592,12 +607,14 @@ export const deliverablesRouter = createTRPCRouter({
             },
           }).returning({ id: checkIns.id });
 
+      const candidates = [...candidateById.values()];
       return {
         deliverableId: updated.id,
         checkInId: checkInRow?.id,
         scheduledFor: scheduledFor.toISOString(),
-        candidates: [...candidateById.values()],
+        candidates,
         diff,
+        manualRuleNumber: await manualRuleNumberFor(ctx.db, ctx.companyId, candidates),
       };
     }),
 
@@ -755,7 +772,12 @@ export const deliverablesRouter = createTRPCRouter({
         }
       }
 
-      return { deliverableId: updated.id, candidates, diff };
+      return {
+        deliverableId: updated.id,
+        candidates,
+        diff,
+        manualRuleNumber: await manualRuleNumberFor(ctx.db, ctx.companyId, candidates),
+      };
     }),
 
   reject: protectedProcedure

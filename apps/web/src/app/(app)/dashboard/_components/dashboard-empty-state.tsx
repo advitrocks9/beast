@@ -1,4 +1,3 @@
-import { GlassCard } from "@beast/ui";
 import { startersForRole, type StarterRole } from "@beast/shared";
 import { roleColor } from "@/lib/colors";
 import { StarterCard } from "./starter-card";
@@ -20,10 +19,10 @@ export function DashboardEmptyState({ employees }: DashboardEmptyStateProps) {
 
   return (
     <div>
-      <h2 className="heading-gradient text-lg font-semibold mb-1">
+      <h2 className="text-lg font-semibold mb-1">
         Pick a first project
       </h2>
-      <p className="mb-4 text-sm text-text-secondary">
+      <p className="mb-4 text-sm text-ink-secondary">
         Each card is a real task. Tap Start, edit the brief if you want, and your AI employee drafts a deliverable in a few minutes.
       </p>
 
@@ -50,11 +49,11 @@ export function DashboardEmptyState({ employees }: DashboardEmptyStateProps) {
         })}
       </div>
 
-      <GlassCard hoverable={false} className="mt-6 p-4">
-        <p className="text-center text-xs text-text-muted">
+      <div className="panel-tinted mt-6 p-4">
+        <p className="text-center text-xs text-ink-muted">
           Want a custom first task? Click any employee card above to open their desk and brief them yourself.
         </p>
-      </GlassCard>
+      </div>
     </div>
   );
 }

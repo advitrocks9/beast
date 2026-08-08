@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { ChatPanel } from "@/components/chat-panel";
 
 interface DeskActionsProps {
@@ -8,30 +9,24 @@ interface DeskActionsProps {
   employeeName: string;
 }
 
+const FOCUS_RING =
+  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink";
+
 export function DeskActions({ employeeId, employeeName }: DeskActionsProps) {
   const [chatOpen, setChatOpen] = useState(false);
 
   return (
     <>
-      <div className="flex items-center gap-2">
-        <a
-          href={`/employees/${employeeId}/chat`}
-          className="rounded-full border border-gray-200 px-4 py-2 text-sm font-medium text-text-secondary hover:bg-gray-50"
-        >
-          Full chat
-        </a>
-        <button
-          onClick={() => setChatOpen(true)}
-          className="rounded-full border border-gray-200 px-4 py-2 text-sm font-medium text-text-secondary hover:bg-gray-50"
-        >
+      <div className="flex flex-wrap items-center gap-2">
+        <Link href={`/employees/${employeeId}/chat`} className={`btn-ghost ${FOCUS_RING}`}>
+          Open chat
+        </Link>
+        <button type="button" onClick={() => setChatOpen(true)} className={`btn-ghost ${FOCUS_RING}`}>
           Quick chat
         </button>
-        <a
-          href={`/employees/${employeeId}/new-task`}
-          className="rounded-full bg-black px-5 py-2 text-sm font-medium text-white hover:bg-gray-800"
-        >
-          + New Task
-        </a>
+        <Link href={`/employees/${employeeId}/new-task`} className={`btn-identity ${FOCUS_RING}`}>
+          Brief a job
+        </Link>
       </div>
 
       <ChatPanel

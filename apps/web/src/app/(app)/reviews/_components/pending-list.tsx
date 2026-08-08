@@ -4,8 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
+import { Check } from "lucide-react";
 import { useTRPC } from "@/trpc/client";
-import { GlassCard } from "@beast/ui";
+import { Monogram } from "@/components/monogram";
+import { StateChip } from "@/components/state-chip";
+import { ProvenanceTag } from "@/components/provenance-tag";
 
 export interface PendingItem {
   id: string;
@@ -14,16 +17,29 @@ export interface PendingItem {
   version: number;
   createdAt: string;
   employeeName: string;
-  employeeInitial: string;
-  employeeColor: string;
+  employeeRoleType: string | null;
   taskTitle: string | null;
+  isLive: boolean;
 }
 
-interface PendingListProps {
-  items: PendingItem[];
+function relativeTime(iso: string): string {
+  const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (m < 1) return "now";
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h`;
+  return `${Math.floor(h / 24)}d`;
 }
 
-export function PendingList({ items }: PendingListProps) {
+function Kbd({ children }: { children: React.ReactNode }) {
+  return (
+    <kbd className="spec rounded-[2px] border border-hairline bg-bg px-1 py-0.5 text-[10px]">
+      {children}
+    </kbd>
+  );
+}
+
+export function PendingList({ items }: { items: PendingItem[] }) {
   const router = useRouter();
   const trpc = useTRPC();
   const approve = useMutation(trpc.deliverables.approve.mutationOptions());
@@ -99,11 +115,11 @@ export function PendingList({ items }: PendingListProps) {
     });
   }
 
-  async function handleBulkApprove() {
+  async function handleBulkAccept() {
     if (selected.size === 0 || bulkPending) return;
     if (
       !confirm(
-        `Approve ${selected.size} ${selected.size === 1 ? "deliverable" : "deliverables"} without edits or rationale? Each will get a post-approval check-in.`,
+        `Accept ${selected.size} ${selected.size === 1 ? "deliverable" : "deliverables"} without edits or a sign-off note? Each schedules a check-in.`,
       )
     ) {
       return;
@@ -117,12 +133,12 @@ export function PendingList({ items }: PendingListProps) {
         await approve.mutateAsync({ deliverableId: id, approvedWithoutEdits: true });
       } catch (err) {
         failures++;
-        console.error("[bulk approve] failed for", id, err);
+        console.error("[bulk accept] failed for", id, err);
       }
     }
     setBulkPending(false);
     if (failures > 0) {
-      setBulkError(`Approved ${ids.length - failures} of ${ids.length}. ${failures} failed.`);
+      setBulkError(`Accepted ${ids.length - failures} of ${ids.length}. ${failures} failed.`);
     }
     setSelected(new Set());
     router.refresh();
@@ -131,114 +147,85 @@ export function PendingList({ items }: PendingListProps) {
   if (items.length === 0) return null;
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between gap-3">
-        <p className="px-1 text-[11px] text-text-muted">
-          Tip: <kbd className="rounded border border-gray-200 bg-white px-1 py-0.5 text-[10px] font-medium">J</kbd> /{" "}
-          <kbd className="rounded border border-gray-200 bg-white px-1 py-0.5 text-[10px] font-medium">K</kbd> to walk,{" "}
-          <kbd className="rounded border border-gray-200 bg-white px-1 py-0.5 text-[10px] font-medium">X</kbd> to select,{" "}
-          <kbd className="rounded border border-gray-200 bg-white px-1 py-0.5 text-[10px] font-medium">Enter</kbd> to open.
+    <div className="mt-1">
+      <div className="flex min-h-8 items-center justify-between gap-3">
+        <p className="spec-label">
+          <Kbd>J</Kbd> / <Kbd>K</Kbd> walk · <Kbd>X</Kbd> select · <Kbd>↵</Kbd> open
         </p>
         {selected.size > 0 && (
           <div className="flex items-center gap-2">
-            <span className="text-xs text-text-secondary">
-              {selected.size} selected
-            </span>
+            <span className="spec text-ink-secondary">{selected.size} selected</span>
             <button
               onClick={() => setSelected(new Set())}
               disabled={bulkPending}
-              className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-text-secondary hover:bg-gray-50 disabled:opacity-50"
+              className="btn-ghost px-3 py-1.5 text-[12px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-50"
             >
               Clear
             </button>
             <button
-              onClick={handleBulkApprove}
+              onClick={handleBulkAccept}
               disabled={bulkPending}
-              className="rounded-full bg-[#15803D] px-3 py-1 text-xs font-medium text-white hover:bg-[#166534] disabled:opacity-50"
+              className="btn-ink px-3 py-1.5 text-[12px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-50"
             >
-              {bulkPending ? "Approving..." : `Approve ${selected.size}`}
+              {bulkPending ? "Accepting..." : `Accept ${selected.size}`}
             </button>
           </div>
         )}
       </div>
 
-      {bulkError && (
-        <p className="px-1 text-xs text-error">{bulkError}</p>
-      )}
+      {bulkError && <p className="spec mt-1 text-state-failed">{bulkError}</p>}
 
-      {items.map((d, i) => {
-        const active = i === activeIndex;
-        const isSelected = selected.has(d.id);
-        return (
-          <div key={d.id} className="flex items-stretch gap-2">
-            <button
-              type="button"
-              onClick={() => toggleSelect(d.id)}
-              aria-label={isSelected ? `Deselect ${d.title}` : `Select ${d.title}`}
-              aria-pressed={isSelected}
-              className="flex w-6 shrink-0 items-center justify-center rounded-md hover:bg-gray-100"
-            >
-              <span
-                className={`flex h-4 w-4 items-center justify-center rounded border ${
-                  isSelected
-                    ? "border-[#15803D] bg-[#15803D] text-white"
-                    : "border-gray-300 bg-white"
+      <ul className="mt-1">
+        {items.map((d, i) => {
+          const active = i === activeIndex;
+          const isSelected = selected.has(d.id);
+          return (
+            <li key={d.id} className="hairline-b flex items-stretch gap-1 last:border-b-0">
+              <button
+                type="button"
+                onClick={() => toggleSelect(d.id)}
+                aria-label={isSelected ? `Deselect ${d.title}` : `Select ${d.title}`}
+                aria-pressed={isSelected}
+                className="flex w-7 shrink-0 items-center justify-center transition-colors hover:bg-panel focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+              >
+                <span
+                  className={`flex h-4 w-4 items-center justify-center rounded-[2px] border ${
+                    isSelected ? "border-ink bg-ink text-white" : "border-hairline bg-bg"
+                  }`}
+                >
+                  {isSelected && <Check size={11} strokeWidth={2.5} />}
+                </span>
+              </button>
+              <Link
+                href={`/review/${d.id}`}
+                ref={(el) => {
+                  itemRefs.current[i] = el;
+                }}
+                onMouseEnter={() => setActiveIndex(i)}
+                className={`flex min-w-0 flex-1 items-center gap-3 py-2.5 pr-1 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink ${
+                  active ? "bg-panel" : "hover:bg-panel"
                 }`}
               >
-                {isSelected && (
-                  <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
-                    <path d="M2 6.5L5 9.5L10 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                )}
-              </span>
-            </button>
-            <Link
-              href={`/review/${d.id}`}
-              ref={(el) => {
-                itemRefs.current[i] = el;
-              }}
-              onMouseEnter={() => setActiveIndex(i)}
-              className="flex-1"
-            >
-              <GlassCard
-                className="p-4 transition-shadow"
-                style={
-                  active
-                    ? { boxShadow: `0 0 0 2px ${d.employeeColor}55` }
-                    : undefined
-                }
-              >
-                <div className="flex items-center gap-3">
-                  <div
-                    className="flex h-8 w-8 items-center justify-center rounded-full text-white text-xs font-semibold shrink-0"
-                    style={{ backgroundColor: d.employeeColor }}
-                  >
-                    {d.employeeInitial}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{d.title}</p>
-                    <p className="text-xs text-text-secondary truncate">
-                      {d.employeeName} &middot; {d.deliverableType.replace(/_/g, " ")}
-                      {d.taskTitle ? ` · ${d.taskTitle}` : ""}
-                    </p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <span className="rounded-full bg-surface-solid px-2 py-0.5 text-[10px] font-medium text-text-muted">
-                      v{d.version}
-                    </span>
-                    <p className="text-[10px] text-text-muted mt-0.5">
-                      {new Date(d.createdAt).toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                      })}
-                    </p>
-                  </div>
-                </div>
-              </GlassCard>
-            </Link>
-          </div>
-        );
-      })}
+                <Monogram name={d.employeeName} roleType={d.employeeRoleType} size="sm" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13.5px] leading-tight font-medium">
+                    {d.title}
+                  </span>
+                  <span className="spec-label mt-0.5 block truncate">
+                    {d.deliverableType.replace(/_/g, " ")} · v{d.version}
+                    {d.taskTitle ? ` · ${d.taskTitle}` : ""}
+                  </span>
+                </span>
+                {d.isLive && <ProvenanceTag kind="live" />}
+                <StateChip status="in_review" />
+                <span className="spec w-8 shrink-0 text-right text-ink-muted">
+                  {relativeTime(d.createdAt)}
+                </span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }

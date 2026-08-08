@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useTRPC } from "@/trpc/client";
-import { GlassCard } from "@beast/ui";
 import { roleColor, statusMeta } from "@/lib/colors";
 
 interface InlineCheckIn {
@@ -47,10 +46,10 @@ export function CheckInsInline({ checkIns, employees }: CheckInsInlineProps) {
   return (
     <section>
       <div className="flex items-baseline justify-between mb-3">
-        <h2 className="heading-gradient text-lg font-semibold">Check-ins</h2>
+        <h2 className="text-lg font-semibold">Check-ins</h2>
         <Link
           href="/checkins"
-          className="text-xs font-medium text-text-secondary hover:text-foreground"
+          className="text-xs font-medium text-ink-secondary hover:text-foreground"
         >
           View all &rarr;
         </Link>
@@ -66,7 +65,7 @@ export function CheckInsInline({ checkIns, employees }: CheckInsInlineProps) {
             new Date(c.scheduledFor).getTime() < Date.now();
 
           return (
-            <GlassCard key={c.id} hoverable={false} className="p-4">
+            <div key={c.id} className="panel p-4">
               <div className="flex items-start gap-3">
                 <span
                   className="mt-1 h-2 w-2 shrink-0 rounded-full"
@@ -77,7 +76,7 @@ export function CheckInsInline({ checkIns, employees }: CheckInsInlineProps) {
                   <p className="truncate text-sm font-medium">
                     {c.deliverableTitle ?? "Check-in"}
                   </p>
-                  <div className="mt-0.5 flex flex-wrap items-center gap-x-3 text-xs text-text-muted">
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-3 text-xs text-ink-muted">
                     {emp && <span>{emp.name}</span>}
                     {c.deliverableType && (
                       <span>{c.deliverableType.replace(/_/g, " ")}</span>
@@ -90,7 +89,7 @@ export function CheckInsInline({ checkIns, employees }: CheckInsInlineProps) {
                       {scheduledLabel}
                     </span>
                   </div>
-                  <p className="mt-2 text-sm text-text-secondary">
+                  <p className="mt-2 text-sm text-ink-secondary">
                     Did you end up using {emp?.name ? `${emp.name}'s` : "this"} draft?
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2">
@@ -117,19 +116,19 @@ export function CheckInsInline({ checkIns, employees }: CheckInsInlineProps) {
                     ))}
                     <Link
                       href={`/checkins/${c.id}`}
-                      className="rounded-full border border-gray-200 px-3 py-1 text-xs font-medium text-text-secondary hover:bg-gray-50"
+                      className="rounded-full border border-gray-200 px-3 py-1 text-xs font-medium text-ink-secondary hover:bg-gray-50"
                     >
                       Add note
                     </Link>
                   </div>
                 </div>
               </div>
-            </GlassCard>
+            </div>
           );
         })}
 
         {Object.keys(dismissed).length > 0 && (
-          <p className="px-1 text-[11px] text-text-muted">
+          <p className="px-1 text-[11px] text-ink-muted">
             {Object.keys(dismissed).length} answered just now. Refresh to update
             the count.
           </p>

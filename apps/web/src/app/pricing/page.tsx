@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { Brain, Quote, Calendar, ShieldCheck } from "lucide-react";
-import { GlassCard } from "@beast/ui";
 
 export const metadata = {
   title: "Pricing",
@@ -135,20 +134,20 @@ const TRUST_CLAIMS = [
 
 export default function PricingPage() {
   return (
-    <main className="min-h-screen bg-bg-warm px-6 py-16 sm:py-24">
+    <main className="min-h-screen bg-bg px-6 py-16 sm:py-24">
       <div className="mx-auto max-w-5xl">
         {/* Hero */}
         <div className="mb-12 text-center">
-          <p className="mb-3 text-sm font-medium uppercase tracking-wider text-text-secondary">
+          <p className="mb-3 text-sm font-medium uppercase tracking-wider text-ink-secondary">
             Pricing
           </p>
           <h1 className="font-(--font-display) text-4xl font-bold tracking-tight sm:text-5xl">
             $99/mo flat.
           </h1>
-          <p className="mx-auto mt-4 max-w-xl text-lg text-text-secondary">
+          <p className="mx-auto mt-4 max-w-xl text-lg text-ink-secondary">
             No credits. No per-task fees. No surprise bills.
           </p>
-          <p className="mx-auto mt-3 max-w-xl text-sm text-text-muted">
+          <p className="mx-auto mt-3 max-w-xl text-sm text-ink-muted">
             Predictable monthly billing. Cancel any time.
           </p>
         </div>
@@ -175,7 +174,7 @@ export default function PricingPage() {
                 </span>
               </div>
             ))}
-            <p className="mt-3 text-xs text-text-muted">
+            <p className="mt-3 text-xs text-ink-muted">
               Source: BLS 2024 (US median for marketing managers at SMBs), openai.com/chatgpt/pricing
             </p>
           </div>
@@ -184,10 +183,9 @@ export default function PricingPage() {
         {/* Tier cards */}
         <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
           {TIERS.map((t) => (
-            <GlassCard
+            <div
               key={t.name}
-              hoverable={false}
-              className={`flex flex-col p-7 ${
+              className={`panel flex flex-col p-7 ${
                 t.emphasis
                   ? "ring-2 ring-[oklch(0.62_0.08_185)] shadow-lg"
                   : ""
@@ -201,14 +199,14 @@ export default function PricingPage() {
               <h2 className="font-(--font-display) text-xl font-bold tracking-tight">
                 {t.name}
               </h2>
-              <p className="mt-1 text-sm text-text-secondary">{t.tagline}</p>
+              <p className="mt-1 text-sm text-ink-secondary">{t.tagline}</p>
               <div className="mt-5 flex items-baseline gap-1">
                 <span className="font-(--font-display) text-4xl font-bold tracking-tight">
                   ${t.price}
                 </span>
-                <span className="text-sm text-text-muted">/mo</span>
+                <span className="text-sm text-ink-muted">/mo</span>
               </div>
-              <p className="mt-1 text-xs text-text-muted">{t.trial}</p>
+              <p className="mt-1 text-xs text-ink-muted">{t.trial}</p>
               <ul className="mt-6 space-y-2.5 text-sm">
                 {t.features.map((f) => (
                   <li key={f} className="flex items-start gap-2">
@@ -231,7 +229,7 @@ export default function PricingPage() {
                   {t.cta.label}
                 </Link>
               </div>
-            </GlassCard>
+            </div>
           ))}
         </div>
 
@@ -250,7 +248,7 @@ export default function PricingPage() {
                   <Icon size={18} strokeWidth={2} />
                 </div>
                 <p className="mt-3 text-sm font-semibold">{label}</p>
-                <p className="mt-1 text-xs leading-relaxed text-text-secondary">
+                <p className="mt-1 text-xs leading-relaxed text-ink-secondary">
                   {detail}
                 </p>
               </div>
@@ -263,7 +261,7 @@ export default function PricingPage() {
           <h2 className="text-center font-(--font-display) text-2xl font-bold tracking-tight">
             Why flat monthly?
           </h2>
-          <p className="mx-auto mt-3 max-w-2xl text-center text-sm text-text-secondary">
+          <p className="mx-auto mt-3 max-w-2xl text-center text-sm text-ink-secondary">
             Every other AI agent platform either hides pricing behind sales
             calls or charges you per credit, per task, or per resolution. Flat
             monthly is the only model that lets you predict your bill before
@@ -330,7 +328,7 @@ export default function PricingPage() {
           <h2 className="font-(--font-display) text-3xl font-bold tracking-tight">
             Hire your first AI employee in 90 seconds.
           </h2>
-          <p className="mx-auto mt-3 max-w-md text-sm text-text-secondary">
+          <p className="mx-auto mt-3 max-w-md text-sm text-ink-secondary">
             Three questions. One product pick. No credit card.
           </p>
           <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
@@ -352,10 +350,10 @@ export default function PricingPage() {
         {/* Trust strip */}
         <div className="mt-12 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-center">
           {TRUST_CLAIMS.map((claim, i) => (
-            <span key={claim} className="flex items-center gap-3 text-xs text-text-muted">
+            <span key={claim} className="flex items-center gap-3 text-xs text-ink-muted">
               {claim}
               {i < TRUST_CLAIMS.length - 1 && (
-                <span className="text-text-muted/40">|</span>
+                <span className="text-ink-muted/40">|</span>
               )}
             </span>
           ))}
@@ -377,14 +375,14 @@ function ComparisonCard({
   cite: string;
 }) {
   return (
-    <GlassCard hoverable={false} className="p-5">
-      <p className="text-xs font-medium uppercase tracking-wider text-text-muted">
+    <div className="panel p-5">
+      <p className="text-xs font-medium uppercase tracking-wider text-ink-muted">
         {competitor}
       </p>
       <p className="mt-1 text-sm font-semibold">{shape}</p>
-      <p className="mt-2 text-sm text-text-secondary">{detail}</p>
-      <p className="mt-3 text-xs text-text-muted">Source: {cite}</p>
-    </GlassCard>
+      <p className="mt-2 text-sm text-ink-secondary">{detail}</p>
+      <p className="mt-3 text-xs text-ink-muted">Source: {cite}</p>
+    </div>
   );
 }
 
@@ -392,7 +390,7 @@ function Faq({ q, a }: { q: string; a: string }) {
   return (
     <div className="rounded-xl border border-gray-100 bg-white p-5">
       <p className="text-sm font-semibold">{q}</p>
-      <p className="mt-2 text-sm text-text-secondary">{a}</p>
+      <p className="mt-2 text-sm text-ink-secondary">{a}</p>
     </div>
   );
 }

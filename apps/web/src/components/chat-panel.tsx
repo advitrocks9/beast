@@ -181,11 +181,11 @@ export function ChatPanel({ employeeName, employeeId, open, onClose }: ChatPanel
       <div className="flex items-center justify-between border-b border-[oklch(0.8_0.01_260/0.1)] px-4 py-3">
         <div>
           <p className="text-sm font-semibold">Chat with {employeeName}</p>
-          <p className="text-xs text-text-muted">Tell me what you want done. I will pick it up immediately.</p>
+          <p className="text-xs text-ink-muted">Tell me what you want done. I will pick it up immediately.</p>
         </div>
         <button
           onClick={onClose}
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-text-secondary hover:bg-gray-100"
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-secondary hover:bg-gray-100"
           aria-label="Close chat"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -196,7 +196,7 @@ export function ChatPanel({ employeeName, employeeId, open, onClose }: ChatPanel
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
         {messages.length === 0 && (
-          <div className="text-center text-sm text-text-muted py-12 px-4">
+          <div className="text-center text-sm text-ink-muted py-12 px-4">
             <p>Tell {employeeName} what to work on.</p>
             <p className="mt-2 text-xs">
               Examples: &ldquo;Draft a tweet about our launch.&rdquo;, &ldquo;Research three competitors&rdquo;, &ldquo;Write a cold email for SaaS founders.&rdquo;
@@ -209,7 +209,7 @@ export function ChatPanel({ employeeName, employeeId, open, onClose }: ChatPanel
               className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
                 msg.role === "user"
                   ? "bg-black text-white"
-                  : "bg-gray-100 text-text"
+                  : "bg-gray-100 text-ink"
               }`}
             >
               <p>{msg.content}</p>
@@ -217,7 +217,7 @@ export function ChatPanel({ employeeName, employeeId, open, onClose }: ChatPanel
                 <Link
                   href={msg.taskHref}
                   onClick={onClose}
-                  className="mt-2 inline-block text-xs font-medium text-brand hover:underline"
+                  className="mt-2 inline-block text-xs font-medium text-identity hover:underline"
                 >
                   Open task
                 </Link>
@@ -229,9 +229,9 @@ export function ChatPanel({ employeeName, employeeId, open, onClose }: ChatPanel
           <div className="flex justify-start">
             <div className="rounded-2xl bg-gray-100 px-3.5 py-2.5">
               <div className="flex gap-1">
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-text-muted [animation-delay:0ms]" />
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-text-muted [animation-delay:150ms]" />
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-text-muted [animation-delay:300ms]" />
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-muted [animation-delay:0ms]" />
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-muted [animation-delay:150ms]" />
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-muted [animation-delay:300ms]" />
               </div>
             </div>
           </div>
@@ -239,10 +239,10 @@ export function ChatPanel({ employeeName, employeeId, open, onClose }: ChatPanel
 
         {activeTaskId && runEvents.data && runEvents.data.length > 0 && (
           <div className="rounded-2xl border border-[oklch(0.85_0.01_260/0.4)] bg-[oklch(0.97_0.005_260/0.4)] px-3.5 py-2.5 text-xs">
-            <p className="font-medium text-text-secondary mb-1.5">Activity</p>
+            <p className="font-medium text-ink-secondary mb-1.5">Activity</p>
             <ul className="space-y-1">
               {runEvents.data.slice(-6).map((e) => (
-                <li key={e.id} className="text-text-muted">
+                <li key={e.id} className="text-ink-muted">
                   {formatRunEvent(e.eventType, e.payload as Record<string, unknown>)}
                 </li>
               ))}
@@ -262,7 +262,7 @@ export function ChatPanel({ employeeName, employeeId, open, onClose }: ChatPanel
             }}
             placeholder={`Message ${employeeName}...`}
             rows={1}
-            className="flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-text-muted"
+            className="flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-ink-muted"
             style={{ maxHeight: "80px" }}
             onInput={(e) => {
               const target = e.target as HTMLTextAreaElement;

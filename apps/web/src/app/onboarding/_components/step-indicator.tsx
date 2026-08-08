@@ -1,3 +1,5 @@
+import { cn } from "@/lib/utils";
+
 interface StepIndicatorProps {
   currentStep: 1 | 2;
 }
@@ -9,44 +11,32 @@ const STEPS: Array<{ n: 1 | 2; label: string }> = [
 
 export function OnboardingStepIndicator({ currentStep }: StepIndicatorProps) {
   return (
-    <ol className="flex items-center gap-1.5">
+    <ol className="flex items-center gap-3">
       {STEPS.map((step, i) => {
-        const status: "done" | "current" | "upcoming" =
-          step.n < currentStep
-            ? "done"
-            : step.n === currentStep
-              ? "current"
-              : "upcoming";
-        const isLast = i === STEPS.length - 1;
+        const current = step.n === currentStep;
+        const done = step.n < currentStep;
         return (
-          <li key={step.n} className="flex items-center gap-1.5">
+          <li key={step.n} className="flex items-center gap-3">
             <span
-              className={
-                status === "done"
-                  ? "flex h-5 w-5 items-center justify-center rounded-full bg-text text-[10px] font-bold text-white"
-                  : status === "current"
-                    ? "flex h-5 w-5 items-center justify-center rounded-full bg-black text-[10px] font-bold text-white"
-                    : "flex h-5 w-5 items-center justify-center rounded-full border border-gray-200 bg-white text-[10px] font-medium text-text-muted"
-              }
-              aria-current={status === "current" ? "step" : undefined}
+              aria-current={current ? "step" : undefined}
+              className={cn(
+                "flex items-baseline gap-1.5 border-b-2 pb-0.5",
+                current ? "border-ink" : "border-transparent",
+              )}
             >
-              {status === "done" ? "✓" : step.n}
-            </span>
-            <span
-              className={
-                status === "current"
-                  ? "text-xs font-semibold text-text"
-                  : "text-xs text-text-muted"
-              }
-            >
-              {step.label}
-            </span>
-            {!isLast && (
+              <span className={cn("spec", current || done ? "text-ink" : "text-ink-muted")}>
+                0{step.n}
+              </span>
               <span
-                aria-hidden
-                className="ml-1 h-px w-5 bg-[oklch(0.8_0.01_260/0.4)]"
-              />
-            )}
+                className={cn(
+                  "text-[12px]",
+                  current ? "font-semibold text-ink" : done ? "text-ink" : "text-ink-muted",
+                )}
+              >
+                {step.label}
+              </span>
+            </span>
+            {i < STEPS.length - 1 && <span aria-hidden className="h-px w-6 bg-hairline" />}
           </li>
         );
       })}

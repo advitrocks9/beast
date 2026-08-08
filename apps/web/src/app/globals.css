@@ -46,37 +46,7 @@
 
   --ease-press: cubic-bezier(0.16, 1, 0.3, 1);
 
-  /* Transitional aliases for surfaces not yet rebuilt; remove with last usage. */
-  --color-bg-warm: #FFFFFF;
-  --color-surface: #FFFFFF;
-  --color-surface-hover: #F4F4F2;
-  --color-surface-solid: #FFFFFF;
-  --color-surface-sunken: #ECECEA;
-  --color-glass: #FFFFFF;
-  --color-glass-border: #DAD9D4;
-  --color-glass-heavy: #FFFFFF;
-  --color-brand: #E8420C;
-  --color-brand-deep: #BC3105;
-  --color-brand-light: #FBEDE6;
-  --color-brand-glow: #FBEDE6;
-  --color-brand-fg: #FFFFFF;
-  --color-text: #131311;
-  --color-text-secondary: #4A4A46;
-  --color-text-muted: #6E6D68;
-  --color-active: #1E7A34;
-  --color-working: #E8420C;
-  --color-review: #131311;
-  --color-idle: #6E6D68;
-  --color-error: #C92A1B;
-  --color-marketing: #2E5FD0;
-  --color-sales: #8A3D63;
-  --color-support: #A07A00;
-  --color-chip-negative-bg: #FDF0EE;
-  --color-chip-negative-text: #C92A1B;
-  --color-chip-positive-bg: #EFF6EF;
-  --color-chip-positive-text: #1E7A34;
-  --color-chip-neutral-bg: #F4F4F2;
-  --color-chip-neutral-text: #4A4A46;
+  /* Shadows flattened and large radii squared so stock utilities obey the world. */
   --shadow-xs: 0 0 0 0 transparent;
   --shadow-sm: 0 0 0 0 transparent;
   --shadow-md: 0 0 0 0 transparent;
@@ -301,36 +271,3 @@ a.panel:hover, button.panel:hover, .panel-hover:hover {
 @media (prefers-reduced-motion: reduce) {
   .register-mark, .line-arrive, .stamp-in, .tally-fill { animation: none; }
 }
-
-/* Transitional aliases while surfaces are rebuilt; remove with the last usage. */
-.glass, .glass-heavy, .glass-frosted {
-  background: var(--color-bg);
-  border: 1px solid var(--color-hairline);
-  border-radius: var(--radius-card);
-}
-.glass-nav {
-  background: #FFFFFFEB;
-  backdrop-filter: blur(8px);
-  border-bottom: 1px solid var(--color-hairline);
-}
-.btn-primary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--color-ink);
-  color: #fff;
-  border-radius: 2px;
-  padding: 9px 16px;
-  font: 600 13.5px/1 var(--font-sans);
-}
-.btn-brand {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--color-identity);
-  color: #fff;
-  border-radius: 2px;
-  padding: 9px 16px;
-  font: 600 13.5px/1 var(--font-sans);
-}
-.heading-gradient { color: var(--color-ink); }

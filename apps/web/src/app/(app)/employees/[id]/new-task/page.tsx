@@ -7,20 +7,20 @@ import { NewTaskForm } from "./_components/new-task-form";
 
 const ROLE_TASK_TYPES: Record<string, Array<{ value: string; label: string }>> = {
   marketing: [
-    { value: "write-blog-post", label: "Blog Post" },
-    { value: "create-social-post", label: "Social Media Post" },
+    { value: "write-blog-post", label: "Blog post" },
+    { value: "create-social-post", label: "Social post" },
     { value: "draft-newsletter", label: "Newsletter" },
-    { value: "custom", label: "Custom Task" },
+    { value: "custom", label: "Custom" },
   ],
   sales: [
-    { value: "draft-outreach-email", label: "Outreach Email" },
-    { value: "create-email-sequence", label: "Email Sequence" },
-    { value: "custom", label: "Custom Task" },
+    { value: "draft-outreach-email", label: "Outreach email" },
+    { value: "create-email-sequence", label: "Email sequence" },
+    { value: "custom", label: "Custom" },
   ],
   support: [
-    { value: "draft-ticket-response", label: "Ticket Response" },
-    { value: "write-faq-article", label: "FAQ Article" },
-    { value: "custom", label: "Custom Task" },
+    { value: "draft-ticket-response", label: "Ticket response" },
+    { value: "write-faq-article", label: "FAQ article" },
+    { value: "custom", label: "Custom" },
   ],
 };
 
@@ -48,10 +48,9 @@ export default async function NewTaskPage({ params }: PageProps) {
     notFound();
   }
 
-  const taskTypes = ROLE_TASK_TYPES[employee.roleType] ?? [{ value: "custom", label: "Custom Task" }];
+  const taskTypes = ROLE_TASK_TYPES[employee.roleType] ?? [{ value: "custom", label: "Custom" }];
 
-  // Active goals this employee can pin a task to: assigned-to-this-employee
-  // OR unassigned (matches the employee-page rule).
+  // Goals this employee can pin a brief to: assigned to them or not yet assigned.
   const activeGoals = await db.query.goals.findMany({
     where: and(
       eq(goals.companyId, company!.id),

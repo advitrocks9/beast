@@ -1,10 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
+import { ArrowLeft } from "lucide-react";
 import { useTRPC } from "@/trpc/client";
-import { GlassCard } from "@beast/ui";
+import { DEMO_MODE } from "@/lib/demo";
+import { ProvenanceTag } from "@/components/provenance-tag";
 
 interface TaskType {
   value: string;
@@ -25,6 +28,11 @@ interface NewTaskFormProps {
   taskTypes: TaskType[];
   activeGoals: ActiveGoal[];
 }
+
+const FIELD =
+  "mt-1.5 block w-full rounded-[2px] border border-hairline bg-bg px-3.5 py-2.5 text-sm text-ink outline-none placeholder:text-ink-muted focus-visible:border-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink";
+const FOCUS_RING =
+  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink";
 
 export function NewTaskForm({
   employeeId,
@@ -53,7 +61,6 @@ export function NewTaskForm({
   function handleParseInput() {
     if (!input.trim()) return;
 
-    // Simple client-side parsing - extract title from first sentence, rest is objective
     const lines = input.trim().split("\n");
     const firstLine = lines[0] ?? input.trim();
     const rest = lines.slice(1).join("\n").trim();
@@ -87,46 +94,67 @@ export function NewTaskForm({
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
-      <div>
-        <h1 className="font-(--font-display) text-2xl font-bold tracking-tight">
-          New task for {employeeName}
-        </h1>
-        <p className="mt-1 text-sm text-text-secondary">{employeeRole}</p>
-      </div>
+    <div className="mx-auto max-w-2xl">
+      <header className="rule-b pb-3">
+        <Link
+          href={`/employees/${employeeId}`}
+          className={`spec-label inline-flex items-center gap-1.5 transition-colors hover:text-ink ${FOCUS_RING}`}
+        >
+          <ArrowLeft size={12} strokeWidth={1.5} />
+          {employeeName}&apos;s desk
+        </Link>
+        <h1 className="display mt-2 text-3xl">Brief a job</h1>
+        <p className="spec mt-1.5 text-ink-muted">
+          {employeeName} · {employeeRole}
+        </p>
+      </header>
+
+      {DEMO_MODE && (
+        <p className="mt-4 flex flex-wrap items-center gap-2">
+          <ProvenanceTag kind="stub" />
+          <span className="spec-label">
+            Briefing from this form is product-mode only — use Commission a job on the office board
+          </span>
+        </p>
+      )}
 
       {step === "input" ? (
-        <GlassCard hoverable={false} className="p-6 space-y-5">
-          {/* Task type */}
-          <div>
-            <label className="block text-sm font-medium mb-1.5">Task type</label>
-            <div className="flex flex-wrap gap-2">
-              {taskTypes.map((t) => (
-                <button
-                  key={t.value}
-                  onClick={() => setTaskType(t.value)}
-                  className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition-all ${
-                    taskType === t.value
-                      ? "bg-black text-white"
-                      : "bg-[oklch(0.97_0.005_260/0.5)] text-text-secondary hover:text-text"
-                  }`}
-                >
-                  {t.label}
-                </button>
-              ))}
+        <div className="mt-5 space-y-5">
+          <fieldset>
+            <legend className="spec-label">Job type</legend>
+            <div role="radiogroup" aria-label="Job type" className="mt-1.5 flex flex-wrap gap-1.5">
+              {taskTypes.map((t) => {
+                const selected = taskType === t.value;
+                return (
+                  <button
+                    key={t.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => setTaskType(t.value)}
+                    className={`rounded-[2px] border px-3 py-1.5 text-[13px] font-medium transition-colors duration-150 ${FOCUS_RING} ${
+                      selected
+                        ? "border-ink bg-ink text-white"
+                        : "border-hairline text-ink-secondary hover:border-ink hover:text-ink"
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                );
+              })}
             </div>
-          </div>
+          </fieldset>
 
-          {/* Pinned goal */}
           {activeGoals.length > 0 && (
             <div>
-              <label className="block text-sm font-medium mb-1.5">
+              <label htmlFor="pinned-goal" className="spec-label block">
                 Pinned goal
               </label>
               <select
+                id="pinned-goal"
                 value={pinnedGoalId}
                 onChange={(e) => setPinnedGoalId(e.target.value)}
-                className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
+                className={FIELD}
               >
                 {activeGoals.map((g) => (
                   <option key={g.id} value={g.id}>
@@ -134,115 +162,125 @@ export function NewTaskForm({
                     {g.targetDate ? ` (by ${formatTargetDate(g.targetDate)})` : ""}
                   </option>
                 ))}
-                <option value="none">No goal (one-off task)</option>
+                <option value="none">No goal (one-off job)</option>
               </select>
-              <p className="mt-1 text-xs text-text-muted">
-                {employeeName} will open the deliverable with one sentence
-                connecting it back to this goal.
+              <p className="mt-1.5 text-[12px] text-ink-muted">
+                {employeeName} opens the deliverable with one sentence connecting it back to this
+                goal.
               </p>
             </div>
           )}
 
-          {/* Natural language input */}
           <div>
-            <label className="block text-sm font-medium mb-1.5">
-              What should {employeeName} do?
+            <label htmlFor="brief" className="spec-label block">
+              The brief
             </label>
             <textarea
+              id="brief"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder={getPlaceholder(taskType, employeeName)}
               rows={4}
-              className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand resize-none"
+              className={`${FIELD} resize-none`}
             />
           </div>
 
           <button
+            type="button"
             onClick={handleParseInput}
             disabled={!input.trim()}
-            className="w-full rounded-xl bg-black px-4 py-2.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-30"
+            className={`btn-ink w-full disabled:opacity-50 ${FOCUS_RING}`}
           >
-            Preview brief →
+            Preview the brief
           </button>
-        </GlassCard>
+        </div>
       ) : (
-        <GlassCard hoverable={false} className="p-6 space-y-5">
-          <h2 className="text-sm font-semibold text-text-secondary uppercase tracking-wider">
-            Brief preview
-          </h2>
+        <div className="mt-5 space-y-5">
+          <div className="rule-t pt-2.5">
+            <h2 className="text-[15px] font-semibold">Brief preview</h2>
+          </div>
 
-          {/* Editable title */}
           <div>
-            <label className="block text-xs font-medium text-text-muted mb-1">Title</label>
+            <label htmlFor="task-title" className="spec-label block">
+              Title
+            </label>
             <input
+              id="task-title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium outline-none focus:border-brand focus:ring-1 focus:ring-brand"
+              className={FIELD}
             />
           </div>
 
-          {/* Editable objective */}
           <div>
-            <label className="block text-xs font-medium text-text-muted mb-1">Objective</label>
+            <label htmlFor="task-objective" className="spec-label block">
+              Objective
+            </label>
             <textarea
+              id="task-objective"
               value={objective}
               onChange={(e) => setObjective(e.target.value)}
               rows={3}
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand resize-none"
+              className={`${FIELD} resize-none`}
             />
           </div>
 
-          {/* Optional fields */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="block text-xs font-medium text-text-muted mb-1">
-                Target audience <span className="text-text-muted">(optional)</span>
+              <label htmlFor="task-audience" className="spec-label block">
+                Audience (optional)
               </label>
               <input
+                id="task-audience"
                 value={audience}
                 onChange={(e) => setAudience(e.target.value)}
                 placeholder="e.g. Engineering leads at B2B SaaS"
-                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
+                className={FIELD}
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-text-muted mb-1">
-                Tone <span className="text-text-muted">(optional)</span>
+              <label htmlFor="task-tone" className="spec-label block">
+                Tone (optional)
               </label>
               <input
+                id="task-tone"
                 value={tone}
                 onChange={(e) => setTone(e.target.value)}
                 placeholder="e.g. Technical but approachable"
-                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
+                className={FIELD}
               />
             </div>
           </div>
 
-          <div className="rounded-lg bg-brand-light/50 p-3">
-            <p className="text-xs text-text-secondary">
-              <strong>{employeeName}</strong> will receive this brief and start working.
-              You'll be notified when the deliverable is ready for review.
-            </p>
-          </div>
+          <p className="border border-hairline bg-panel px-3.5 py-2.5 text-[12.5px] text-ink-secondary">
+            {employeeName} takes this brief and starts work; the deliverable lands in your review
+            tray.
+          </p>
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && (
+            <p className="border border-state-failed/40 bg-state-failed/5 px-3.5 py-2.5 text-[13px] text-state-failed">
+              {error}
+            </p>
+          )}
 
           <div className="flex gap-3">
             <button
+              type="button"
               onClick={() => setStep("input")}
-              className="flex-1 rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-medium text-text-secondary hover:bg-gray-50"
+              className={`btn-ghost flex-1 ${FOCUS_RING}`}
             >
-              ← Edit
+              Back to draft
             </button>
             <button
+              type="button"
               onClick={handleSubmit}
-              disabled={!title.trim() || createTask.isPending}
-              className="flex-1 rounded-xl bg-black px-4 py-2.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+              disabled={DEMO_MODE || !title.trim() || createTask.isPending}
+              className={`btn-identity flex-1 disabled:opacity-50 ${FOCUS_RING}`}
             >
-              {createTask.isPending ? "Creating..." : `Assign to ${employeeName}`}
+              {createTask.isPending ? "Assigning..." : `Assign to ${employeeName}`}
             </button>
           </div>
-        </GlassCard>
+        </div>
       )}
     </div>
   );

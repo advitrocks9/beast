@@ -63,11 +63,7 @@ export function SuggestionChips({ category, onPick, onSkip }: SuggestionChipsPro
   if (!chips || chips.length === 0) return null;
 
   return (
-    <div
-      className="mt-2 flex flex-wrap gap-2 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200"
-      role="group"
-      aria-label="Suggested answers"
-    >
+    <div className="mt-2.5 flex flex-wrap gap-1.5" role="group" aria-label="Suggested answers">
       {chips.map((chip, i) => (
         <button
           key={`${category}-${i}`}
@@ -77,7 +73,7 @@ export function SuggestionChips({ category, onPick, onSkip }: SuggestionChipsPro
             if (chip.isSkip) onSkip(category);
             else onPick(chip.body);
           }}
-          className="rounded-full border border-[oklch(0.85_0.01_260/0.4)] bg-white px-3.5 py-2 text-xs text-text-secondary transition-colors hover:border-[oklch(0.7_0.01_260/0.6)] hover:bg-[oklch(0.97_0.005_260)] hover:text-foreground"
+          className="rounded-[2px] border border-hairline bg-bg px-3 py-1.5 text-[12px] text-ink-secondary transition-colors duration-150 hover:border-ink hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
         >
           {chip.label}
         </button>

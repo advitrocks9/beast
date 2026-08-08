@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useMutation } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { useTRPC } from "@/trpc/client";
-import { GlassCard } from "@beast/ui";
 
 export default function SignUpPage() {
   const [companyName, setCompanyName] = useState("");
@@ -72,7 +71,6 @@ export default function SignUpPage() {
       }
     }
 
-    // Create the company record before entering onboarding
     try {
       await ensureCompany.mutateAsync({ name: companyName });
     } catch {
@@ -85,103 +83,105 @@ export default function SignUpPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-bg-warm px-6 py-16">
-      <div className="w-full max-w-md">
-        <div className="mb-6 text-center">
-          <p className="text-xs font-medium uppercase tracking-wider text-text-secondary">
-            Beast
-          </p>
-          <h1 className="mt-2 font-(--font-display) text-3xl font-bold tracking-tight">
-            Hire your first AI employee
-          </h1>
-          <p className="mt-2 text-sm text-text-secondary">
-            Free during private beta. No credit card.
-          </p>
+    <main className="flex min-h-screen items-center justify-center bg-bg px-6 py-16">
+      <div className="w-full max-w-sm">
+        <div className="rule-b flex items-baseline justify-between pb-3">
+          <span className="display-caps text-xl">Beast</span>
+          <span className="spec-label">Founding papers</span>
         </div>
 
-        <GlassCard hoverable={false} className="p-7">
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label
-                htmlFor="companyName"
-                className="block text-sm font-medium text-text-secondary"
-              >
-                Company name
-              </label>
-              <input
-                id="companyName"
-                type="text"
-                value={companyName}
-                onChange={(e) => setCompanyName(e.target.value)}
-                required
-                autoComplete="organization"
-                placeholder="Acme Marketing"
-                className="mt-1.5 block w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-black focus:ring-1 focus:ring-black"
-              />
-            </div>
+        <h1 className="display mt-8 text-3xl">Found your company.</h1>
+        <p className="mt-2 text-sm text-ink-secondary">
+          Name it, answer the founding interview, and put your first employees to work.
+        </p>
 
-            <div>
-              <label
-                htmlFor="email"
-                className="block text-sm font-medium text-text-secondary"
-              >
-                Work email
-              </label>
-              <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                autoComplete="email"
-                placeholder="you@yourcompany.com"
-                className="mt-1.5 block w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-black focus:ring-1 focus:ring-black"
-              />
-            </div>
+        <form onSubmit={handleSubmit} className="mt-7 space-y-5">
+          <Field
+            id="companyName"
+            label="Company name"
+            type="text"
+            value={companyName}
+            onChange={setCompanyName}
+            autoComplete="organization"
+            placeholder="Acme Marketing"
+          />
+          <Field
+            id="email"
+            label="Email"
+            type="email"
+            value={email}
+            onChange={setEmail}
+            autoComplete="email"
+            placeholder="you@yourcompany.com"
+          />
+          <Field
+            id="password"
+            label="Password"
+            type="password"
+            value={password}
+            onChange={setPassword}
+            autoComplete="new-password"
+            placeholder="At least 6 characters"
+            minLength={6}
+          />
 
-            <div>
-              <label
-                htmlFor="password"
-                className="block text-sm font-medium text-text-secondary"
-              >
-                Password
-              </label>
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={6}
-                autoComplete="new-password"
-                placeholder="At least 6 characters"
-                className="mt-1.5 block w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-black focus:ring-1 focus:ring-black"
-              />
-            </div>
+          {error && (
+            <p className="border border-state-failed/40 bg-state-failed/5 px-3.5 py-2.5 text-sm text-state-failed">
+              {error}
+            </p>
+          )}
 
-            {error && (
-              <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-                {error}
-              </p>
-            )}
+          <button type="submit" disabled={loading} className="btn-ink w-full disabled:opacity-50">
+            {loading ? "Founding..." : "Found the company"}
+          </button>
+        </form>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full rounded-xl bg-black px-4 py-3 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
-            >
-              {loading ? "Setting up your account..." : "Create account"}
-            </button>
-          </form>
-        </GlassCard>
-
-        <p className="mt-6 text-center text-sm text-text-secondary">
-          Already have an account?{" "}
-          <Link href="/sign-in" className="font-medium text-black underline">
+        <p className="hairline-t mt-8 pt-4 text-sm text-ink-secondary">
+          Already founded?{" "}
+          <Link href="/sign-in" className="font-semibold text-ink underline underline-offset-2">
             Sign in
           </Link>
         </p>
       </div>
     </main>
+  );
+}
+
+function Field({
+  id,
+  label,
+  type,
+  value,
+  onChange,
+  autoComplete,
+  placeholder,
+  minLength,
+}: {
+  id: string;
+  label: string;
+  type: string;
+  value: string;
+  onChange: (v: string) => void;
+  autoComplete: string;
+  placeholder?: string;
+  minLength?: number;
+}) {
+  return (
+    <div>
+      <label htmlFor={id} className="spec-label block">
+        {label}
+      </label>
+      <input
+        id={id}
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        required
+        autoComplete={autoComplete}
+        placeholder={placeholder}
+        minLength={minLength}
+        className="mt-1.5 block w-full border border-hairline bg-bg px-3.5 py-2.5 text-sm text-ink outline-none placeholder:text-ink-muted focus-visible:border-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+      />
+    </div>
   );
 }

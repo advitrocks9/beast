@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { useTRPC } from "@/trpc/client";
-import { GlassCard } from "@beast/ui";
 import { type OnboardingStarter, formatEta } from "@beast/shared";
 
 interface StarterCardProps {
@@ -36,7 +35,7 @@ export function StarterCard({ starter, employeeId, employeeName, hex }: StarterC
   const isPending = create.isPending;
 
   return (
-    <GlassCard hoverable={false} className="flex h-full flex-col p-5">
+    <div className="panel flex h-full flex-col p-5">
       <div className="flex items-center gap-2">
         <span
           className="h-2 w-2 rounded-full"
@@ -53,13 +52,13 @@ export function StarterCard({ starter, employeeId, employeeName, hex }: StarterC
       </h3>
 
       <details className="group mt-2">
-        <summary className="cursor-pointer list-none text-xs leading-relaxed text-text-secondary line-clamp-2 group-open:line-clamp-none">
+        <summary className="cursor-pointer list-none text-xs leading-relaxed text-ink-secondary line-clamp-2 group-open:line-clamp-none">
           {starter.brief}
         </summary>
       </details>
 
       <div className="mt-auto flex items-center justify-between pt-4">
-        <span className="text-xs text-text-muted">ETA {formatEta(starter)}</span>
+        <span className="text-xs text-ink-muted">ETA {formatEta(starter)}</span>
         <button
           type="button"
           onClick={handleStart}
@@ -71,8 +70,8 @@ export function StarterCard({ starter, employeeId, employeeName, hex }: StarterC
       </div>
 
       {error && (
-        <p className="mt-2 text-xs text-[oklch(0.55_0.18_30)]">{error}</p>
+        <p className="mt-2 text-xs text-destructive">{error}</p>
       )}
-    </GlassCard>
+    </div>
   );
 }

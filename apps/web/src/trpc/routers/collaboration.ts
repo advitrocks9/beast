@@ -36,11 +36,7 @@ export const collaborationRouter = createTRPCRouter({
       });
       if (!proposal) throw new Error("Proposal not found");
 
-      // All four writes (status flip, task insert, proposal.resultingTaskId
-      // backlink, activity log) commit atomically. Prior to this, a failure
-      // between the status flip and createCollaborationTask left a proposal
-      // marked "approved" with no task created, and a failure before the
-      // activity log left the dashboard ActivityFeed missing the event.
+      // status flip, task insert, backlink, and activity log must commit atomically
       const taskId = await ctx.db.transaction(async (tx) => {
         await tx
           .update(collaborationProposals)

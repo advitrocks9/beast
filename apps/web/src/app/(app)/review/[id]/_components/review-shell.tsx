@@ -1,35 +1,18 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { useTRPC } from "@/trpc/client";
-import { GlassCard } from "@beast/ui";
 import type { Citation } from "@beast/shared";
+import { Monogram } from "@/components/monogram";
+import { StateChip } from "@/components/state-chip";
+import { ProvenanceTag, type Provenance } from "@/components/provenance-tag";
 import { CheckInModal } from "./check-in-modal";
-import { ReasoningTrail } from "./reasoning-trail";
-import { MemoryReceipt } from "./memory-receipt";
+import { ReasoningTrail, type ToolCallTrace } from "./reasoning-trail";
+import { AppliedRules, type AppliedRule } from "./applied-rules";
 import { CitedBody, unresolvedCitationCount } from "./cited-body";
-import { roleMeta, statusMeta } from "@/lib/colors";
-
-interface ToolCallTrace {
-  toolCallId: string;
-  name: string;
-  inputSummary: string;
-  resultSummary: string;
-  durationMs: number;
-  startedAt: string;
-}
-
-interface AppliedRule {
-  ruleId: string;
-  summary: string;
-  evidence: string;
-  extractedFromDeliverableId: string;
-  extractedFromTitle: string;
-  extractedAt: string;
-  confidence: number;
-}
+import { VerdictMoment, type CandidateWire, type DiffSpanWire } from "./verdict-moment";
 
 interface DeliverableData {
   id: string;
@@ -41,6 +24,7 @@ interface DeliverableData {
   aiEmployeeId: string;
   taskId: string;
   publishAfter?: string | null;
+  createdAt: string;
 }
 
 const PUBLISHABLE_TYPES = new Set([
@@ -51,21 +35,41 @@ const PUBLISHABLE_TYPES = new Set([
 ]);
 
 const FEEDBACK_CHIPS = [
-  { value: "love_this", label: "Love this", color: "#15803D", bg: "#ECFDF3" },
-  { value: "too_long", label: "Too long", color: "#B91C1C", bg: "#FEF2F2" },
-  { value: "too_formal", label: "Too formal", color: "#B91C1C", bg: "#FEF2F2" },
-  { value: "too_casual", label: "Too casual", color: "#B91C1C", bg: "#FEF2F2" },
-  { value: "make_punchier", label: "Make punchier", color: "#52525B", bg: "#F4F4F5" },
-  { value: "add_data", label: "Add data", color: "#52525B", bg: "#F4F4F5" },
-  { value: "stronger_cta", label: "Stronger CTA", color: "#52525B", bg: "#F4F4F5" },
-  { value: "different_angle", label: "Different angle", color: "#52525B", bg: "#F4F4F5" },
+  { value: "love_this", label: "Love this" },
+  { value: "too_long", label: "Too long" },
+  { value: "too_formal", label: "Too formal" },
+  { value: "too_casual", label: "Too casual" },
+  { value: "make_punchier", label: "Make punchier" },
+  { value: "add_data", label: "Add data" },
+  { value: "stronger_cta", label: "Stronger CTA" },
+  { value: "different_angle", label: "Different angle" },
 ] as const;
+
+interface Moment {
+  verdict: "accepted" | "revising";
+  diff: { spans: DiffSpanWire[] } | null;
+  candidates: CandidateWire[];
+  manualRuleNumber: number | null;
+  scheduledFor: string | null;
+  checkInId: string | null;
+}
 
 interface ReviewShellProps {
   deliverable: DeliverableData;
   employeeName: string;
   employeeRoleType: string;
   taskTitle?: string;
+  ruleNumbers: Record<string, string>;
+  provenance: Provenance | null;
+}
+
+function filedWhen(iso: string): string {
+  const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (m < 1) return "filed now";
+  if (m < 60) return `filed ${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `filed ${h}h ago`;
+  return `filed ${Math.floor(h / 24)}d ago`;
 }
 
 export function ReviewShell({
@@ -73,12 +77,15 @@ export function ReviewShell({
   employeeName,
   employeeRoleType,
   taskTitle,
+  ruleNumbers,
+  provenance,
 }: ReviewShellProps) {
   const [selectedChips, setSelectedChips] = useState<Set<string>>(new Set());
   const [feedbackText, setFeedbackText] = useState("");
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [moment, setMoment] = useState<Moment | null>(null);
   const [checkInModalOpen, setCheckInModalOpen] = useState(false);
-  const [checkInScheduledFor, setCheckInScheduledFor] = useState<string | null>(null);
-  const [checkInId, setCheckInId] = useState<string | null>(null);
+  const momentRef = useRef<HTMLDivElement | null>(null);
   const router = useRouter();
   const trpc = useTRPC();
 
@@ -89,7 +96,6 @@ export function ReviewShell({
   const queueAutoPublish = useMutation(trpc.deliverables.queueAutoPublish.mutationOptions());
   const cancelAutoPublish = useMutation(trpc.deliverables.cancelAutoPublish.mutationOptions());
 
-  const roleText = roleMeta(employeeRoleType).text;
   const pickString = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined);
   const originalBody = pickString(deliverable.content.content)
     ?? pickString(deliverable.content.body)
@@ -106,6 +112,11 @@ export function ReviewShell({
   const unresolved = unresolvedCitationCount(mainContent, citations);
   const hasUnsavedEdit = isEditing && draftText !== mainContent;
   const wasEdited = persistedEdit !== undefined && persistedEdit !== originalBody;
+  const reviewable = deliverable.status === "in_review" || deliverable.status === "revised";
+
+  useEffect(() => {
+    if (moment) momentRef.current?.scrollIntoView({ block: "nearest" });
+  }, [moment]);
 
   function toggleChip(value: string) {
     setSelectedChips((prev) => {
@@ -121,7 +132,13 @@ export function ReviewShell({
       setIsEditing(false);
       return;
     }
-    await saveEdit.mutateAsync({ deliverableId: deliverable.id, editedText: draftText });
+    setActionError(null);
+    try {
+      await saveEdit.mutateAsync({ deliverableId: deliverable.id, editedText: draftText });
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Edit did not save.");
+      return;
+    }
     setIsEditing(false);
     router.refresh();
   }
@@ -141,35 +158,65 @@ export function ReviewShell({
     router.refresh();
   }
 
-  async function handleApprove() {
+  async function handleAccept() {
+    setActionError(null);
     const hasNoEdits = selectedChips.size === 0 && !feedbackText.trim() && !wasEdited;
-    const result = await approve.mutateAsync({
-      deliverableId: deliverable.id,
-      chips: Array.from(selectedChips),
-      feedbackText: feedbackText.trim() || undefined,
-      originalText: originalBody,
-      editedText: wasEdited ? mainContent : undefined,
-      approvedWithoutEdits: hasNoEdits,
+    let result;
+    try {
+      result = await approve.mutateAsync({
+        deliverableId: deliverable.id,
+        chips: Array.from(selectedChips),
+        feedbackText: feedbackText.trim() || undefined,
+        originalText: originalBody,
+        editedText: wasEdited ? mainContent : undefined,
+        approvedWithoutEdits: hasNoEdits,
+      });
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Sign-off did not go through.");
+      return;
+    }
+    if (!result) {
+      router.refresh();
+      return;
+    }
+    setMoment({
+      verdict: "accepted",
+      diff: result.diff,
+      candidates: result.candidates,
+      manualRuleNumber: result.manualRuleNumber,
+      scheduledFor: result.scheduledFor,
+      checkInId: result.checkInId ?? null,
     });
-    setCheckInScheduledFor(result?.scheduledFor ?? null);
-    setCheckInId(result?.checkInId ?? null);
-    setCheckInModalOpen(true);
-  }
-
-  function handleDismissCheckInModal() {
-    setCheckInModalOpen(false);
-    router.back();
     router.refresh();
   }
 
-  async function handleRequestRevision() {
-    await requestRevision.mutateAsync({
-      deliverableId: deliverable.id,
-      chips: Array.from(selectedChips),
-      feedbackText: feedbackText.trim() || undefined,
-      originalText: mainContent,
+  async function handleSendBack() {
+    setActionError(null);
+    let result;
+    try {
+      result = await requestRevision.mutateAsync({
+        deliverableId: deliverable.id,
+        chips: Array.from(selectedChips),
+        feedbackText: feedbackText.trim() || undefined,
+        originalText: originalBody,
+        editedText: wasEdited ? mainContent : undefined,
+      });
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Send-back did not go through.");
+      return;
+    }
+    if (!result) {
+      router.refresh();
+      return;
+    }
+    setMoment({
+      verdict: "revising",
+      diff: result.diff,
+      candidates: result.candidates,
+      manualRuleNumber: result.manualRuleNumber,
+      scheduledFor: null,
+      checkInId: null,
     });
-    router.back();
     router.refresh();
   }
 
@@ -177,41 +224,51 @@ export function ReviewShell({
   const [rejectReason, setRejectReason] = useState("");
 
   async function handleReject() {
-    await reject.mutateAsync({
-      deliverableId: deliverable.id,
-      reason: rejectReason.trim(),
-      originalText: mainContent,
-    });
-    router.back();
+    setActionError(null);
+    try {
+      await reject.mutateAsync({
+        deliverableId: deliverable.id,
+        reason: rejectReason.trim(),
+        originalText: mainContent,
+      });
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Reject did not go through.");
+      return;
+    }
+    router.push("/reviews");
     router.refresh();
   }
 
+  const checkInLine = moment?.scheduledFor
+    ? `Check-in ${new Date(moment.scheduledFor).toLocaleDateString("en-US", {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+      })}`
+    : null;
+
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-xs font-medium text-text-muted uppercase tracking-wider">
-            Review deliverable · v{deliverable.version}
+    <div className="mx-auto max-w-5xl space-y-5">
+      <header className="rule-b flex flex-wrap items-end justify-between gap-3 pb-3">
+        <div className="min-w-0">
+          <p className="spec-label">
+            Proofing desk · {deliverable.deliverableType.replace(/_/g, " ")} · v
+            {deliverable.version} · {filedWhen(deliverable.createdAt)}
           </p>
-          <h1 className="mt-1 font-(--font-display) text-2xl font-bold tracking-tight">
-            {deliverable.title}
-          </h1>
-          <p className="mt-0.5 text-sm text-text-secondary">
-            by <span style={{ color: roleText }} className="font-medium">{employeeName}</span>
-            {taskTitle && <> · {taskTitle}</>}
+          <h1 className="display mt-1.5 text-2xl">{deliverable.title}</h1>
+          <p className="mt-1.5 flex items-center gap-2 text-[13px] text-ink-secondary">
+            <Monogram name={employeeName} roleType={employeeRoleType} size="sm" />
+            <span className="font-medium text-ink">{employeeName}</span>
+            {taskTitle && <span className="truncate">· {taskTitle}</span>}
           </p>
         </div>
-        <span className="rounded-full bg-[oklch(0.97_0.005_260/0.5)] px-3 py-1 text-xs font-medium text-text-secondary">
-          {deliverable.deliverableType}
-        </span>
-      </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {provenance && <ProvenanceTag kind={provenance} />}
+          <StateChip status={moment ? moment.verdict : deliverable.status} />
+        </div>
+      </header>
 
-      <MemoryReceipt
-        rules={appliedRules}
-        scopeKey={deliverable.id}
-        employeeName={employeeName}
-      />
+      <AppliedRules rules={appliedRules} ruleNumbers={ruleNumbers} />
 
       <PublishBanner
         status={deliverable.status}
@@ -224,201 +281,222 @@ export function ReviewShell({
       />
 
       {unresolved > 0 && (
-        <div
-          className="rounded-xl border px-4 py-3 text-sm"
-          style={{
-            background: "color-mix(in oklab, var(--color-error) 8%, white)",
-            borderColor: "color-mix(in oklab, var(--color-error) 30%, white)",
-            color: "var(--color-error)",
-          }}
-        >
-          {unresolved} {unresolved === 1 ? "source" : "sources"} not found.
-          The body cites markers that are not in the citation list. Approve only after verifying the unresolved claims.
+        <div className="border border-state-failed px-3.5 py-2.5">
+          <p className="spec-label text-state-failed">
+            {unresolved} {unresolved === 1 ? "source" : "sources"} not found
+          </p>
+          <p className="mt-1 text-[13px] leading-snug text-ink-secondary">
+            The body cites markers that are not in the source list. Sign off only after
+            verifying the unresolved claims.
+          </p>
         </div>
       )}
 
-      {/* Content renderer */}
-      <GlassCard hoverable={false} className="p-8">
-        <div className="flex items-center justify-between mb-3">
+      <section aria-label="Document" className="panel">
+        <div className="hairline-b flex items-center justify-between gap-3 px-4 py-2.5">
+          <p className="spec-label">Document</p>
           <div className="flex items-center gap-2">
             {wasEdited && !isEditing && (
-              <span
-                className="rounded-full px-2 py-0.5 text-[10px] font-medium"
-                style={{ backgroundColor: "#FEF3C7", color: "#92400E" }}
-              >
+              <span className="spec-label border border-identity px-1.5 py-0.5 text-identity-deep">
                 Edited by you
               </span>
             )}
+            {isEditing && (
+              <>
+                <button
+                  onClick={handleCancelEdit}
+                  disabled={saveEdit.isPending}
+                  className="btn-ghost px-3 py-1.5 text-[12px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-50"
+                >
+                  Discard
+                </button>
+                <button
+                  onClick={handleSaveEdit}
+                  disabled={saveEdit.isPending || !hasUnsavedEdit}
+                  className="btn-ink px-3 py-1.5 text-[12px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-50"
+                >
+                  {saveEdit.isPending ? "Saving..." : "Save edit"}
+                </button>
+              </>
+            )}
           </div>
-          {!isEditing ? (
-            <button
-              onClick={() => {
-                setDraftText(mainContent);
-                setIsEditing(true);
-              }}
-              className="text-xs font-medium text-text-secondary hover:text-text"
-            >
-              Edit
-            </button>
-          ) : (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleCancelEdit}
-                disabled={saveEdit.isPending}
-                className="text-xs font-medium text-text-secondary hover:text-text disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveEdit}
-                disabled={saveEdit.isPending || !hasUnsavedEdit}
-                className="rounded-lg bg-black px-3 py-1 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-50"
-              >
-                {saveEdit.isPending ? "Saving..." : "Save edit"}
-              </button>
-            </div>
-          )}
         </div>
 
-        {isEditing ? (
-          <textarea
-            value={draftText}
-            onChange={(e) => setDraftText(e.target.value)}
-            rows={Math.max(8, draftText.split("\n").length + 2)}
-            className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm leading-relaxed outline-none focus:border-brand focus:ring-1 focus:ring-brand resize-y"
-            autoFocus
-          />
-        ) : deliverable.deliverableType === "social_twitter" || deliverable.deliverableType === "social_linkedin" ? (
-          <SocialPostPreview
-            content={mainContent}
-            platform={deliverable.deliverableType === "social_twitter" ? "Twitter" : "LinkedIn"}
-          />
-        ) : (
-          <CitedBody body={mainContent} citations={citations} hex={roleText} />
-        )}
-      </GlassCard>
+        <div className="px-4 py-4 sm:px-5">
+          {isEditing ? (
+            <textarea
+              value={draftText}
+              onChange={(e) => setDraftText(e.target.value)}
+              rows={Math.max(8, draftText.split("\n").length + 2)}
+              className="block w-full resize-y border border-hairline bg-bg px-3.5 py-3 text-[14px] leading-relaxed text-ink outline-none focus-visible:border-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+              autoFocus
+            />
+          ) : deliverable.deliverableType === "social_twitter" ||
+            deliverable.deliverableType === "social_linkedin" ? (
+            <SocialPostPreview
+              content={mainContent}
+              platform={deliverable.deliverableType === "social_twitter" ? "Twitter" : "LinkedIn"}
+            />
+          ) : (
+            <CitedBody body={mainContent} citations={citations} />
+          )}
+        </div>
+      </section>
 
       <ReasoningTrail trace={trail} employeeName={employeeName} />
 
-      {/* Quick feedback chips */}
-      <div>
-        <h3 className="text-sm font-medium mb-2">Quick feedback</h3>
-        <div className="flex flex-wrap gap-2">
-          {FEEDBACK_CHIPS.map((chip) => {
-            const selected = selectedChips.has(chip.value);
-            return (
-              <button
-                key={chip.value}
-                onClick={() => toggleChip(chip.value)}
-                className="rounded-full px-3.5 py-1.5 text-xs font-medium transition-all"
-                style={{
-                  backgroundColor: selected ? chip.bg : "oklch(0.97 0.005 260 / 0.4)",
-                  color: selected ? chip.color : "#6B7280",
-                  outline: selected ? `2px solid ${chip.color}30` : "none",
-                }}
-              >
-                {chip.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Approval rationale */}
-      <div>
-        <label className="block text-sm font-medium mb-1.5">
-          Why did you approve this? <span className="text-text-muted font-normal">(optional)</span>
-        </label>
-        <textarea
-          value={feedbackText}
-          onChange={(e) => setFeedbackText(e.target.value)}
-          placeholder={`What worked here that ${employeeName} should repeat? What should they avoid next time?`}
-          rows={3}
-          className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand resize-none"
-        />
-        <p className="mt-1 text-xs text-text-muted">
-          One or two sentences becomes a rule {employeeName} applies to similar work.
-        </p>
-      </div>
-
-      {/* Reject reason panel */}
-      {rejectMode && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 space-y-2">
-          <label className="block text-sm font-medium text-red-900">
-            Why is this rejected?
-          </label>
-          <textarea
-            value={rejectReason}
-            onChange={(e) => setRejectReason(e.target.value)}
-            rows={3}
-            placeholder={`What was wrong with this approach? ${employeeName} stores this as an avoid-pattern for next time.`}
-            className="w-full rounded-lg border border-red-200 bg-white px-3 py-2 text-sm outline-none focus:border-red-400 focus:ring-1 focus:ring-red-400 resize-none"
-            autoFocus
+      {moment ? (
+        <div ref={momentRef}>
+          <VerdictMoment
+            verdict={moment.verdict}
+            diff={moment.diff}
+            candidates={moment.candidates}
+            manualRuleNumber={moment.manualRuleNumber}
+            checkInLine={checkInLine}
+            onAdjustCheckIn={moment.checkInId ? () => setCheckInModalOpen(true) : undefined}
+            onDone={() => {
+              router.push("/reviews");
+              router.refresh();
+            }}
           />
-          <p className="text-xs text-red-700">
-            Rejecting ends this task. The agent will not retry. The reason becomes a high-signal avoid rule (10-char minimum).
-          </p>
-          <div className="flex gap-2 pt-1">
-            <button
-              onClick={() => {
-                setRejectMode(false);
-                setRejectReason("");
-              }}
-              disabled={reject.isPending}
-              className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleReject}
-              disabled={reject.isPending || rejectReason.trim().length < 10}
-              className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-30"
-            >
-              {reject.isPending ? "Rejecting..." : "Confirm reject"}
-            </button>
-          </div>
         </div>
-      )}
+      ) : (
+        reviewable && (
+          <>
+            <section aria-label="Feedback" className="rule-t pt-2.5">
+              <h2 className="text-[15px] font-semibold">Mark it up</h2>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {FEEDBACK_CHIPS.map((chip) => {
+                  const selected = selectedChips.has(chip.value);
+                  return (
+                    <button
+                      key={chip.value}
+                      onClick={() => toggleChip(chip.value)}
+                      aria-pressed={selected}
+                      className={`rounded-[2px] border px-2.5 py-1.5 text-[12px] font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink ${
+                        selected
+                          ? "border-ink bg-ink text-white"
+                          : "border-hairline text-ink-secondary hover:border-ink hover:text-ink"
+                      }`}
+                    >
+                      {chip.label}
+                    </button>
+                  );
+                })}
+              </div>
 
-      {/* Actions */}
-      <div className="flex gap-3 pt-2">
-        <button
-          onClick={() => router.back()}
-          className="rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-medium text-text-secondary hover:bg-gray-50"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={() => setRejectMode((v) => !v)}
-          disabled={reject.isPending}
-          className="rounded-xl border border-red-300 bg-white px-5 py-2.5 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
-        >
-          Reject
-        </button>
-        <button
-          onClick={handleRequestRevision}
-          disabled={requestRevision.isPending || (selectedChips.size === 0 && !feedbackText.trim())}
-          className="flex-1 rounded-xl border border-red-200 bg-red-50 px-5 py-2.5 text-sm font-medium text-red-700 hover:bg-red-100 disabled:opacity-30"
-        >
-          {requestRevision.isPending ? "Sending..." : "Request Revision"}
-        </button>
-        <button
-          onClick={handleApprove}
-          disabled={approve.isPending}
-          className="flex-1 rounded-xl bg-[#15803D] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#166534] disabled:opacity-50"
-        >
-          {approve.isPending ? "Approving..." : "Approve"}
-        </button>
-      </div>
+              <label htmlFor="signoff-note" className="spec-label mt-4 block">
+                Sign-off note (optional)
+              </label>
+              <textarea
+                id="signoff-note"
+                value={feedbackText}
+                onChange={(e) => setFeedbackText(e.target.value)}
+                placeholder={`What should ${employeeName} repeat, and what should they avoid?`}
+                rows={3}
+                className="mt-1.5 block w-full resize-none border border-hairline bg-bg px-3.5 py-2.5 text-sm text-ink outline-none placeholder:text-ink-muted focus-visible:border-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+              />
+              <p className="spec mt-1 text-ink-muted">
+                A sentence here becomes a candidate rule in the operating manual.
+              </p>
+            </section>
+
+            {rejectMode && (
+              <section aria-label="Reject" className="border border-state-failed p-4">
+                <label htmlFor="reject-reason" className="spec-label block text-state-failed">
+                  Why is this rejected?
+                </label>
+                <textarea
+                  id="reject-reason"
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  rows={3}
+                  placeholder={`What was wrong with the approach? ${employeeName} files it as an avoid-pattern.`}
+                  className="mt-1.5 block w-full resize-none border border-hairline bg-bg px-3.5 py-2.5 text-sm text-ink outline-none placeholder:text-ink-muted focus-visible:border-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+                  autoFocus
+                />
+                <p className="spec mt-1.5 text-ink-secondary">
+                  Rejecting ends the job. The reason becomes a high-signal avoid rule, 10
+                  characters minimum.
+                </p>
+                <div className="mt-2.5 flex gap-2">
+                  <button
+                    onClick={() => {
+                      setRejectMode(false);
+                      setRejectReason("");
+                    }}
+                    disabled={reject.isPending}
+                    className="btn-ghost px-3 py-1.5 text-[12px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-50"
+                  >
+                    Keep reviewing
+                  </button>
+                  <button
+                    onClick={handleReject}
+                    disabled={reject.isPending || rejectReason.trim().length < 10}
+                    className="btn-ink bg-state-failed px-3 py-1.5 text-[12px] hover:bg-state-failed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-40"
+                  >
+                    {reject.isPending ? "Rejecting..." : "Confirm reject"}
+                  </button>
+                </div>
+              </section>
+            )}
+
+            {actionError && (
+              <p className="spec text-state-failed" role="alert">
+                {actionError}
+              </p>
+            )}
+
+            <div className="rule-t flex flex-wrap items-center gap-2 pt-3">
+              <button
+                onClick={() => setRejectMode((v) => !v)}
+                disabled={reject.isPending}
+                aria-expanded={rejectMode}
+                className="btn-ghost text-state-failed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-50"
+              >
+                Reject
+              </button>
+              <button
+                onClick={handleSendBack}
+                disabled={
+                  requestRevision.isPending ||
+                  isEditing ||
+                  (selectedChips.size === 0 && !feedbackText.trim() && !wasEdited)
+                }
+                className="btn-ghost focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-40"
+              >
+                {requestRevision.isPending ? "Sending back..." : "Send back"}
+              </button>
+              <span className="flex-1" />
+              <button
+                onClick={() => {
+                  setDraftText(mainContent);
+                  setIsEditing(true);
+                }}
+                disabled={isEditing}
+                className="btn-ghost focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-40"
+              >
+                Edit
+              </button>
+              <button
+                onClick={handleAccept}
+                disabled={approve.isPending || isEditing}
+                className="btn-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-50"
+              >
+                {approve.isPending ? "Signing off..." : "Accept"}
+              </button>
+            </div>
+          </>
+        )
+      )}
 
       <CheckInModal
         open={checkInModalOpen}
-        scheduledFor={checkInScheduledFor}
+        scheduledFor={moment?.scheduledFor ?? null}
         deliverableType={deliverable.deliverableType}
-        deliverableId={deliverable.id}
-        checkInId={checkInId}
+        checkInId={moment?.checkInId}
         employeeName={employeeName}
-        onDismiss={handleDismissCheckInModal}
+        onDismiss={() => setCheckInModalOpen(false)}
       />
     </div>
   );
@@ -454,19 +532,17 @@ function PublishBanner({
   if (status === "auto_publishing" && publishAfter) {
     const left = Math.max(0, Math.round((new Date(publishAfter).getTime() - now) / 1000));
     return (
-      <div className="rounded-xl border border-brand bg-brand-light px-4 py-3 flex items-center justify-between gap-3">
+      <div className="flex items-center justify-between gap-3 border border-identity px-3.5 py-2.5">
         <div>
-          <p className="text-sm font-medium text-brand">
-            Publishing in {left}s
-          </p>
-          <p className="text-xs text-text-secondary mt-0.5">
-            Cancel here or from /reviews to keep this in approved status.
+          <p className="spec font-semibold text-identity-deep">Publishing in {left}s</p>
+          <p className="spec mt-0.5 text-ink-secondary">
+            Cancel here or from the review page to keep it accepted.
           </p>
         </div>
         <button
           onClick={onCancel}
           disabled={cancelPending || left === 0}
-          className="rounded-lg border border-error bg-white px-3 py-1.5 text-xs font-medium text-error hover:bg-[oklch(0.97_0.05_25)] disabled:opacity-50"
+          className="btn-ghost px-3 py-1.5 text-[12px] text-state-failed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-50"
         >
           {cancelPending ? "Cancelling..." : "Cancel publish"}
         </button>
@@ -476,19 +552,17 @@ function PublishBanner({
 
   if (status === "accepted" && PUBLISHABLE_TYPES.has(deliverableType)) {
     return (
-      <div className="rounded-xl border border-[oklch(0.85_0.01_260/0.4)] bg-white px-4 py-3 flex items-center justify-between gap-3">
+      <div className="panel-tinted flex items-center justify-between gap-3 px-3.5 py-2.5">
         <div>
-          <p className="text-sm font-medium">
-            Accepted. Publish to platform when ready.
-          </p>
-          <p className="text-xs text-text-secondary mt-0.5">
-            Queue auto-publish with a 60-second cancel window, or publish manually from Settings.
+          <p className="text-[13.5px] font-medium">Accepted. Publish when ready.</p>
+          <p className="spec mt-0.5 text-ink-muted">
+            Queues with a 60-second cancel window; manual publish lives in Settings.
           </p>
         </div>
         <button
           onClick={onQueue}
           disabled={queuePending}
-          className="rounded-lg bg-black px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+          className="btn-ink px-3 py-1.5 text-[12px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-50"
         >
           {queuePending ? "Queueing..." : "Publish in 60s"}
         </button>
@@ -497,10 +571,9 @@ function PublishBanner({
   }
 
   if (status === "published") {
-    const published = statusMeta("published");
     return (
-      <div className="rounded-xl border border-brand bg-brand-light px-4 py-3">
-        <p className="text-sm font-medium" style={{ color: published.fg }}>Published.</p>
+      <div className="panel-tinted px-3.5 py-2.5">
+        <p className="spec font-semibold text-state-published">Published.</p>
       </div>
     );
   }
@@ -510,15 +583,17 @@ function PublishBanner({
 
 function SocialPostPreview({ content, platform }: { content: string; platform: string }) {
   return (
-    <div className="mx-auto max-w-md rounded-xl border border-gray-200 bg-white p-4">
-      <div className="flex items-center gap-2 mb-3">
-        <div className="h-8 w-8 rounded-full bg-gray-200" />
+    <div className="panel-tinted mx-auto max-w-md p-4">
+      <div className="mb-3 flex items-center gap-2.5">
+        <span className="flex h-8 w-8 items-center justify-center rounded-[2px] bg-ink font-mono text-[12px] uppercase text-white">
+          Co
+        </span>
         <div>
-          <p className="text-sm font-medium">Your Company</p>
-          <p className="text-xs text-text-muted">{platform}</p>
+          <p className="text-[13.5px] leading-tight font-medium">Your company</p>
+          <p className="spec-label mt-0.5">{platform} · draft preview</p>
         </div>
       </div>
-      <p className="text-sm leading-relaxed whitespace-pre-wrap">{content}</p>
+      <p className="text-[14px] leading-relaxed whitespace-pre-wrap">{content}</p>
     </div>
   );
 }

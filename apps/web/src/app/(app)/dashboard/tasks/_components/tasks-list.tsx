@@ -1,52 +1,71 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { useTRPC } from "@/trpc/client";
-import { statusMeta } from "@/lib/colors";
-import { GlassCard } from "@beast/ui";
+import { cn } from "@/lib/utils";
+import { Monogram } from "@/components/monogram";
+import { StateChip } from "@/components/state-chip";
+import { ProvenanceTag } from "@/components/provenance-tag";
 
 export interface TaskRow {
   id: string;
   title: string;
   taskType: string;
   status: string;
-  statusLabel: string;
-  statusColor: string;
-  createdAt: string;
+  when: string;
   employeeName: string;
-  employeeInitial: string;
-  employeeColor: string;
+  employeeRole: string | null;
+  live: boolean;
   inFlight: boolean;
 }
 
-interface TasksListProps {
+export interface TaskSection {
+  key: string;
+  title: string;
+  teach: string;
+  count: number;
+  collapsed: boolean;
   rows: TaskRow[];
 }
 
-export function TasksList({ rows }: TasksListProps) {
+const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink";
+
+export function TasksList({ sections }: { sections: TaskSection[] }) {
   const router = useRouter();
   const trpc = useTRPC();
   const cancel = useMutation(trpc.tasks.cancel.mutationOptions());
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkPending, setBulkPending] = useState(false);
   const [bulkError, setBulkError] = useState<string | null>(null);
-  const [activeIndex, setActiveIndex] = useState<number>(rows.length > 0 ? 0 : -1);
   const itemRefs = useRef<Array<HTMLAnchorElement | null>>([]);
 
+  const visible = useMemo(
+    () => sections.map((s) => ({ ...s, open: !s.collapsed || historyOpen })),
+    [sections, historyOpen],
+  );
+  const flat = useMemo(() => visible.flatMap((s) => (s.open ? s.rows : [])), [visible]);
+  const [activeIndex, setActiveIndex] = useState<number>(flat.length > 0 ? 0 : -1);
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
   useEffect(() => {
-    if (rows.length === 0) {
+    if (flat.length === 0) {
       setActiveIndex(-1);
       return;
     }
-    setActiveIndex((prev) => {
-      if (prev < 0) return 0;
-      if (prev >= rows.length) return rows.length - 1;
-      return prev;
-    });
-  }, [rows.length]);
+    setActiveIndex((prev) => Math.min(Math.max(prev, 0), flat.length - 1));
+  }, [flat.length]);
 
   useEffect(() => {
     function handler(e: KeyboardEvent) {
@@ -55,12 +74,12 @@ export function TasksList({ rows }: TasksListProps) {
         return;
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
-      if (rows.length === 0) return;
+      if (flat.length === 0) return;
 
       if (e.key === "j" || e.key === "J") {
         e.preventDefault();
         setActiveIndex((i) => {
-          const next = i < 0 ? 0 : Math.min(i + 1, rows.length - 1);
+          const next = i < 0 ? 0 : Math.min(i + 1, flat.length - 1);
           itemRefs.current[next]?.scrollIntoView({ block: "nearest" });
           return next;
         });
@@ -72,39 +91,31 @@ export function TasksList({ rows }: TasksListProps) {
           return next;
         });
       } else if (e.key === "x" || e.key === "X") {
-        if (activeIndex >= 0 && activeIndex < rows.length) {
+        const row = flat[activeIndex];
+        if (row) {
           e.preventDefault();
-          const target = rows[activeIndex];
-          if (target) toggleSelect(target.id);
+          toggleSelect(row.id);
         }
       } else if (e.key === "Enter") {
-        if (activeIndex >= 0 && activeIndex < rows.length) {
+        const row = flat[activeIndex];
+        if (row) {
           e.preventDefault();
-          const target = rows[activeIndex];
-          if (target) router.push(`/dashboard/tasks/${target.id}`);
+          router.push(`/dashboard/tasks/${row.id}`);
         }
       }
     }
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [activeIndex, rows, router]);
+  }, [activeIndex, flat, router, toggleSelect]);
 
-  function toggleSelect(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  }
-
-  const inFlightSelected = rows.filter((r) => selected.has(r.id) && r.inFlight);
-  const cannotCancelCount = selected.size - inFlightSelected.length;
+  const inFlightSelected = flat.filter((r) => selected.has(r.id) && r.inFlight);
+  const notInFlight = selected.size - inFlightSelected.length;
 
   async function handleBulkCancel() {
     if (inFlightSelected.length === 0 || bulkPending) return;
     if (
       !confirm(
-        `Cancel ${inFlightSelected.length} in-flight ${inFlightSelected.length === 1 ? "task" : "tasks"}? Already approved or completed rows are skipped.`,
+        `Cancel ${inFlightSelected.length} in-flight ${inFlightSelected.length === 1 ? "job" : "jobs"}? Filed and finished rows are skipped.`,
       )
     ) {
       return;
@@ -128,38 +139,34 @@ export function TasksList({ rows }: TasksListProps) {
     router.refresh();
   }
 
-  if (rows.length === 0) return null;
+  let cursor = 0;
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="px-1 text-[11px] text-text-muted">
-          Tip: <kbd className="rounded border border-gray-200 bg-white px-1 py-0.5 text-[10px] font-medium">J</kbd> /{" "}
-          <kbd className="rounded border border-gray-200 bg-white px-1 py-0.5 text-[10px] font-medium">K</kbd> to walk,{" "}
-          <kbd className="rounded border border-gray-200 bg-white px-1 py-0.5 text-[10px] font-medium">X</kbd> to select,{" "}
-          <kbd className="rounded border border-gray-200 bg-white px-1 py-0.5 text-[10px] font-medium">Enter</kbd> to open.
+    <div className="mt-3">
+      <div className="flex min-h-8 flex-wrap items-center justify-between gap-3">
+        <p className="spec-label">
+          <Kbd>J</Kbd>/<Kbd>K</Kbd> walk · <Kbd>X</Kbd> select · <Kbd>Enter</Kbd> open
         </p>
         {selected.size > 0 && (
           <div className="flex items-center gap-2">
-            <span className="text-xs text-text-secondary">
+            <span className="spec text-ink-secondary">
               {selected.size} selected
-              {cannotCancelCount > 0 && (
-                <span className="text-text-muted">
-                  {" "}({cannotCancelCount} not in flight)
-                </span>
-              )}
+              {notInFlight > 0 && <span className="text-ink-muted"> · {notInFlight} not in flight</span>}
             </span>
             <button
               onClick={() => setSelected(new Set())}
               disabled={bulkPending}
-              className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-text-secondary hover:bg-gray-50 disabled:opacity-50"
+              className={cn("btn-ghost disabled:opacity-50", FOCUS)}
             >
               Clear
             </button>
             <button
               onClick={handleBulkCancel}
               disabled={bulkPending || inFlightSelected.length === 0}
-              className="rounded-full bg-[#DC2626] px-3 py-1 text-xs font-medium text-white hover:bg-[#B91C1C] disabled:opacity-50"
+              className={cn(
+                "inline-flex items-center rounded-[2px] border border-hairline bg-bg px-4 py-[9px] text-[13.5px] leading-none font-semibold text-state-failed transition-colors hover:border-state-failed disabled:opacity-50",
+                FOCUS,
+              )}
             >
               {bulkPending ? "Cancelling..." : `Cancel ${inFlightSelected.length}`}
             </button>
@@ -167,82 +174,112 @@ export function TasksList({ rows }: TasksListProps) {
         )}
       </div>
 
-      {bulkError && (
-        <p className="px-1 text-xs text-error">{bulkError}</p>
-      )}
+      {bulkError && <p className="spec mt-1 text-state-failed">{bulkError}</p>}
 
-      {rows.map((t, i) => {
-        const active = i === activeIndex;
-        const isSelected = selected.has(t.id);
-        const status = statusMeta(t.status);
-        return (
-          <div key={t.id} className="flex items-stretch gap-2">
-            <button
-              type="button"
-              onClick={() => toggleSelect(t.id)}
-              aria-label={isSelected ? `Deselect ${t.title}` : `Select ${t.title}`}
-              aria-pressed={isSelected}
-              className="flex w-6 shrink-0 items-center justify-center rounded-md hover:bg-gray-100"
-            >
-              <span
-                className={`flex h-4 w-4 items-center justify-center rounded border ${
-                  isSelected
-                    ? "border-[#1F2937] bg-[#1F2937] text-white"
-                    : "border-gray-300 bg-white"
-                }`}
-              >
-                {isSelected && (
-                  <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
-                    <path d="M2 6.5L5 9.5L10 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
+      <div className="mt-1 space-y-5">
+        {visible.map((section) => {
+          const { open } = section;
+          const start = cursor;
+          if (open) cursor += section.rows.length;
+          return (
+            <section key={section.key} aria-label={section.title}>
+              <div className="rule-t flex items-baseline justify-between pt-2.5">
+                <h2 className="text-[15px] font-semibold">
+                  {section.title}
+                  <span className="spec ml-2 font-normal text-ink-muted">{section.count}</span>
+                </h2>
+                {section.collapsed && section.rows.length > 0 && (
+                  <button
+                    onClick={() => setHistoryOpen((v) => !v)}
+                    aria-expanded={historyOpen}
+                    className={cn("spec-label transition-colors hover:text-ink", FOCUS)}
+                  >
+                    {historyOpen ? "Collapse" : `Show ${section.count}`}
+                  </button>
                 )}
-              </span>
-            </button>
-            <Link
-              href={`/dashboard/tasks/${t.id}`}
-              ref={(el) => {
-                itemRefs.current[i] = el;
-              }}
-              onMouseEnter={() => setActiveIndex(i)}
-              className="flex-1"
-            >
-              <GlassCard
-                className="p-4 transition-shadow"
-                style={
-                  active
-                    ? { boxShadow: `0 0 0 2px ${t.employeeColor}55` }
-                    : undefined
-                }
-              >
-                <div className="flex items-center gap-3">
-                  <div
-                    className="flex h-8 w-8 items-center justify-center rounded-full text-white text-xs font-semibold shrink-0"
-                    style={{ backgroundColor: t.employeeColor }}
-                  >
-                    {t.employeeInitial}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium truncate">{t.title}</p>
-                    <p className="text-xs text-text-secondary truncate">
-                      {t.employeeName} &middot; {t.taskType.replace(/_/g, " ")} &middot;{" "}
-                      {new Date(t.createdAt).toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                      })}
-                    </p>
-                  </div>
-                  <span
-                    className="rounded-full px-2.5 py-0.5 text-xs font-medium shrink-0"
-                    style={{ backgroundColor: status.bg, color: status.fg }}
-                  >
-                    {t.statusLabel}
-                  </span>
-                </div>
-              </GlassCard>
-            </Link>
-          </div>
-        );
-      })}
+              </div>
+              {!open ? null : section.rows.length === 0 ? (
+                <p className="mt-2.5 text-[13px] text-ink-muted">{section.teach}</p>
+              ) : (
+                <ul className="mt-1">
+                  {section.rows.map((row, i) => {
+                    const index = start + i;
+                    const active = index === activeIndex;
+                    const isSelected = selected.has(row.id);
+                    return (
+                      <li key={row.id} className="hairline-b last:border-b-0">
+                        <div
+                          className={cn(
+                            "flex items-center gap-1",
+                            active && "bg-panel shadow-[inset_2px_0_0_0_var(--color-ink)]",
+                          )}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => toggleSelect(row.id)}
+                            aria-label={isSelected ? `Deselect ${row.title}` : `Select ${row.title}`}
+                            aria-pressed={isSelected}
+                            className={cn("flex h-9 w-7 shrink-0 items-center justify-center", FOCUS)}
+                          >
+                            <span
+                              className={cn(
+                                "flex h-3.5 w-3.5 items-center justify-center rounded-[2px] border transition-colors",
+                                isSelected
+                                  ? "border-ink bg-ink text-white"
+                                  : "border-hairline bg-bg hover:border-ink",
+                              )}
+                            >
+                              {isSelected && (
+                                <svg width="9" height="9" viewBox="0 0 12 12" fill="none" aria-hidden>
+                                  <path d="M2 6.5L5 9.5L10 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                              )}
+                            </span>
+                          </button>
+                          <Link
+                            href={`/dashboard/tasks/${row.id}`}
+                            ref={(el) => {
+                              itemRefs.current[index] = el;
+                            }}
+                            onMouseEnter={() => setActiveIndex(index)}
+                            className={cn(
+                              "flex min-w-0 flex-1 items-center gap-3 py-2.5 pr-1 transition-colors hover:bg-panel",
+                              FOCUS,
+                            )}
+                          >
+                            <Monogram name={row.employeeName} roleType={row.employeeRole} size="sm" />
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-[13.5px] leading-tight font-medium">
+                                {row.title}
+                              </span>
+                              <span className="spec-label">
+                                {row.employeeName} · {row.taskType}
+                              </span>
+                            </span>
+                            {row.live && <ProvenanceTag kind="live" />}
+                            <StateChip status={row.status} />
+                            <span className="spec w-12 shrink-0 text-right text-ink-muted">
+                              {row.when}
+                            </span>
+                          </Link>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+          );
+        })}
+      </div>
     </div>
+  );
+}
+
+function Kbd({ children }: { children: React.ReactNode }) {
+  return (
+    <kbd className="rounded-[2px] border border-hairline bg-bg px-1 py-0.5 font-mono text-[10px] text-ink-secondary">
+      {children}
+    </kbd>
   );
 }

@@ -3,19 +3,17 @@
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useTRPC } from "@/trpc/client";
-import { GlassCard } from "@beast/ui";
 import { createClient } from "@/lib/supabase/client";
 import { DEMO_MODE } from "@/lib/demo";
-import { statusMeta } from "@/lib/colors";
+
+const BTN_FAILED =
+  "inline-flex items-center justify-center rounded-[2px] bg-state-failed px-4 py-[9px] text-[13.5px] font-semibold text-white transition-colors duration-150 hover:bg-[#A82115] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink active:translate-y-px disabled:pointer-events-none disabled:opacity-50";
 
 export default function SettingsDangerPage() {
   const router = useRouter();
   const trpc = useTRPC();
 
   const dbHealth = useQuery(trpc.system.dbHealth.queryOptions());
-
-  // migration drift is a "needs your attention" warning, so it borrows the amber status tokens
-  const warnMeta = statusMeta("blocked");
 
   const resetOnboarding = useMutation({
     ...trpc.company.updateOnboardingStatus.mutationOptions(),
@@ -33,141 +31,108 @@ export default function SettingsDangerPage() {
   return (
     <div className="space-y-6">
       {dbHealth.data?.status === "drifted" && (
-        <GlassCard
-          hoverable={false}
-          className="p-5"
-          style={{
-            borderColor: warnMeta.fg,
-            backgroundColor: warnMeta.bg,
-          }}
+        <div
+          role="alert"
+          className="border border-state-failed/40 bg-state-failed/5 px-4 py-3.5"
         >
-          <h2 className="text-base font-semibold mb-1" style={{ color: warnMeta.fg }}>
+          <h2 className="text-[14px] font-semibold text-state-failed">
             Database migrations are not tracked
           </h2>
-          <p className="text-xs text-text-secondary mb-3">
-            Tables exist but{" "}
-            <code className="rounded bg-gray-100 px-1 py-0.5 text-[10px]">
-              drizzle.__drizzle_migrations
-            </code>{" "}
-            is empty, so the schema was applied without recording migrations.
-            Drizzle cannot track further schema changes until the journal is
-            reconciled.
+          <p className="mt-1 text-[13px] leading-snug text-ink-secondary">
+            Tables exist but <span className="spec">drizzle.__drizzle_migrations</span> is empty:
+            the schema was applied without recording migrations, so Drizzle cannot track further
+            schema changes until the journal is reconciled.
           </p>
-          <ol className="list-decimal pl-5 space-y-1 text-xs text-text-secondary mb-3">
+          <ol className="mt-2 list-decimal space-y-1 pl-5 text-[13px] leading-snug text-ink-secondary">
             <li>
-              Backfill the migration journal to match the live schema, one row
-              per tag in{" "}
-              <code className="rounded bg-gray-100 px-1 py-0.5 text-[10px]">
-                packages/db/drizzle/meta/_journal.json
-              </code>
-              .
+              Backfill the journal to match the live schema, one row per tag in{" "}
+              <span className="spec">packages/db/drizzle/meta/_journal.json</span>.
             </li>
             <li>
               Or, on a disposable database, reset and re-run{" "}
-              <code className="rounded bg-gray-100 px-1 py-0.5 text-[10px]">
-                pnpm --filter @beast/db db:migrate
-              </code>
-              .
+              <span className="spec">pnpm --filter @beast/db db:migrate</span>.
             </li>
           </ol>
-          <p className="text-[11px] text-text-muted">
-            This banner clears automatically once{" "}
-            <code className="rounded bg-gray-100 px-1 py-0.5 text-[10px]">
-              drizzle.__drizzle_migrations
-            </code>{" "}
-            has rows.
+          <p className="spec-label mt-2">
+            Clears automatically once the journal has rows
           </p>
-        </GlassCard>
+        </div>
       )}
 
       {dbHealth.data?.status === "unknown" && (
-        <GlassCard hoverable={false} className="p-5 border-gray-200">
-          <h2 className="text-base font-semibold mb-1">Database health unknown</h2>
-          <p className="text-xs text-text-secondary">
-            {dbHealth.data.message}
-          </p>
-        </GlassCard>
+        <div className="border border-hairline bg-panel px-4 py-3">
+          <h2 className="text-[14px] font-semibold">Database health unknown</h2>
+          <p className="mt-1 text-[13px] text-ink-secondary">{dbHealth.data.message}</p>
+        </div>
       )}
 
-      <GlassCard hoverable={false} className="p-5 border-error">
-        <h2 className="text-base font-semibold text-error mb-1">Reset onboarding</h2>
-        <p className="text-xs text-text-secondary mb-3">
-          Re-runs the conversational interview. Your knowledge base, employees, and tasks
-          stay intact; only the onboarding flow restarts so you can re-answer the company
-          questions.
-        </p>
-        <button
-          onClick={() => resetOnboarding.mutate({ status: "started" })}
-          disabled={DEMO_MODE || resetOnboarding.isPending}
-          className="rounded-xl border border-error bg-white px-4 py-2 text-sm font-medium text-error hover:bg-[oklch(0.97_0.05_25)] disabled:opacity-50"
-        >
-          {resetOnboarding.isPending ? "Resetting..." : "Reset onboarding"}
-        </button>
-        {DEMO_MODE && (
-          <p className="mt-2 text-xs text-text-muted">Disabled in the read-only demo.</p>
-        )}
-        {resetOnboarding.error && (
-          <p className="mt-2 text-xs text-error">
-            {resetOnboarding.error.message}
-          </p>
-        )}
-      </GlassCard>
-
-      <GlassCard hoverable={false} className="p-5">
-        <h2 className="text-base font-semibold mb-1">Re-register orchestrator schedules</h2>
-        <p className="text-xs text-text-secondary mb-3">
-          Fires the schedules.create calls that finish onboarding wires up
-          (orchestrator tick every 5 min plus nightly maintenance at 11pm
-          local time). Idempotent via deduplicationKey, so this is safe to
-          click even when the schedules already exist. Use this if your
-          dashboard is missing nightly-maintenance results or orchestrator
-          activity stalled.
+      <section aria-label="Re-register orchestrator schedules">
+        <div className="rule-t pt-2.5">
+          <h2 className="text-[15px] font-semibold">Re-register orchestrator schedules</h2>
+        </div>
+        <p className="mt-1.5 text-[13px] leading-snug text-ink-secondary">
+          Re-fires the schedule registration onboarding runs: orchestrator tick every 5 minutes,
+          nightly maintenance at 11pm local. Idempotent, so safe when the schedules already exist.
+          Use it when the dashboard stops showing orchestrator activity.
         </p>
         <button
           onClick={() => registerSchedules.mutate()}
           disabled={DEMO_MODE || registerSchedules.isPending}
-          className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-foreground hover:bg-gray-50 disabled:opacity-50"
+          className="btn-ghost mt-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:pointer-events-none disabled:opacity-50"
         >
-          {registerSchedules.isPending ? "Registering..." : "Register schedules"}
+          {registerSchedules.isPending ? "Registering…" : "Register schedules"}
         </button>
-        {DEMO_MODE && (
-          <p className="mt-2 text-xs text-text-muted">Disabled in the read-only demo.</p>
-        )}
+        {DEMO_MODE && <p className="spec-label mt-2">Disabled in the read-only demo</p>}
         {registerSchedules.isSuccess && registerSchedules.data && (
-          <p className="mt-2 text-xs text-text-secondary">
-            Registered for timezone {registerSchedules.data.timezone}. Tick id{" "}
-            <code className="rounded bg-gray-100 px-1 py-0.5 text-[10px]">
-              {registerSchedules.data.tickScheduleId}
-            </code>
-            , nightly id{" "}
-            <code className="rounded bg-gray-100 px-1 py-0.5 text-[10px]">
-              {registerSchedules.data.nightlyScheduleId}
-            </code>
-            .
+          <p className="spec mt-2 text-ink-secondary">
+            registered · tz {registerSchedules.data.timezone} · tick{" "}
+            {registerSchedules.data.tickScheduleId} · nightly{" "}
+            {registerSchedules.data.nightlyScheduleId}
           </p>
         )}
         {registerSchedules.error && (
-          <p className="mt-2 text-xs text-error">{registerSchedules.error.message}</p>
+          <p className="mt-2 text-[13px] text-state-failed">{registerSchedules.error.message}</p>
         )}
-      </GlassCard>
+      </section>
 
-      <GlassCard hoverable={false} className="p-5 border-error">
-        <h2 className="text-base font-semibold text-error mb-1">Sign out everywhere</h2>
-        <p className="text-xs text-text-secondary mb-3">
-          Revokes every active session for your account, including other browsers
-          and devices. You will need to sign in again.
+      <section aria-label="Reset onboarding">
+        <div className="rule-t pt-2.5">
+          <h2 className="text-[15px] font-semibold">Reset onboarding</h2>
+        </div>
+        <p className="mt-1.5 text-[13px] leading-snug text-ink-secondary">
+          Restarts the founding interview. Knowledge, employees, and jobs stay intact; you re-answer
+          the company questions and cannot use the app until the interview is done again.
+        </p>
+        <button
+          onClick={() => resetOnboarding.mutate({ status: "started" })}
+          disabled={DEMO_MODE || resetOnboarding.isPending}
+          className={`mt-3 ${BTN_FAILED}`}
+        >
+          {resetOnboarding.isPending ? "Resetting…" : "Reset onboarding"}
+        </button>
+        {DEMO_MODE && <p className="spec-label mt-2">Disabled in the read-only demo</p>}
+        {resetOnboarding.error && (
+          <p className="mt-2 text-[13px] text-state-failed">{resetOnboarding.error.message}</p>
+        )}
+      </section>
+
+      <section aria-label="Sign out everywhere">
+        <div className="rule-t pt-2.5">
+          <h2 className="text-[15px] font-semibold">Sign out everywhere</h2>
+        </div>
+        <p className="mt-1.5 text-[13px] leading-snug text-ink-secondary">
+          Revokes every active session for your account, on every browser and device. You sign in
+          again from scratch.
         </p>
         <button
           onClick={handleSignOutEverywhere}
           disabled={DEMO_MODE}
-          className="rounded-xl border border-error bg-white px-4 py-2 text-sm font-medium text-error hover:bg-[oklch(0.97_0.05_25)] disabled:opacity-50"
+          className={`mt-3 ${BTN_FAILED}`}
         >
           Sign out everywhere
         </button>
-        {DEMO_MODE && (
-          <p className="mt-2 text-xs text-text-muted">Disabled in the read-only demo.</p>
-        )}
-      </GlassCard>
+        {DEMO_MODE && <p className="spec-label mt-2">Disabled in the read-only demo</p>}
+      </section>
     </div>
   );
 }

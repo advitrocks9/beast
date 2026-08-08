@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { GlassCard } from "@beast/ui";
 import { useTRPC } from "@/trpc/client";
 import { DEMO_MODE } from "@/lib/demo";
 import { roleMeta } from "@/lib/colors";
@@ -135,7 +134,7 @@ export function AutonomySuggestionBanner() {
 
   return (
     <section aria-label="Trust promotion suggestion">
-      <GlassCard hoverable={false} className="p-5">
+      <div className="panel p-5">
         <div className="flex items-start gap-3">
           <span
             className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
@@ -149,14 +148,14 @@ export function AutonomySuggestionBanner() {
               </p>
               <div className="flex items-center gap-3">
                 {counter && (
-                  <span className="text-xs text-text-muted">{counter}</span>
+                  <span className="text-xs text-ink-muted">{counter}</span>
                 )}
                 <button
                   type="button"
                   onClick={handleDismiss}
                   aria-label="Dismiss suggestion"
                   disabled={pending}
-                  className="text-xs text-text-muted hover:text-foreground disabled:opacity-50"
+                  className="text-xs text-ink-muted hover:text-foreground disabled:opacity-50"
                 >
                   Hide
                 </button>
@@ -170,7 +169,7 @@ export function AutonomySuggestionBanner() {
             </p>
             {safety && (
               <p
-                className="mt-2 text-xs text-text-secondary"
+                className="mt-2 text-xs text-ink-secondary"
                 id={`autonomy-${active.id}-safety`}
               >
                 {safety}
@@ -211,7 +210,7 @@ export function AutonomySuggestionBanner() {
                 <button
                   type="button"
                   onClick={() => setActiveIdx((i) => (i + 1) % total)}
-                  className="ml-auto text-xs text-text-muted hover:text-foreground"
+                  className="ml-auto text-xs text-ink-muted hover:text-foreground"
                 >
                   Next suggestion &rarr;
                 </button>
@@ -223,7 +222,7 @@ export function AutonomySuggestionBanner() {
             )}
           </div>
         </div>
-      </GlassCard>
+      </div>
     </section>
   );
 }
@@ -239,19 +238,19 @@ function LastEightInline({
 }) {
   if (loading) {
     return (
-      <p className="mt-4 text-xs text-text-muted">Loading last 8...</p>
+      <p className="mt-4 text-xs text-ink-muted">Loading last 8...</p>
     );
   }
   if (rows.length === 0) {
     return (
-      <p className="mt-4 text-xs text-text-muted">
+      <p className="mt-4 text-xs text-ink-muted">
         No approved deliverables found yet.
       </p>
     );
   }
   return (
     <div className="mt-4 rounded-lg border border-gray-100 bg-[oklch(0.99_0.002_260)] p-3">
-      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-muted">
         These set the streak
       </p>
       <ul className="space-y-2">
@@ -264,7 +263,7 @@ function LastEightInline({
             >
               {r.title}
             </a>
-            <span className="shrink-0 text-text-muted">
+            <span className="shrink-0 text-ink-muted">
               {r.deliverableType}
             </span>
             {r.version === 1 && (

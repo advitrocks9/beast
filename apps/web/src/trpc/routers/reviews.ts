@@ -16,17 +16,19 @@ export const reviewsRouter = createTRPCRouter({
     .input(z.object({
       limit: z.number().int().min(1).max(100).default(30),
       offset: z.number().int().min(0).default(0),
-      statusFilter: z.enum(["all", "accepted", "rejected"]).default("all"),
+      statusFilter: z.enum(["all", "accepted", "rejected", "published"]).default("all"),
       employeeId: z.string().uuid().optional(),
       typeFilter: z.string().min(1).max(64).optional(),
     }))
     .query(async ({ ctx, input }) => {
       const statusList: readonly string[] =
         input.statusFilter === "accepted"
-          ? ["accepted", "published"]
-          : input.statusFilter === "rejected"
-            ? ["rejected"]
-            : FINAL_STATES;
+          ? ["accepted"]
+          : input.statusFilter === "published"
+            ? ["published"]
+            : input.statusFilter === "rejected"
+              ? ["rejected"]
+              : FINAL_STATES;
 
       const rows = await ctx.db
         .select({
