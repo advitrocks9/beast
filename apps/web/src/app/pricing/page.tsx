@@ -310,7 +310,7 @@ export default function PricingPage() {
             />
             <Faq
               q="Which AI model is this?"
-              a="Claude Sonnet 4.x by default. Heavier strategy work uses Opus. Cheap deterministic tasks (formatting, classification) use Haiku. We route per task to keep your bill predictable."
+              a="Runs are routed by tier: Claude Sonnet for execution, Opus for planning and strategy, Haiku for classification. With an OpenRouter key the same tiers route to open models instead. You bring your own key either way."
             />
             <Faq
               q="What happens to my data if I leave?"
