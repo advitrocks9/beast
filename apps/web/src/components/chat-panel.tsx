@@ -227,11 +227,11 @@ export function ChatPanel({ employeeName, employeeId, open, onClose }: ChatPanel
         ))}
         {createTask.isPending && (
           <div className="flex justify-start">
-            <div className="rounded-2xl bg-gray-100 px-3.5 py-2.5">
+            <div className="rounded-[2px] bg-panel px-3.5 py-2.5">
               <div className="flex gap-1">
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-muted [animation-delay:0ms]" />
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-muted [animation-delay:150ms]" />
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-muted [animation-delay:300ms]" />
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-ink-muted [animation-delay:0ms]" />
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-ink-muted [animation-delay:150ms]" />
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-ink-muted [animation-delay:300ms]" />
               </div>
             </div>
           </div>
