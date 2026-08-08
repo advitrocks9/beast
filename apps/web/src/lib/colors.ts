@@ -81,7 +81,3 @@ export function statusMeta(status?: string | null): StatusMeta {
   return STATUS_FALLBACK;
 }
 
-// Transitional aliases for surfaces not yet rebuilt; remove with last usage.
-export const BRAND = IDENTITY;
-export const BRAND_DEEP = IDENTITY_DEEP;
-export const BRAND_LIGHT = "#FBEDE6";

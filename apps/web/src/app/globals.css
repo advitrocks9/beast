@@ -42,7 +42,6 @@
   --font-sans: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-fragment), ui-monospace, monospace;
-  --font-body: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
 
   --ease-press: cubic-bezier(0.16, 1, 0.3, 1);
 
