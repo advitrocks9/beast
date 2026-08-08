@@ -28,7 +28,7 @@ export interface UnresolvedMarker {
 
 export type Marker = ResolvedMarker | UnresolvedMarker;
 
-const MARKER_RE = /\[\^([A-Za-z0-9_-]+)\]/g;
+export const CITATION_MARKER_RE = /\[\^([A-Za-z0-9_-]+)\]/g;
 
 export interface SegmentText {
   kind: "text";
@@ -58,7 +58,7 @@ export function parseCitedBody(body: string, citations: Citation[]): {
   const segments: Segment[] = [];
 
   let lastIndex = 0;
-  for (const match of body.matchAll(MARKER_RE)) {
+  for (const match of body.matchAll(CITATION_MARKER_RE)) {
     const id = match[1]!;
     const start = match.index!;
     if (start > lastIndex) {

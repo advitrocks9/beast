@@ -149,7 +149,7 @@ export function PendingList({ items }: { items: PendingItem[] }) {
   return (
     <div className="mt-1">
       <div className="flex min-h-8 items-center justify-between gap-3">
-        <p className="spec-label">
+        <p className="spec-label hidden sm:block">
           <Kbd>J</Kbd> / <Kbd>K</Kbd> walk · <Kbd>X</Kbd> select · <Kbd>↵</Kbd> open
         </p>
         {selected.size > 0 && (
@@ -202,26 +202,30 @@ export function PendingList({ items }: { items: PendingItem[] }) {
                   itemRefs.current[i] = el;
                 }}
                 onMouseEnter={() => setActiveIndex(i)}
-                className={`flex min-w-0 flex-1 items-center gap-3 py-2.5 pr-1 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink ${
+                className={`flex min-w-0 flex-1 flex-col gap-1.5 py-2.5 pr-1 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink sm:flex-row sm:items-center sm:gap-3 ${
                   active ? "bg-panel" : "hover:bg-panel"
                 }`}
               >
-                <Monogram name={d.employeeName} roleType={d.employeeRoleType} size="sm" />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13.5px] leading-tight font-medium">
-                    {d.title}
-                  </span>
-                  <span className="spec-label mt-0.5 block truncate">
-                    {d.deliverableType.replace(/_/g, " ")} · v{d.version}
-                    {d.taskTitle && d.taskTitle.toLowerCase() !== d.title.toLowerCase()
-                      ? ` · ${d.taskTitle}`
-                      : ""}
+                <span className="flex min-w-0 items-center gap-3 sm:flex-1">
+                  <Monogram name={d.employeeName} roleType={d.employeeRoleType} size="sm" />
+                  <span className="min-w-0 flex-1">
+                    <span className="line-clamp-2 text-[13.5px] leading-tight font-medium sm:line-clamp-1">
+                      {d.title}
+                    </span>
+                    <span className="spec-label mt-0.5 block truncate">
+                      {d.deliverableType.replace(/_/g, " ")} · v{d.version}
+                      {d.taskTitle && d.taskTitle.toLowerCase() !== d.title.toLowerCase()
+                        ? ` · ${d.taskTitle}`
+                        : ""}
+                    </span>
                   </span>
                 </span>
-                {d.isLive && <ProvenanceTag kind="live" />}
-                <StateChip status="in_review" />
-                <span className="spec w-8 shrink-0 text-right text-ink-muted">
-                  {relativeTime(d.createdAt)}
+                <span className="flex shrink-0 items-center gap-3 pl-9 sm:pl-0">
+                  {d.isLive && <ProvenanceTag kind="live" />}
+                  <StateChip status="in_review" />
+                  <span className="spec w-8 text-right text-ink-muted">
+                    {relativeTime(d.createdAt)}
+                  </span>
                 </span>
               </Link>
             </li>

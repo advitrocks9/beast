@@ -17,7 +17,7 @@ function shortDate(iso?: string): string | null {
   if (!iso) return null;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
 
 function deriveDomain(citation: Citation): string | null {
@@ -52,12 +52,12 @@ export function CitationCard({ citation, index }: CitationCardProps) {
 
       <div className="mt-1.5 flex items-center justify-between gap-2">
         <span
-          className="spec-label inline-flex min-w-0 items-center gap-1.5 truncate normal-case"
+          className="spec-label inline-flex min-w-0 items-center gap-1.5 normal-case"
           title={domain ?? citation.toolName ?? ""}
         >
           <Icon size={12} strokeWidth={1.5} className="shrink-0" />
-          {domain ?? citation.toolName ?? citation.type}
-          {lastMod ? ` · ${lastMod}` : ""}
+          <span className="truncate">{domain ?? citation.toolName ?? citation.type}</span>
+          {lastMod && <span className="shrink-0 whitespace-nowrap">· {lastMod}</span>}
         </span>
         {citation.url && (
           <a

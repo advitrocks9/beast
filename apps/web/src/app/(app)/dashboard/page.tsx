@@ -21,6 +21,7 @@ import { roleColor } from "@/lib/colors";
 import { Monogram } from "@/components/monogram";
 import { StateChip } from "@/components/state-chip";
 import { ProvenanceTag } from "@/components/provenance-tag";
+import { Tally } from "@/components/tally";
 import { DashboardEmptyState } from "./_components/dashboard-empty-state";
 import { AutonomySuggestionBanner } from "./_components/autonomy-suggestion-banner";
 import { CheckInsInline } from "./_components/check-ins-inline";
@@ -116,7 +117,7 @@ export default async function DashboardPage() {
         notInArray(activityLog.actionType, [...LOW_SIGNAL_ACTIVITY_TYPES]),
       ),
       orderBy: [desc(activityLog.createdAt)],
-      limit: 8,
+      limit: 10,
     }),
     db.query.checkIns.findMany({
       where: and(
@@ -138,6 +139,9 @@ export default async function DashboardPage() {
 
   const employeeById = new Map(employees.map((e) => [e.id, e]));
   const deliverableRows = withDemoOverlay(deliverableRowsRaw, demoSid);
+  const deliverableByTaskId = new Map(
+    deliverableRows.filter((d) => d.taskId).map((d) => [d.taskId, d]),
+  );
   const reviewRows = deliverableRows.filter((d) => d.status === "in_review").slice(0, 5);
   const reviewCount = deliverableRows.filter((d) => d.status === "in_review").length;
   const shippedThisMonth = deliverableRows.filter(
@@ -218,16 +222,20 @@ export default async function DashboardPage() {
                       <li key={t.id} className="hairline-b last:border-b-0">
                         <Link
                           href={`/dashboard/tasks/${t.id}`}
-                          className="flex items-center gap-3 py-2.5 transition-colors hover:bg-panel"
+                          className="flex flex-col gap-1.5 py-2.5 transition-colors hover:bg-panel sm:flex-row sm:items-center sm:gap-3"
                         >
-                          <Monogram name={emp?.name ?? "?"} roleType={emp?.roleType} size="sm" />
-                          <span className="min-w-0 flex-1 truncate text-[13.5px] font-medium">
-                            {t.title}
+                          <span className="flex min-w-0 items-center gap-3 sm:flex-1">
+                            <Monogram name={emp?.name ?? "?"} roleType={emp?.roleType} size="sm" />
+                            <span className="line-clamp-2 min-w-0 flex-1 text-[13.5px] font-medium sm:line-clamp-1">
+                              {t.title}
+                            </span>
                           </span>
-                          {t.demoSessionId && <ProvenanceTag kind="live" />}
-                          <StateChip status={t.status} />
-                          <span className="spec w-8 shrink-0 text-right text-ink-muted">
-                            {relativeTime(t.createdAt)}
+                          <span className="flex shrink-0 items-center gap-3 pl-9 sm:pl-0">
+                            {t.demoSessionId && <ProvenanceTag kind="live" />}
+                            <StateChip status={t.status} />
+                            <span className="spec w-8 text-right text-ink-muted">
+                              {relativeTime(t.createdAt)}
+                            </span>
                           </span>
                         </Link>
                       </li>
@@ -254,6 +262,17 @@ export default async function DashboardPage() {
                 ))}
               </ol>
             </section>
+
+            <CheckInsInline
+              checkIns={pendingCheckIns.map((c) => ({
+                id: c.id,
+                aiEmployeeId: c.aiEmployeeId,
+                scheduledFor: c.scheduledFor?.toISOString() ?? null,
+                deliverableTitle: deliverableByTaskId.get(c.taskId ?? "")?.title ?? null,
+                deliverableType: deliverableByTaskId.get(c.taskId ?? "")?.deliverableType ?? null,
+              }))}
+              employees={employees.map((e) => ({ id: e.id, name: e.name, roleType: e.roleType }))}
+            />
           </div>
 
           <div className="min-w-0 space-y-5">
@@ -274,16 +293,23 @@ export default async function DashboardPage() {
                       <li key={d.id} className="hairline-b last:border-b-0">
                         <Link
                           href={`/review/${d.id}`}
-                          className="flex items-center gap-2.5 py-2.5 transition-colors hover:bg-bg"
+                          className="flex flex-col gap-1 py-2.5 transition-colors hover:bg-bg sm:flex-row sm:items-center sm:gap-2.5"
                         >
-                          <Monogram name={emp?.name ?? "?"} roleType={emp?.roleType} size="sm" />
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-[13px] leading-tight font-medium">
-                              {d.title}
+                          <span className="flex min-w-0 items-center gap-2.5 sm:flex-1">
+                            <Monogram name={emp?.name ?? "?"} roleType={emp?.roleType} size="sm" />
+                            <span className="min-w-0 flex-1">
+                              <span className="line-clamp-2 text-[13px] leading-tight font-medium sm:line-clamp-1">
+                                {d.title}
+                              </span>
+                              <span className="spec-label">{d.deliverableType}</span>
                             </span>
-                            <span className="spec-label">{d.deliverableType}</span>
                           </span>
-                          {d.demoSessionId && <ProvenanceTag kind="live" />}
+                          {d.demoSessionId && (
+                            <ProvenanceTag
+                              kind="live"
+                              className="ml-[34px] self-start sm:ml-0 sm:shrink-0 sm:self-auto"
+                            />
+                          )}
                         </Link>
                       </li>
                     );
@@ -315,7 +341,7 @@ export default async function DashboardPage() {
                     <li key={c.id}>
                       <p className="text-[13px] leading-snug font-medium">{c.title}</p>
                       <p className="spec mt-1 flex items-center gap-2 text-ink-muted">
-                        <ConfidenceTallies count={c.distinctReviewCount} />
+                        <Tally count={c.distinctReviewCount} threshold={3} />
                         {c.distinctReviewCount} review{c.distinctReviewCount === 1 ? "" : "s"} ·
                         confidence {c.confidence.toFixed(2)}
                         {c.demoSessionId && <ProvenanceTag kind="live" />}
@@ -339,34 +365,11 @@ export default async function DashboardPage() {
               </div>
             </section>
 
-            <CheckInsInline
-              checkIns={pendingCheckIns.map((c) => ({
-                id: c.id,
-                aiEmployeeId: c.aiEmployeeId,
-                scheduledFor: c.scheduledFor?.toISOString() ?? null,
-                deliverableTitle: null,
-                deliverableType: null,
-              }))}
-              employees={employees.map((e) => ({ id: e.id, name: e.name, roleType: e.roleType }))}
-            />
 
             {proposals.length > 0 && <CollaborationProposals items={proposals} />}
           </div>
         </div>
       )}
     </div>
-  );
-}
-
-function ConfidenceTallies({ count }: { count: number }) {
-  return (
-    <span aria-hidden className="inline-flex items-end gap-[2px]">
-      {Array.from({ length: 3 }, (_, i) => (
-        <span
-          key={i}
-          className={`inline-block h-2.5 w-[3px] ${i < count ? "tally-fill bg-identity" : "bg-hairline"}`}
-        />
-      ))}
-    </span>
   );
 }

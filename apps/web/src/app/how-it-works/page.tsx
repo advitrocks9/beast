@@ -70,7 +70,7 @@ export default function HowItWorksPage() {
         <p className="spec-label hidden text-right sm:block">
           Beast operating manual
           <br />
-          One page. No scroll.
+          One page.
         </p>
       </header>
 

@@ -1,4 +1,5 @@
-import { parseCitedBody, type Citation } from "@beast/shared";
+import { parseCitedBody, CITATION_MARKER_RE, type Citation } from "@beast/shared";
+import { MarkdownBody } from "@/components/markdown-body";
 import { CitationMark } from "./citation-marker";
 import { CitationCard } from "./citation-card";
 
@@ -8,56 +9,55 @@ interface CitedBodyProps {
 }
 
 const MAX_INLINE_CITATIONS = 24;
+const CITE_HREF = "#beast-cite-";
 
 export function CitedBody({ body, citations }: CitedBodyProps) {
   const parsed = parseCitedBody(body, citations);
+  const citationById = new Map(citations.map((c) => [c.id, c]));
+  const indexById = new Map(parsed.resolved.map((c, i) => [c.id, i + 1]));
 
-  // Markers can sit mid-paragraph, so walk the segment list and split text
-  // segments on \n, flushing a <p> at every boundary.
-  const paragraphs: React.ReactNode[][] = [[]];
-  let key = 0;
-  for (const seg of parsed.segments) {
-    if (seg.kind === "text") {
-      const parts = seg.text.split("\n");
-      parts.forEach((part, i) => {
-        if (i > 0) paragraphs.push([]);
-        if (part.length > 0) {
-          paragraphs[paragraphs.length - 1]!.push(
-            <span key={`t${key++}`}>{part}</span>,
-          );
-        }
-      });
-    } else {
-      const m = seg.marker;
-      if (m.kind === "ok") {
-        paragraphs[paragraphs.length - 1]!.push(
-          <CitationMark
-            key={`m${key++}`}
-            n={m.index}
-            variant="ok"
-            ariaLabel={`Source ${m.index}: ${m.citation.title}`}
-          />,
-        );
-      } else {
-        paragraphs[paragraphs.length - 1]!.push(
-          <CitationMark
-            key={`m${key++}`}
-            n={null}
-            variant="warning"
-            ariaLabel={`Missing source for marker ${m.id}`}
-          />,
-        );
-      }
-    }
-  }
+  // Citation markers become empty links so markdown carries them through
+  // tables and lists; the `a` override swaps them back into superscripts.
+  const source = body.replace(
+    CITATION_MARKER_RE,
+    (_m, id: string) => `[](${CITE_HREF}${id})`,
+  );
 
   const renderedBody = (
-    <div className="max-w-none text-[14px] leading-relaxed text-ink">
-      {paragraphs.map((nodes, i) => (
-        <p key={i} className={nodes.length === 0 ? "h-3" : "mb-3 last:mb-0"}>
-          {nodes}
-        </p>
-      ))}
+    <div className="max-w-none">
+      <MarkdownBody
+        source={source}
+        components={{
+          a: ({ href, children }) => {
+            if (href?.startsWith(CITE_HREF)) {
+              const id = href.slice(CITE_HREF.length);
+              const n = indexById.get(id);
+              const cite = citationById.get(id);
+              if (n !== undefined && cite) {
+                return (
+                  <CitationMark
+                    n={n}
+                    variant="ok"
+                    ariaLabel={`Source ${n}: ${cite.title}`}
+                  />
+                );
+              }
+              return (
+                <CitationMark
+                  n={null}
+                  variant="warning"
+                  ariaLabel={`Missing source for marker ${id}`}
+                />
+              );
+            }
+            return (
+              <a href={href} target="_blank" rel="noreferrer">
+                {children}
+              </a>
+            );
+          },
+        }}
+      />
     </div>
   );
 

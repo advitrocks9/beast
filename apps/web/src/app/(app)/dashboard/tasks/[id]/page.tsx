@@ -7,8 +7,9 @@ import { createClient } from "@/lib/supabase/server";
 import { DEMO_MODE, demoSessionIdFromHeaders } from "@/lib/demo";
 import { demoWhere, withDemoOverlay } from "@/lib/demo-overlay";
 import { db } from "@beast/db";
-import { companies, tasks, deliverables, aiEmployees, agentRunEvents } from "@beast/db";
-import type { AgentRunEvent } from "@beast/shared";
+import { companies, tasks, deliverables, aiEmployees, agentRunEvents, goals } from "@beast/db";
+import { CITATION_MARKER_RE, type AgentRunEvent } from "@beast/shared";
+import { MarkdownBody } from "@/components/markdown-body";
 import { Monogram } from "@/components/monogram";
 import { StateChip } from "@/components/state-chip";
 import { ProvenanceTag, type Provenance } from "@/components/provenance-tag";
@@ -108,6 +109,9 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
   const plan = task.plan as { steps?: PlanStep[] } | null;
   const planSteps = plan?.steps ?? [];
 
+  const brief = task.brief as Record<string, unknown>;
+  const pinnedGoalTitle = await resolvePinnedGoalTitle(brief.pinnedGoal, company!.id);
+
   const masthead: TicketMastheadData = {
     jobNo: task.id.slice(0, 8),
     taskType: task.taskType.replace(/_/g, " "),
@@ -132,7 +136,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
 
   const briefAndPlan = (
     <>
-      <BriefBlock brief={task.brief as Record<string, unknown>} />
+      <BriefBlock brief={brief} pinnedGoalTitle={pinnedGoalTitle} />
       {planSteps.length > 0 && (
         <PlanSection steps={planSteps} taskId={task.id} approved={task.planApproved} />
       )}
@@ -231,23 +235,70 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
   );
 }
 
-function BriefBlock({ brief }: { brief: Record<string, unknown> }) {
-  const entries = Object.entries(brief).filter(
-    ([, v]) => v !== null && v !== undefined && v !== "",
-  );
-  if (entries.length === 0) return null;
+async function resolvePinnedGoalTitle(raw: unknown, companyId: string): Promise<string | null> {
+  const pg = typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : null;
+  if (pg && typeof pg.title === "string") return pg.title;
+  const goalId = typeof raw === "string" ? raw : pg && typeof pg.id === "string" ? pg.id : null;
+  if (!goalId) return null;
+  const goal = await db.query.goals.findFirst({
+    where: and(eq(goals.id, goalId), eq(goals.companyId, companyId)),
+    columns: { title: true },
+  });
+  return goal?.title ?? null;
+}
+
+function BriefBlock({
+  brief,
+  pinnedGoalTitle,
+}: {
+  brief: Record<string, unknown>;
+  pinnedGoalTitle: string | null;
+}) {
+  const rows: Array<{ key: string; label: string; body: React.ReactNode }> = [];
+  for (const [k, v] of Object.entries(brief)) {
+    if (k === "pinnedGoal") {
+      if (pinnedGoalTitle) rows.push({ key: k, label: "pinned goal", body: pinnedGoalTitle });
+    } else if (k === "acceptanceCriteria") {
+      const criteria = Array.isArray(v)
+        ? v.filter((c): c is string => typeof c === "string")
+        : [];
+      if (criteria.length > 0) {
+        rows.push({
+          key: k,
+          label: "acceptance criteria",
+          body: (
+            <ol>
+              {criteria.map((c, i) => (
+                <li key={i} className="flex gap-2.5 py-0.5">
+                  <span className="spec shrink-0 text-ink-muted">
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
+                  <span className="min-w-0">{c}</span>
+                </li>
+              ))}
+            </ol>
+          ),
+        });
+      }
+    } else if (typeof v === "string" && v !== "" && !k.endsWith("Id")) {
+      rows.push({
+        key: k,
+        label: k.replace(/([A-Z])/g, " $1").toLowerCase(),
+        body: <span className="whitespace-pre-wrap">{v}</span>,
+      });
+    }
+  }
+  if (rows.length === 0) return null;
   return (
     <section aria-label="The brief" className="mt-5">
       <div className="rule-t pt-2.5">
         <h2 className="text-[15px] font-semibold">The brief</h2>
       </div>
       <dl className="panel-tinted mt-2.5 space-y-3 p-4">
-        {entries.map(([k, v]) => (
-          <div key={k}>
-            <dt className="spec-label">{k.replace(/([A-Z])/g, " $1").toLowerCase()}</dt>
-            <dd className="mt-0.5 text-[13.5px] leading-relaxed whitespace-pre-wrap">
-              {typeof v === "string" ? v : <span className="spec">{JSON.stringify(v)}</span>}
-            </dd>
+        {rows.map((r) => (
+          <div key={r.key}>
+            <dt className="spec-label">{r.label}</dt>
+            <dd className="mt-0.5 text-[13.5px] leading-relaxed">{r.body}</dd>
           </div>
         ))}
       </dl>
@@ -357,9 +408,9 @@ function DeliverableSection({
       </div>
       <div className="panel mt-2.5 p-4">
         {previewText ? (
-          <p className="line-clamp-[10] text-[13.5px] leading-relaxed whitespace-pre-wrap">
-            {previewText}
-          </p>
+          <div className="max-h-72 overflow-hidden">
+            <MarkdownBody source={previewText.replace(CITATION_MARKER_RE, "")} />
+          </div>
         ) : (
           <p className="text-[13px] text-ink-muted">
             Non-text deliverable. Open it in review for the full output.

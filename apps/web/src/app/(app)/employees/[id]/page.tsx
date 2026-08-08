@@ -8,6 +8,7 @@ import { demoWhere, withDemoOverlay } from "@/lib/demo-overlay";
 import { db } from "@beast/db";
 import { companies, aiEmployees, tasks, deliverables, proceduralMemories } from "@beast/db";
 import { roleMeta } from "@/lib/colors";
+import { splitRuleTitle } from "@/lib/rule-title";
 import { Monogram } from "@/components/monogram";
 import { StateChip } from "@/components/state-chip";
 import { ProvenanceTag } from "@/components/provenance-tag";
@@ -164,15 +165,17 @@ export default async function EmployeeDeskPage({ params }: PageProps) {
                   <li key={t.id} className="hairline-b last:border-b-0">
                     <Link
                       href={`/dashboard/tasks/${t.id}`}
-                      className="flex items-center gap-3 py-2.5 transition-colors hover:bg-panel focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+                      className="flex flex-col gap-1.5 py-2.5 transition-colors hover:bg-panel focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink sm:flex-row sm:items-center sm:gap-3"
                     >
-                      <span className="min-w-0 flex-1 truncate text-[13.5px] font-medium">
+                      <span className="line-clamp-2 min-w-0 text-[13.5px] font-medium sm:line-clamp-1 sm:flex-1">
                         {t.title}
                       </span>
-                      {t.demoSessionId && <ProvenanceTag kind="live" />}
-                      <StateChip status={t.status} />
-                      <span className="spec w-8 shrink-0 text-right text-ink-muted">
-                        {relativeTime(t.createdAt)}
+                      <span className="flex shrink-0 items-center gap-3">
+                        {t.demoSessionId && <ProvenanceTag kind="live" />}
+                        <StateChip status={t.status} />
+                        <span className="spec w-8 text-right text-ink-muted">
+                          {relativeTime(t.createdAt)}
+                        </span>
                       </span>
                     </Link>
                   </li>
@@ -195,20 +198,22 @@ export default async function EmployeeDeskPage({ params }: PageProps) {
                   <li key={d.id} className="hairline-b last:border-b-0">
                     <Link
                       href={`/review/${d.id}`}
-                      className="flex items-center gap-3 py-2.5 transition-colors hover:bg-panel focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+                      className="flex flex-col gap-1.5 py-2.5 transition-colors hover:bg-panel focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink sm:flex-row sm:items-center sm:gap-3"
                     >
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[13.5px] leading-tight font-medium">
+                      <span className="min-w-0 sm:flex-1">
+                        <span className="line-clamp-2 text-[13.5px] leading-tight font-medium sm:line-clamp-1">
                           {d.title}
                         </span>
                         <span className="spec-label">
                           {d.deliverableType} · v{d.version}
                         </span>
                       </span>
-                      {d.demoSessionId && <ProvenanceTag kind="live" />}
-                      <StateChip status={d.status} />
-                      <span className="spec w-8 shrink-0 text-right text-ink-muted">
-                        {relativeTime(d.updatedAt)}
+                      <span className="flex shrink-0 items-center gap-3">
+                        {d.demoSessionId && <ProvenanceTag kind="live" />}
+                        <StateChip status={d.status} />
+                        <span className="spec w-8 text-right text-ink-muted">
+                          {relativeTime(d.updatedAt)}
+                        </span>
                       </span>
                     </Link>
                   </li>
@@ -236,15 +241,16 @@ export default async function EmployeeDeskPage({ params }: PageProps) {
               </p>
             ) : (
               <ol className="mt-2.5 space-y-2.5">
-                {rules.map((r, i) => (
-                  <li key={r.id} className="flex items-baseline gap-2.5">
-                    <span className="spec shrink-0 font-semibold">
-                      R-{String(i + 1).padStart(3, "0")}
-                    </span>
-                    <span className="min-w-0 flex-1 text-[13px] leading-snug">{r.title}</span>
-                    <span className="spec shrink-0 text-ink-muted">{r.confidence.toFixed(2)}</span>
-                  </li>
-                ))}
+                {rules.map((r) => {
+                  const { number, text } = splitRuleTitle(r.title);
+                  return (
+                    <li key={r.id} className="flex items-baseline gap-2.5">
+                      {number && <span className="spec shrink-0 font-semibold">{number}</span>}
+                      <span className="min-w-0 flex-1 text-[13px] leading-snug">{text}</span>
+                      <span className="spec shrink-0 text-ink-muted">{r.confidence.toFixed(2)}</span>
+                    </li>
+                  );
+                })}
               </ol>
             )}
           </section>

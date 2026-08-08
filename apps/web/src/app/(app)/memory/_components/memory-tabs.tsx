@@ -4,7 +4,9 @@ import { useState } from "react";
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { splitRuleTitle } from "@/lib/rule-title";
 import { Monogram } from "@/components/monogram";
+import { Tally } from "@/components/tally";
 import { ProvenanceTag } from "@/components/provenance-tag";
 
 interface EmployeeRef {
@@ -80,11 +82,6 @@ function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-function splitRuleTitle(title: string): { number: string | null; text: string } {
-  const m = /^(R-\d+)\s+(.*)$/.exec(title);
-  return m ? { number: m[1]!, text: m[2]! } : { number: null, text: title };
-}
-
 export function MemoryTabs({
   demoMode,
   employees,
@@ -154,22 +151,6 @@ export function MemoryTabs({
         {tab === "semantic" && <SemanticTab facts={facts} demoMode={demoMode} />}
       </div>
     </div>
-  );
-}
-
-function Tally({ count, threshold }: { count: number; threshold: number }) {
-  return (
-    <span aria-hidden className="inline-flex items-end gap-[2px]">
-      {Array.from({ length: threshold }, (_, i) => (
-        <span
-          key={i}
-          className={cn(
-            "inline-block h-3 w-[3px]",
-            i < count ? "tally-fill bg-identity" : "bg-hairline",
-          )}
-        />
-      ))}
-    </span>
   );
 }
 

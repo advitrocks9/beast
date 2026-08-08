@@ -148,7 +148,7 @@ export function TasksList({ sections }: { sections: TaskSection[] }) {
   return (
     <div className="mt-3">
       <div className="flex min-h-8 flex-wrap items-center justify-between gap-3">
-        <p className="spec-label">
+        <p className="spec-label hidden sm:block">
           <Kbd>J</Kbd>/<Kbd>K</Kbd> walk · <Kbd>X</Kbd> select · <Kbd>Enter</Kbd> open
         </p>
         {selected.size > 0 && (
@@ -245,23 +245,27 @@ export function TasksList({ sections }: { sections: TaskSection[] }) {
                             }}
                             onMouseEnter={() => setActiveIndex(index)}
                             className={cn(
-                              "flex min-w-0 flex-1 items-center gap-3 py-2.5 pr-1 transition-colors hover:bg-panel",
+                              "flex min-w-0 flex-1 flex-col gap-1.5 py-2.5 pr-1 transition-colors hover:bg-panel sm:flex-row sm:items-center sm:gap-3",
                               FOCUS,
                             )}
                           >
-                            <Monogram name={row.employeeName} roleType={row.employeeRole} size="sm" />
-                            <span className="min-w-0 flex-1">
-                              <span className="block truncate text-[13.5px] leading-tight font-medium">
-                                {row.title}
-                              </span>
-                              <span className="spec-label">
-                                {row.employeeName} · {row.taskType}
+                            <span className="flex min-w-0 items-center gap-3 sm:flex-1">
+                              <Monogram name={row.employeeName} roleType={row.employeeRole} size="sm" />
+                              <span className="min-w-0 flex-1">
+                                <span className="line-clamp-2 text-[13.5px] leading-tight font-medium sm:line-clamp-1">
+                                  {row.title}
+                                </span>
+                                <span className="spec-label">
+                                  {row.employeeName} · {row.taskType}
+                                </span>
                               </span>
                             </span>
-                            {row.live && <ProvenanceTag kind="live" />}
-                            <StateChip status={row.status} />
-                            <span className="spec w-12 shrink-0 text-right text-ink-muted">
-                              {row.when}
+                            <span className="flex shrink-0 items-center gap-3 pl-9 sm:pl-0">
+                              {row.live && <ProvenanceTag kind="live" />}
+                              <StateChip status={row.status} />
+                              <span className="spec w-12 text-right text-ink-muted">
+                                {row.when}
+                              </span>
                             </span>
                           </Link>
                         </div>

@@ -4,6 +4,7 @@ import { eq, and, inArray } from "drizzle-orm";
 import { createClient } from "@/lib/supabase/server";
 import { DEMO_MODE, demoSessionIdFromHeaders } from "@/lib/demo";
 import { demoWhere } from "@/lib/demo-overlay";
+import { splitRuleTitle } from "@/lib/rule-title";
 import { db } from "@beast/db";
 import { companies, deliverables, aiEmployees, tasks, proceduralMemories } from "@beast/db";
 import { ReviewShell } from "./_components/review-shell";
@@ -61,11 +62,10 @@ export default async function ReviewPage({ params }: PageProps) {
       : [],
   ]);
 
-  // Seed manual titles carry their number as an "R-00N " prefix.
   const ruleNumbers: Record<string, string> = {};
   for (const r of ruleRows) {
-    const match = /^(R-\d+)\s/.exec(r.title);
-    if (match) ruleNumbers[r.id] = match[1]!;
+    const { number } = splitRuleTitle(r.title);
+    if (number) ruleNumbers[r.id] = number;
   }
 
   return (

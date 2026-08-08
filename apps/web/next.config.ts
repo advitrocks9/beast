@@ -25,6 +25,7 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  devIndicators: false,
   turbopack: {},
   transpilePackages: ["@beast/db", "@beast/shared", "@beast/ui"],
   async headers() {

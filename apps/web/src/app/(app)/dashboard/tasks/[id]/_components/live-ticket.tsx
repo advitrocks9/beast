@@ -67,7 +67,11 @@ export function LiveTicket({
         state={
           <>
             {tag && <ProvenanceTag kind={tag} />}
-            <StateChip status={chipStatus} />
+            <StateChip
+              key={chipStatus}
+              status={chipStatus}
+              className={ended || fatal ? "stamp-in" : undefined}
+            />
             {!ended && !fatal && <CancelTaskButton taskId={taskId} taskTitle={taskTitle} />}
           </>
         }

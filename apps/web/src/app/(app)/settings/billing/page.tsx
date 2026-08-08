@@ -130,11 +130,14 @@ export default async function SettingsBillingPage() {
                 {current ? (
                   <span className="spec-label shrink-0">Current plan</span>
                 ) : (
-                  <CheckoutButton
-                    tier={t}
-                    label={`Move to ${TIER_NAMES[t]}`}
-                    disabled={DEMO_MODE}
-                  />
+                  <span className="flex shrink-0 items-center gap-2">
+                    {DEMO_MODE && <ProvenanceTag kind="stub" />}
+                    <CheckoutButton
+                      tier={t}
+                      label={`Move to ${TIER_NAMES[t]}`}
+                      disabled={DEMO_MODE}
+                    />
+                  </span>
                 )}
               </li>
             );
@@ -148,7 +151,10 @@ export default async function SettingsBillingPage() {
         </div>
         {hasSubscription ? (
           <div className="mt-3">
-            <PortalButton disabled={DEMO_MODE} />
+            <div className="flex items-center gap-2">
+              <PortalButton disabled={DEMO_MODE} />
+              {DEMO_MODE && <ProvenanceTag kind="stub" />}
+            </div>
             <p className="mt-2 text-[13px] text-ink-muted">
               Payment method, invoices, and cancellation live in the Stripe portal.
             </p>
