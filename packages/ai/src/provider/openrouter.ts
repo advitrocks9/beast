@@ -11,7 +11,8 @@ import { ProviderQuotaError } from "./types";
 import { env, requireEnv } from "@beast/shared/env";
 
 const API_URL = "https://openrouter.ai/api/v1/chat/completions";
-const DEFAULT_MODEL = "deepseek/deepseek-chat-v3-0324:free";
+const DEFAULT_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
+const DEFAULT_FAST_MODEL = "nvidia/nemotron-3-nano-30b-a3b:free";
 
 const DEFAULT_MAX_TOKENS: Record<Tier, number> = {
   fast: 2048,
@@ -25,7 +26,9 @@ function modelFor(tier: Tier): string {
     standard: env.OPENROUTER_MODEL_STANDARD,
     deep: env.OPENROUTER_MODEL_DEEP,
   };
-  return perTier[tier] ?? env.OPENROUTER_MODEL ?? DEFAULT_MODEL;
+  return (
+    perTier[tier] ?? env.OPENROUTER_MODEL ?? (tier === "fast" ? DEFAULT_FAST_MODEL : DEFAULT_MODEL)
+  );
 }
 
 type OpenAiToolCall = {
