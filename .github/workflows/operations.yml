@@ -56,5 +56,5 @@ jobs:
           if [ -z "$CRON_SECRET" ]; then
             echo "::error::CRON_SECRET secret not configured"; exit 1
           fi
-          code="$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "Authorization: Bearer $CRON_SECRET" "$DEMO_URL/api/cron/demo-reset")"
+          code="$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $CRON_SECRET" "$DEMO_URL/api/cron/demo-reset")"
           [ "$code" = "200" ] || { echo "::error::demo reset returned $code"; exit 1; }
